@@ -49,7 +49,7 @@ fi
 
 # install both pip3 and the jedi package to use deoplete-jedi
 if ! command_exists pip3; then
-    sudo apt-get install -y python-pip3
+    sudo apt-get install -y python3-pip
     sudo pip2 install jedi
     sudo pip3 install jedi
 fi
