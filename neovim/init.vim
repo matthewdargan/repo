@@ -22,7 +22,7 @@ syntax on
 
 " Airline and Colorscheme
 colorscheme cobalt
-let g:airline_theme='cobalt'
+let g:airline_theme='murmur'
 let g:tmuxline_separators = {
     \ 'left' : '',
     \ 'left_alt': '>',
