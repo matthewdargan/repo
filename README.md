@@ -2,6 +2,7 @@
 ## What's included
 - Neovim config
 - Tmux config
+- i3 and i3blocks config
 - gitconfig
 - bashrc
 - Installation script
@@ -13,7 +14,7 @@ The plugins I use for neovim include:
 - [Deoplete](https://github.com/Shougo/deoplete.nvim) - An asynchronous autocompletion framework for Neovim
 - [Deoplete-clang2](https://github.com/tweekmonster/deoplete-clang2) - A clang completer for Deoplete
 - [Deoplete-jedi](https://github.com/zchee/deoplete-jedi) - A Deoplete source for Jedi
-- [Molokai Theme](https://github.com/justinmk/molokai) - A Molokai color scheme for Vim/Neovim
+- [Cobalt Theme](https://github.com/gkjgh/cobalt) - A Cobalt color scheme for Vim/Neovim
 - [Airline](https://github.com/vim-airline/vim-airline) - A status bar for Vim/Neovim
 - [Airline Themes](https://github.com/vim-airline/vim-airline-themes) - A collection of themes for Airline
 - [Tmuxline](https://github.com/edkolev/tmuxline.vim) - A Tmux status bar that provides integration for Airline
