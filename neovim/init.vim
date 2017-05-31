@@ -3,7 +3,7 @@ call plug#begin('~/.local/share/nvim/plugged')
 Plug 'scrooloose/nerdtree', { 'on': 'NERDTreeToggle' }
 Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
 Plug 'tweekmonster/deoplete-clang2'
-Plug 'justinmk/molokai'
+Plug 'gkjgh/cobalt'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
 Plug 'edkolev/tmuxline.vim'
@@ -21,9 +21,8 @@ set wrap
 syntax on
 
 " Airline and Colorscheme
-set background=dark
-colorscheme molokai
-let g:airline_theme='molokai'
+colorscheme cobalt
+let g:airline_theme='cobalt'
 let g:tmuxline_separators = {
     \ 'left' : '',
     \ 'left_alt': '>',
