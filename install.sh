@@ -79,65 +79,80 @@ fi
 #-----------------------------------------------------
 # Neovim
 #-----------------------------------------------------
-echo -n "[ Neovim ]"
-
-if ! command_exists nvim; then
-    echo "    Installing Neovim!"
-    sudo add-apt-repository ppa:neovim-ppa/unstable
-    sudo apt-get update
-    sudo apt-get install -y neovim
-    sudo pip2 install neovim
-    sudo pip3 install neovim
-    sudo pip2 install --upgrade neovim
-    sudo pip3 install --upgrade neovim
-fi
-
-echo -n "[ Neovim config ]"
-
-if [ ! -d ~/.config/nvim ]; then
-    echo "    Creating nvim folder!"
-    mkdir ~/.config/nvim
-    install_nvim_folder
-elif $REPLACE_FILES; then
-    echo "    Deleting old nvim folder!"
-    rm -rf ~/.config/nvim
-    install_nvim_folder
-else
-    echo "    Keeping existing nvim folder!"
-fi
+# echo -n "[ Neovim ]"
+# 
+# if ! command_exists nvim; then
+#     echo "    Installing Neovim!"
+#     sudo add-apt-repository ppa:neovim-ppa/unstable
+#     sudo apt-get update
+#     sudo apt-get install -y neovim
+#     sudo pip2 install neovim
+#     sudo pip3 install neovim
+#     sudo pip2 install --upgrade neovim
+#     sudo pip3 install --upgrade neovim
+# fi
+# 
+# echo -n "[ Neovim config ]"
+# 
+# if [ ! -d ~/.config/nvim ]; then
+#     echo "    Creating nvim folder!"
+#     mkdir ~/.config/nvim
+#     install_nvim_folder
+# elif $REPLACE_FILES; then
+#     echo "    Deleting old nvim folder!"
+#     rm -rf ~/.config/nvim
+#     install_nvim_folder
+# else
+#     echo "    Keeping existing nvim folder!"
+# fi
 
 #-----------------------------------------------------
 # Tmux
 #-----------------------------------------------------
-echo -n "[ tmux.conf ]"
-
-if ! command_exists tmux; then
-    sudo apt-get install tmux -y
-fi
-
-if [ ! -f ~/.tmux.conf ]; then
-    echo "    Creating tmux.conf!"
-    ln -sf $current_path/tmux/tmux.conf ~/.tmux.conf
-elif $REPLACE_FILES; then
-    echo "    Deleting old tmux.conf!"
-    rm ~/.tmux.conf
-    ln -sf $current_path/tmux/tmux.conf ~/.tmux.conf
-else
-    echo "    Keeping existing tmux.conf!"
-fi
+# echo -n "[ tmux.conf ]"
+# 
+# if ! command_exists tmux; then
+#     sudo apt-get install tmux -y
+# fi
+# 
+# if [ ! -f ~/.tmux.conf ]; then
+#     echo "    Creating tmux.conf!"
+#     ln -sf $current_path/tmux/tmux.conf ~/.tmux.conf
+# elif $REPLACE_FILES; then
+#     echo "    Deleting old tmux.conf!"
+#     rm ~/.tmux.conf
+#     ln -sf $current_path/tmux/tmux.conf ~/.tmux.conf
+# else
+#     echo "    Keeping existing tmux.conf!"
+# fi
 
 #-----------------------------------------------------
 # Bash installation
 #-----------------------------------------------------
-echo -n "[ bashrc ]"
+# echo -n "[ bashrc ]"
+# 
+# if [ ! -f ~/.bashrc ]; then
+#     echo "    Creating bashrc!"
+#     ln -sf $current_path/shell/bashrc ~/.bashrc
+# elif $REPLACE_FILES; then
+#     echo "    Deleting old bashrc!"
+#     rm ~/.bashrc
+#     ln -sf $current_path/shell/bashrc ~/.bashrc
+# else
+#     echo "    Keeping existing bashrc!"
+# fi
 
-if [ ! -f ~/.bashrc ]; then
-    echo "    Creating bashrc!"
-    ln -sf $current_path/shell/bashrc ~/.bashrc
+echo -n "[ zshrc ]"
+
+if [ ! -f ~/.zshrc ]; then
+    echo "    Creating zshrc!"
+    ln -sf $current_path/shell/zshrc ~/.zshrc
 elif $REPLACE_FILES; then
-    echo "    Deleting old bashrc!"
-    rm ~/.bashrc
-    ln -sf $current_path/shell/bashrc ~/.bashrc
+    echo "    Deleting old zshrc!"
+    rm ~/.zshrc
+    ln -sf $current_path/shell/zshrc ~/.zshrc
 else
-    echo "    Keeping existing bashrc!"
+    echo "    Keeping existing zshrc!"
 fi
+
+mv $current_path/settings.json ~/.vscode/
