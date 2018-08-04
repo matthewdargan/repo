@@ -1,0 +1,9 @@
+[user]
+	email = matthewdargan57@gmail.com
+    name = Matthew Dargan
+[core]
+    editor = code
+[github]
+    user = matthewdargan
+[includeIf "gitdir:~/Documents/workspace/school/"]
+    path = ~/Documents/workspace/school/.gitconfig

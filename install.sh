@@ -1,158 +1,62 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Don't continue on error
-set -e
+cd "$(dirname "${BASH_SOURCE}")";
 
-# Existing files won't be replaced
-REPLACE_FILES=false
+echo "Shell installation script for odarriba's dotfiles";
+echo "-------------------------------------------------";
+echo "";
 
-#-----------------------------------------------------
-# Functions and variables
-#-----------------------------------------------------
-current_path=$(pwd)
+installSoftware() {
+	# Install zsh and required software
+	echo "[INFO] Installing required software (zsh, git, curl, wget and python-pip)...";
+    sudo apt-get install -y vim zsh git-core curl wget python3 python-pip unzip fonts-hack-ttf 
 
-command_exists() {
-    type "$1" &>/dev/null
+	# Install Oh My Zsh!
+	echo "[INFO] Installing Oh My Zsh...";
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+	
+    # Change the shell to zsh
+	chsh -s $(which zsh)
+
+    # Install Anaconda
+    cd /tmp
+    curl -O https://repo.anaconda.com/archive/Anaconda3-5.1.0-Linux-x86_64.sh
+    chmod +x Anaconda3-5.1.0-Linux-x86_64.sh
+    sudo ./Anaconda3-5.1.0-Linux-x86_64.sh -b -p
+    conda install ipython
+    rm -f Anaconda3-5.1.0-Linux-x86_64.sh
+    cd
 }
 
-install_plug_nvim() {
-    curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs \
-        https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+updateApt() {
+	echo "[INFO] Updating APT repositories...";
+	sudo apt-get update && sudo apt-get -y upgrade;
 }
 
-install_nvim_folder() {
-    install_plug_nvim
-    ln -sf $current_path/neovim/init.vim ~/.config/nvim/init.vim
+syncConfig() {
+	echo "[INFO] Syncing configuration...";
+	# Avoid copying gnupg config for OSX on Linux
+	rsync --exclude ".git/" --exclude ".DS_Store" --exclude ".gitignore" --exclude "install.sh" \
+	--exclude "README.md" --exclude "LICENSE" -avh --no-perms . ~;
+    rm -f ~/.config/Code/User/settings.json
+    cp settings.json ~/.config/Code/User/
 }
 
+doIt() {
+	updateApt;
+	installSoftware;
+	syncConfig;
+}
 
-#-----------------------------------------------------
-# Basic requirements check
-#-----------------------------------------------------
-if ! command_exists apt-get; then
-    echo "This installer is only compatible with debian/ubuntu based Linux distributions."
-    echo "Please install configuration files manually."
-    exit
-fi
-
-if ! command_exists curl; then
-    sudo apt-get install -y curl
-fi
-
-if ! command_exists git; then
-    sudo apt-get install -y git
-fi
-
-if ! command_exists pip; then
-    sudo apt-get install -y python-pip
-fi
-
-# install both pip3 and the jedi package to use deoplete-jedi
-if ! command_exists pip3; then
-    sudo apt-get install -y python3-pip
-    sudo pip2 install jedi
-    sudo pip3 install jedi
-fi
-
-if ! command_exists clang; then
-    sudo apt-get install -y clang
-fi
-
-#-----------------------------------------------------
-# Git (config, ignore)
-#-----------------------------------------------------
-echo -n "[ gitconfig ]"
-
-if [ ! -f ~/.gitconfig ]; then
-    echo "  Creating gitconfig!"
-    ln -sf $current_path/git/gitconfig ~/.gitconfig
-elif $REPLACE_FILES; then
-    echo "  Deleting old gitconfig!"
-    rm ~/.gitconfig
-    ln -sf $current_path/git/gitconfig ~/.gitconfig
+if [ "$1" == "--force" -o "$1" == "-f" ]; then
+	doIt;
 else
-    echo "  Keeping existing gitconfig!"
-fi
+	read -p "I'm about to change the configuration files placed in your home directory. Do you want to continue? (y/n) " -n 1;
+	echo "";
+	if [[ $REPLY =~ ^[Yy]$ ]]; then
+		doIt;
+	fi;
+fi;
 
-# TODO: gitignore
-
-#-----------------------------------------------------
-# Neovim
-#-----------------------------------------------------
-# echo -n "[ Neovim ]"
-# 
-# if ! command_exists nvim; then
-#     echo "    Installing Neovim!"
-#     sudo add-apt-repository ppa:neovim-ppa/unstable
-#     sudo apt-get update
-#     sudo apt-get install -y neovim
-#     sudo pip2 install neovim
-#     sudo pip3 install neovim
-#     sudo pip2 install --upgrade neovim
-#     sudo pip3 install --upgrade neovim
-# fi
-# 
-# echo -n "[ Neovim config ]"
-# 
-# if [ ! -d ~/.config/nvim ]; then
-#     echo "    Creating nvim folder!"
-#     mkdir ~/.config/nvim
-#     install_nvim_folder
-# elif $REPLACE_FILES; then
-#     echo "    Deleting old nvim folder!"
-#     rm -rf ~/.config/nvim
-#     install_nvim_folder
-# else
-#     echo "    Keeping existing nvim folder!"
-# fi
-
-#-----------------------------------------------------
-# Tmux
-#-----------------------------------------------------
-# echo -n "[ tmux.conf ]"
-# 
-# if ! command_exists tmux; then
-#     sudo apt-get install tmux -y
-# fi
-# 
-# if [ ! -f ~/.tmux.conf ]; then
-#     echo "    Creating tmux.conf!"
-#     ln -sf $current_path/tmux/tmux.conf ~/.tmux.conf
-# elif $REPLACE_FILES; then
-#     echo "    Deleting old tmux.conf!"
-#     rm ~/.tmux.conf
-#     ln -sf $current_path/tmux/tmux.conf ~/.tmux.conf
-# else
-#     echo "    Keeping existing tmux.conf!"
-# fi
-
-#-----------------------------------------------------
-# Bash installation
-#-----------------------------------------------------
-# echo -n "[ bashrc ]"
-# 
-# if [ ! -f ~/.bashrc ]; then
-#     echo "    Creating bashrc!"
-#     ln -sf $current_path/shell/bashrc ~/.bashrc
-# elif $REPLACE_FILES; then
-#     echo "    Deleting old bashrc!"
-#     rm ~/.bashrc
-#     ln -sf $current_path/shell/bashrc ~/.bashrc
-# else
-#     echo "    Keeping existing bashrc!"
-# fi
-
-echo -n "[ zshrc ]"
-
-if [ ! -f ~/.zshrc ]; then
-    echo "    Creating zshrc!"
-    ln -sf $current_path/shell/zshrc ~/.zshrc
-elif $REPLACE_FILES; then
-    echo "    Deleting old zshrc!"
-    rm ~/.zshrc
-    ln -sf $current_path/shell/zshrc ~/.zshrc
-else
-    echo "    Keeping existing zshrc!"
-fi
-
-mv $current_path/settings.json ~/.vscode/
+echo "";
+echo "[INFO] If there isn't any error message, the process is completed.";
