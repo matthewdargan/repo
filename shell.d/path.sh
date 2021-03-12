@@ -1,3 +1,4 @@
+export REPOS=$HOME/repos
 export SCRIPTS=$REPOS/github.com/$GITUSER/dotfiles/scripts
 
 export PATH=\
