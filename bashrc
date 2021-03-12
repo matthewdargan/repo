@@ -16,4 +16,5 @@ source "$HOME/.shell.d/termcap-colors.sh"
 source "$HOME/.shell.d/golang.sh"
 source "$HOME/.shell.d/aliases.sh"
 source "$HOME/.shell.d/api-keys.sh"
+source "$HOME/.shell.d/fzf.sh"
 [ -r ~/.bash_private   ] && source ~/.bash_private
