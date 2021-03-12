@@ -1,0 +1,1 @@
+/home/mpdargan/dotfiles/shell.d
