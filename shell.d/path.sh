@@ -5,6 +5,7 @@ $SCRIPTS:\
 $HOME/.local/bin:\
 $HOME/.local/go/bin:\
 $HOME/.cargo/bin:\
+$HOME/.poetry/bin:\
 /usr/local/go/bin:\
 /usr/local/bin:\
 /usr/local/sbin:\
