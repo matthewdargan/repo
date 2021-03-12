@@ -1,1 +1,1 @@
-/home/mpdargan/dotfiles/shell.d
+/home/mpdargan/repos/github.com/mpdargan/dotfiles/shell.d
