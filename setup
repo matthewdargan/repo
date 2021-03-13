@@ -7,7 +7,7 @@ ln -sf "$PWD/inputrc" "$HOME/.inputrc"
 ln -sf "$PWD/profile" "$HOME/.profile"
 
 [ -d "$HOME/.local/bin" ] || mkdir -p "$HOME/.local/bin"
-which fdfind &>/dev/null && ln -s $(which fdfind) ~/.local/bin/fd
+which fdfind &>/dev/null && ln -sf $(which fdfind) ~/.local/bin/fd
 ln -sf "$PWD/scripts" "$HOME/.local/bin/scripts"
 
 # Call subsequent setup scripts for other configurations
