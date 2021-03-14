@@ -11,6 +11,7 @@ Plug 'neovim/nvim-lspconfig'
 Plug 'nvim-lua/lsp_extensions.nvim'
 Plug 'nvim-lua/completion-nvim'
 Plug 'rust-lang/rust.vim', { 'for': 'rust' }
+Plug 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
 call plug#end()
 
 """ Colorscheme Options
@@ -114,6 +115,32 @@ autocmd CursorMoved,InsertLeave,BufEnter,BufWinEnter,TabEnter,BufWritePost *
 nmap <F5> <Plug>(lcn-menu)
 autocmd FileType rust nmap <silent> gr <Plug>(lcn-rename)
 let g:rustfmt_autosave = 1
+
+""" Go
+let g:go_fmt_fail_silently = 0
+let g:go_fmt_command = 'goimports'
+let g:go_fmt_autosave = 1
+let g:go_gopls_enabled = 1
+let g:go_highlight_types = 1
+let g:go_highlight_fields = 1
+let g:go_highlight_functions = 1
+let g:go_highlight_function_calls = 1
+let g:go_highlight_operators = 1
+let g:go_highlight_extra_types = 1
+let g:go_highlight_variable_declarations = 1
+let g:go_highlight_variable_assignments = 1
+let g:go_highlight_build_constraints = 1
+let g:go_highlight_diagnostic_errors = 1
+let g:go_highlight_diagnostic_warnings = 1
+let g:go_auto_type_info = 1
+let g:go_auto_sameids = 0
+
+au FileType go nmap <leader>t :GoTest!<CR>
+au FileType go nmap <leader>v :GoVet!<CR>
+au FileType go nmap <leader>b :GoBuild!<CR>
+au FileType go nmap <leader>c :GoCoverageToggle<CR>
+au FileType go nmap <leader>i :GoInfo<CR>
+au FileType go nmap <leader>l :GoMetaLinter!<CR>
 
 """ NERDTree
 autocmd StdinReadPre * let s:std_in=1
