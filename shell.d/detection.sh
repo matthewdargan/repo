@@ -33,8 +33,3 @@ onunknown () {
     [ "$PLATFORM" == unknown ] && return 0
     return 1
 }
-
-havecmd () {
-    type "$1" &> /dev/null
-    return $?
-}
