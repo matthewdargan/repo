@@ -146,9 +146,34 @@ au FileType go nmap <leader>l :GoMetaLinter!<CR>
 autocmd StdinReadPre * let s:std_in=1
 map <C-p> :NERDTreeToggle<CR>
 
+" make Y consitent with D and C (yank til end)
+map Y y$
+
+" disable arrow keys (vi muscle memory)
+noremap <up> :echoerr "Umm, use k instead"<CR>
+noremap <down> :echoerr "Umm, use j instead"<CR>
+noremap <left> :echoerr "Umm, use h instead"<CR>
+noremap <right> :echoerr "Umm, use l instead"<CR>
+inoremap <up> <NOP>
+inoremap <down> <NOP>
+inoremap <left> <NOP>
+inoremap <right> <NOP>
+
+" Map alternatives the <ESC> key (<C-[> already is) 
+inoremap jj <Esc>
+cnoremap jj <Esc>
+inoremap kk <Esc> 
+cnoremap kk <Esc>
+inoremap kj <Esc>
+cnoremap kj <Esc> 
+
 """ Other Configurations
+let skip_defaults_vim=1
 set nocompatible
+set autoindent
+set autowrite
 set exrc
+set ruler
 set relativenumber
 set nu
 set hidden
@@ -156,10 +181,14 @@ set noerrorbells
 set tabstop=4 softtabstop=4 shiftwidth=4
 set expandtab
 set smartindent
+set smarttab
+set icon
 set nowrap
 set smartcase
 set incsearch
 set hlsearch
+set linebreak
+set viminfo='20,<1000,s1000
 set termguicolors
 set scrolloff=8
 set colorcolumn=80
@@ -167,6 +196,7 @@ set signcolumn=yes
 set showmatch
 set mouse=v
 set wildmode=longest,list
-set updatetime=50
+set updatetime=100
+set ttyfast
 filetype plugin indent on
 syntax on
