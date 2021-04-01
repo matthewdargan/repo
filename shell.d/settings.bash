@@ -1,6 +1,5 @@
 shopt -s checkwinsize
 shopt -s expand_aliases
-shopt -s nullglob
 shopt -s globstar
 shopt -s dotglob
 shopt -s extglob
