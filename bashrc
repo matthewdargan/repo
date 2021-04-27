@@ -1,6 +1,9 @@
 #!/usr/bin/bash
 
-# first whatever the system has (required for completion, etc.)
+# Change this in your own fork if needed
+export GITUSER=mpdargan
+
+# First whatever the system has (required for completion, etc.)
 if [ -e /etc/bashrc ]; then
     source /etc/bashrc
 fi
@@ -23,4 +26,6 @@ source "$HOME/.shell.d/golang.sh"
 source "$HOME/.shell.d/aliases.sh"
 source "$HOME/.shell.d/api-keys.sh"
 source "$HOME/.shell.d/fzf.sh"
-[ -r ~/.bash_private   ] && source ~/.bash_private
+[ -r ~/.bash_personal ] && source ~/.bash_personal
+[ -r ~/.bash_private ] && source ~/.bash_private
+[ -r ~/.bash_work ] && source ~/.bash_work
