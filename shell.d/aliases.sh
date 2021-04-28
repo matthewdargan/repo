@@ -12,5 +12,4 @@ alias free='free -h'
 alias df='df -h'
 alias top='htop'
 
-which nvim &>/dev/null && alias vi=nvim
-which nvim &>/dev/null && alias vim=nvim
+which vim &>/dev/null && alias vi=vim
