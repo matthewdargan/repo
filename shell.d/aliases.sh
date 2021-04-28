@@ -1,8 +1,8 @@
 unalias -a
 
-alias grep='grep -i --colour=auto'
-alias egrep='egrep -i --colour=auto'
-alias fgrep='fgrep -i --colour=auto'
+alias grep='grep -i --color=auto'
+alias egrep='egrep -i --color=auto'
+alias fgrep='fgrep -i --color=auto'
 alias curl='curl -L'
 alias ls='ls -h --color=auto'
 alias ll='ls -alF'
