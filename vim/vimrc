@@ -10,6 +10,7 @@ set tabstop=4 softtabstop=4 shiftwidth=4
 set smartindent
 set smarttab
 set colorcolumn=80
+let &t_EI .= "\<Esc>[2 q"
 
 if v:version >= 800
     " Stop vim from silently messing with files that it should not
