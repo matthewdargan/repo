@@ -82,7 +82,6 @@ if filereadable(expand("~/.vim/autoload/plug.vim"))
     Plug 'vim-airline/vim-airline-themes'
     Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
     Plug 'junegunn/fzf.vim'
-    Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
     Plug 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
     call plug#end()
 
@@ -132,11 +131,6 @@ if filereadable(expand("~/.vim/autoload/plug.vim"))
     nnoremap <silent> <Leader>hh :History<CR>
     nnoremap <silent> <Leader>h: :History:<CR>
     nnoremap <silent> <Leader>h/ :History/<CR>
-
-    " Deoplete
-    let g:deoplete#enable_at_startup = 1
-    set completeopt=menuone,noinsert,noselect
-    set shortmess+=c
 
     " Shell
     let g:shfmt_fmt_on_save = 1
