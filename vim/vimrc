@@ -22,7 +22,8 @@ if v:version >= 800
 endif
 
 set expandtab
-set norelativenumber
+set number
+set relativenumber
 highlight NonText guifg=bg
 set nobackup
 set noswapfile
