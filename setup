@@ -11,7 +11,7 @@ which fdfind &>/dev/null && ln -sf $(which fdfind) ~/.local/bin/fd
 ln -sf "$PWD/scripts" "$HOME/.local/bin/scripts"
 
 # Call subsequent setup scripts for other configurations
-for i in vim; do
+for i in gh vim; do
     cd $i && ./setup; cd -
 done
 
