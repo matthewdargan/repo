@@ -16,11 +16,14 @@ if v:version >= 800
     " Stop vim from silently messing with files that it should not
     set nofixendofline
 
-    " Better list chars
-    set listchars=tab:→\ ,eol:↲,nbsp:␣,space:·,trail:·,extends:⟩,precedes:⟨
+    " Better ASCII-friendly listchars
+    set listchars=tab:\|_,eol:§,nbsp:•,space:·,trail:•,extends:»,precedes:«
 
     set foldmethod=manual
 endif
+
+" Mark trailing whitespace as errors
+match ErrorMsg '\s\+$'
 
 set expandtab
 set number
@@ -59,7 +62,7 @@ set formatoptions-=b   " don't use broken 'vi-compatible auto-wrapping'
 set formatoptions+=l   " long lines not broken in insert mode
 set formatoptions+=m   " multi-byte character line break support
 set formatoptions+=M   " don't add space before or after multi-byte char
-set formatoptions-=B   " don't add space between two multi-byte chars in join 
+set formatoptions-=B   " don't add space between two multi-byte chars in join
 set formatoptions+=1   " don't break a line after a one-letter word
 set hidden
 set history=100
@@ -204,13 +207,13 @@ inoremap <down> <NOP>
 inoremap <left> <NOP>
 inoremap <right> <NOP>
 
-" Map alternatives the <ESC> key (<C-[> already is) 
+" Map alternatives the <ESC> key (<C-[> already is)
 inoremap jj <Esc>
 cnoremap jj <Esc>
-inoremap kk <Esc> 
+inoremap kk <Esc>
 cnoremap kk <Esc>
 inoremap kj <Esc>
-cnoremap kj <Esc> 
+cnoremap kj <Esc>
 
 " Better page down and page up
 noremap <C-n> <C-d>
