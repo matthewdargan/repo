@@ -8,6 +8,8 @@ alias ls='ls -h --color=auto'
 alias ll='ls -alF'
 alias la='ls -A'
 alias l='ls -CF'
+alias '?'=duck
+alias '??'=google
 alias free='free -h'
 alias df='df -h'
 alias top='htop'
