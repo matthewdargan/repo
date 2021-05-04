@@ -17,7 +17,7 @@ if v:version >= 800
     set nofixendofline
 
     " Better ASCII-friendly listchars
-    set listchars=tab:\|_,eol:§,nbsp:•,space:·,trail:•,extends:»,precedes:«
+    set listchars=space:*,trail:*,nbsp:*,extends:>,precedes:<,tab:\|>
 
     set foldmethod=manual
 endif
