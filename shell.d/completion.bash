@@ -5,6 +5,9 @@ fi
 
 complete -C pdf pdf
 complete -C md md
+complete -C auth auth
+complete -C config config
+complete -C ./setup ./setup
 
 if type gh &>/dev/null; then
     eval "$(gh completion -s bash)"
