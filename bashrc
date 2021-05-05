@@ -10,7 +10,6 @@ fi
 
 source "$HOME/.shell.d/detection.sh"
 source "$HOME/.shell.d/git.sh"
-source "$HOME/.shell.d/git-prompt.sh"
 source "$HOME/.shell.d/path.sh"
 source "$HOME/.shell.d/history.sh"
 source "$HOME/.shell.d/pager.sh"
