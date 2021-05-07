@@ -13,5 +13,7 @@ alias '??'=google
 alias free='free -h'
 alias df='df -h'
 alias top='htop'
+alias dot="cd dotfiles"
+alias scripts="cd scripts"
 
 which vim &>/dev/null && alias vi=vim

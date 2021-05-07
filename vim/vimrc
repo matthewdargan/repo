@@ -90,6 +90,9 @@ if filereadable(expand("~/.vim/autoload/plug.vim"))
     Plug 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
     call plug#end()
 
+    hi SpellRare ctermbg=red
+    hi Special ctermfg=cyan
+
     set laststatus=2
     set statusline=
     set statusline+=%*\ %<%.60F%*                 " path, trunc to 80 length
