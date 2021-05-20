@@ -1,4 +1,22 @@
-export SCRIPTS=$REPOS/github.com/$GITUSER/dotfiles/scripts
+isdir() {
+	RVAL=""
+  	test -d "$1" && RVAL="$1" && return 0
+  	return 1
+}
+
+scripts_repo() {
+    is_dir "$REPOS/github.com/$GITUSER/scripts" && return 0
+    is_dir "$REPOS/github.com/$GITUSER/dotfiles/scripts" && return 0
+    is_dir "$REPOS/github.com/$GITUSER/dot/scripts" && return 0
+    return 1
+}
+
+detect_scripts_repo() {
+    test -z "$GITUSER" -o -z "$REPOS" && return 1
+    scripts_repo || return 1
+    export SCRIPTS="$RVAL"
+    return 0
+}
 
 pathappend() {
     for ARG in "$@"; do
@@ -16,7 +34,7 @@ pathprepend() {
         case ":${PATH}:" in
         *:${ARG}:*) continue ;;
         esac
-        export PATH="${ARG}${PATH:+":${PATH}"}"
+        export PATH="${PATH:+"${PATH}:"}${ARG}"
     done
 }
 

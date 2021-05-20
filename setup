@@ -12,7 +12,6 @@ ln -sf "$PWD/scripts" "$HOME/.local/bin/scripts"
 
 # Call subsequent setup scripts for other configurations
 for i in gh lynx tmux vim; do
-    cd $i && ./setup; cd -
+    cd $i && ./setup
+    cd -
 done
-
-exit
