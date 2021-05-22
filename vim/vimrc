@@ -3,7 +3,7 @@ let skip_defaults_vim=1
 set nocompatible
 set autoindent
 set autowrite
-set nonumber
+set number
 set ruler
 set showmode
 set tabstop=4 softtabstop=4 shiftwidth=4
@@ -26,9 +26,7 @@ endif
 match ErrorMsg '\s\+$'
 
 set expandtab
-set number
 set relativenumber
-highlight NonText guifg=bg
 set nobackup
 set noswapfile
 set nowritebackup
@@ -38,32 +36,33 @@ set incsearch
 set linebreak
 set wildmenu
 
-" \+<cr> clears search
-map <silent> <leader><cr> :noh<cr>:redraw!<cr>
-
 " Avoid most of the 'Hit Enter ...' messages
-set shortmess=aoOtI
+set shortmess=aoOtTI
 
 " Prevents truncated yanks, deletes, etc.
 set viminfo='20,<1000,s1000
 
-set formatoptions-=t   " don't auto-wrap text using text width
-set formatoptions+=c   " autowrap comments using textwidth with leader
-set formatoptions-=r   " don't auto-insert comment leader on enter in insert
-set formatoptions-=o   " don't auto-insert comment leader on o/O in normal
-set formatoptions+=q   " allow formatting of comments with gq
-set formatoptions-=w   " don't use trailing whitespace for paragraphs
-set formatoptions-=a   " disable auto-formatting of paragraph changes
-set formatoptions-=n   " don't recognized numbered lists
-set formatoptions+=j   " delete comment prefix when joining
-set formatoptions-=2   " don't use the indent of second paragraph line
-set formatoptions-=v   " don't use broken 'vi-compatible auto-wrapping'
-set formatoptions-=b   " don't use broken 'vi-compatible auto-wrapping'
-set formatoptions+=l   " long lines not broken in insert mode
-set formatoptions+=m   " multi-byte character line break support
-set formatoptions+=M   " don't add space before or after multi-byte char
-set formatoptions-=B   " don't add space between two multi-byte chars in join
-set formatoptions+=1   " don't break a line after a one-letter word
+" Wrap around when searching
+set wrapscan
+
+set fo-=t   " don't auto-wrap text using text width
+set fo+=c   " autowrap comments using textwidth with leader
+set fo-=r   " don't auto-insert comment leader on enter in insert
+set fo-=o   " don't auto-insert comment leader on o/O in normal
+set fo+=q   " allow formatting of comments with gq
+set fo-=w   " don't use trailing whitespace for paragraphs
+set fo-=a   " disable auto-formatting of paragraph changes
+set fo-=n   " don't recognized numbered lists
+set fo+=j   " delete comment prefix when joining
+set fo-=2   " don't use the indent of second paragraph line
+set fo-=v   " don't use broken 'vi-compatible auto-wrapping'
+set fo-=b   " don't use broken 'vi-compatible auto-wrapping'
+set fo+=l   " long lines not broken in insert mode
+set fo+=m   " multi-byte character line break support
+set fo+=M   " don't add space before or after multi-byte char
+set fo-=B   " don't add space between two multi-byte chars
+set fo+=1   " don't break a line after a one-letter word
+set shm+=T  " truncate all messages instead of 'Press Enter'
 set hidden
 set history=100
 set ttyfast
@@ -75,10 +74,57 @@ if v:version >= 800 && executable('curl') && empty(glob('~/.vim/autoload/plug.vi
     silent !curl -fLo ~/.vim/autoload/plug.vim --create-dirs
         \ https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
     autocmd VimEnter * PlugInstall
-    echo "Don't forget to GoInstallBinaries if you're doing Go dev."
 endif
 
 set background=dark
+
+" Base default color changes (gruvbox dark friendly)
+hi StatusLine ctermfg=black ctermbg=NONE
+hi StatusLineNC ctermfg=black ctermbg=NONE
+hi Normal ctermbg=NONE
+hi Special ctermfg=cyan
+hi LineNr ctermfg=black ctermbg=NONE
+hi SpecialKey ctermfg=black ctermbg=NONE
+hi ModeMsg ctermfg=black cterm=NONE ctermbg=NONE
+hi MoreMsg ctermfg=black ctermbg=NONE
+hi NonText ctermfg=black ctermbg=NONE
+hi vimGlobal ctermfg=black ctermbg=NONE
+hi ErrorMsg ctermbg=234 ctermfg=darkred cterm=NONE
+hi Error ctermbg=234 ctermfg=darkred cterm=NONE
+hi SpellBad ctermbg=234 ctermfg=darkred cterm=NONE
+hi SpellRare ctermbg=234 ctermfg=darkred cterm=NONE
+hi Search ctermbg=236 ctermfg=darkred
+hi vimTodo ctermbg=236 ctermfg=darkred
+hi Todo ctermbg=236 ctermfg=darkred
+hi IncSearch ctermbg=236 cterm=NONE ctermfg=darkred
+hi MatchParen ctermbg=236 ctermfg=darkred
+
+" Color overrides
+au FileType * hi StatusLine ctermfg=black ctermbg=NONE
+au FileType * hi StatusLineNC ctermfg=black ctermbg=NONE
+au FileType * hi Normal ctermbg=NONE
+au FileType * hi Special ctermfg=cyan
+au FileType * hi LineNr ctermfg=black ctermbg=NONE
+au FileType * hi SpecialKey ctermfg=black ctermbg=NONE
+au FileType * hi ModeMsg ctermfg=black cterm=NONE ctermbg=NONE
+au FileType * hi MoreMsg ctermfg=black ctermbg=NONE
+au FileType * hi NonText ctermfg=black ctermbg=NONE
+au FileType * hi vimGlobal ctermfg=black ctermbg=NONE
+au FileType * hi ErrorMsg ctermbg=234 ctermfg=darkred cterm=NONE
+au FileType * hi Error ctermbg=234 ctermfg=darkred cterm=NONE
+au FileType * hi SpellBad ctermbg=234 ctermfg=darkred cterm=NONE
+au FileType * hi SpellRare ctermbg=234 ctermfg=darkred cterm=NONE
+au FileType * hi Search ctermbg=236 ctermfg=darkred
+au FileType * hi vimTodo ctermbg=236 ctermfg=darkred
+au FileType * hi Todo ctermbg=236 ctermfg=darkred
+au FileType * hi IncSearch ctermbg=236 cterm=NONE ctermfg=darkred
+au FileType * hi MatchParen ctermbg=236 ctermfg=darkred
+au FileType markdown,pandoc hi Title ctermfg=yellow ctermbg=NONE
+au FileType markdown,pandoc hi Operator ctermfg=yellow ctermbg=NONE
+
+" Edit/Reload vimr configuration file
+nnoremap confe :e $HOME/.vimrc<CR>
+nnoremap confr :source $HOME/.vimrc<CR>
 
 if filereadable(expand("~/.vim/autoload/plug.vim"))
     call plug#begin('~/.vimplugins')
@@ -93,13 +139,7 @@ if filereadable(expand("~/.vim/autoload/plug.vim"))
     hi SpellRare ctermbg=red
     hi Special ctermfg=cyan
 
-    set laststatus=2
-    set statusline=
-    set statusline+=%*\ %<%.60F%*                 " path, trunc to 80 length
-    set statusline+=\ [%{strlen(&ft)?&ft:'none'}] " filetype
-    set statusline+=%*\ %l:%c%*                   " current line and column
-    set statusline+=%*\ %p%%%*                    " percentage
-    set cmdheight=1
+    set ruf=%50(%=%#LineNr#%.50F\ [%{strlen(&ft)?&ft:'none'}]\ %l:%c\ %p%%%)
     set updatetime=100
 
     " Colorscheme options
@@ -140,8 +180,7 @@ if filereadable(expand("~/.vim/autoload/plug.vim"))
     nnoremap <silent> <Leader>h: :History:<CR>
     nnoremap <silent> <Leader>h/ :History/<CR>
 
-    " Shell
-    let g:shfmt_fmt_on_save = 1
+    let g:shfmt_fmt_on_save = 2
 
     " Golang
     let g:go_fmt_fail_silently = 0
@@ -209,14 +248,6 @@ inoremap <up> <NOP>
 inoremap <down> <NOP>
 inoremap <left> <NOP>
 inoremap <right> <NOP>
-
-" Map alternatives the <ESC> key (<C-[> already is)
-inoremap jj <Esc>
-cnoremap jj <Esc>
-inoremap kk <Esc>
-cnoremap kk <Esc>
-inoremap kj <Esc>
-cnoremap kj <Esc>
 
 " Better page down and page up
 noremap <C-n> <C-d>
