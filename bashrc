@@ -1,5 +1,7 @@
+export TERM=xterm-256color
 export GITUSER="${USER}"
 export SCRIPTS=~/.local/bin/scripts
+test ! -d "$SCRIPTS" && mkdir -p "$SCRIPTS"
 export REPOS="${HOME}/repos"
 export DOTFILES="${REPOS}/github.com/${GITUSER}/dotfiles"
 test -e /etc/bashrc && source /etc/bashrc
