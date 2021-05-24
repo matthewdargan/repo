@@ -226,6 +226,7 @@ alias scripts="cd ${SCRIPTS}"
 
 which vim &>/dev/null && alias vi=vim
 
+source "${HOME}/.shell.d/api-keys.sh"
 test -r ~/.bash_personal && source ~/.bash_personal
 test -r ~/.bash_private && source ~/.bash_private
 test -r ~/.bash_work && source ~/.bash_work
