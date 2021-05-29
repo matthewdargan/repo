@@ -134,6 +134,7 @@ if filereadable(expand("~/.vim/autoload/plug.vim"))
     Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
     Plug 'junegunn/fzf.vim'
     Plug 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
+    Plug 'prabirshrestha/vim-lsp'
     call plug#end()
 
     hi SpellRare ctermbg=red
@@ -206,6 +207,23 @@ if filereadable(expand("~/.vim/autoload/plug.vim"))
     au FileType go nmap <leader>c :GoCoverageToggle<CR>
     au FileType go nmap <leader>i :GoInfo<CR>
     au FileType go nmap <leader>l :GoMetaLinter!<CR>
+
+    " Rust
+    if executable('rust-analyzer')
+  		au User lsp_setup call lsp#register_server({
+        	\   'name': 'Rust Language Server',
+        	\   'cmd': {server_info->['rust-analyzer']},
+        	\   'whitelist': ['rust'],
+        	\   'initialization_options': {
+        	\     'cargo': {
+        	\       'loadOutDirsFromCheck': v:true,
+        	\     },
+        	\     'procMacro': {
+        	\       'enable': v:true,
+        	\     },
+        	\   },
+        	\ })
+	endif
 else
     autocmd vimleavepre *.go !gofmt -w % " backup if fatih fails
 endif
