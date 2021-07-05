@@ -1,7 +1,0 @@
-#!/bin/sh
-if [ -z "$(which vim)" ]; then
-    echo Need to install full vim.
-    exit 1
-fi
-
-ln -sf "$PWD/vimrc" "$HOME/.vimrc"
