@@ -165,8 +165,6 @@ export EDITOR=vi
 export VISUAL=vi
 export EDITOR_PREFIX=vi
 
-test -d ~/.vim/spell && export VIMSPELL=(~/.vim/spell/*.add)
-
 export FZF_DEFAULT_COMMAND='fd --type f'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 export PYTHONDONTWRITEBYTECODE=1
@@ -224,7 +222,7 @@ alias top=htop
 alias dot="cd ${DOTFILES}"
 alias scripts="cd ${SCRIPTS}"
 
-which vim &>/dev/null && alias vi=vim
+which nvim &>/dev/null && alias vi=nvim && alias vim=nvim
 
 source "${HOME}/.shell.d/api-keys.sh"
 test -r ~/.bash_personal && source ~/.bash_personal

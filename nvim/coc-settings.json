@@ -1,0 +1,13 @@
+{
+    "diagnostic.checkCurrentLine": true,
+    "rust-analyzer.cargo.allFeatures": true,
+	"golang": {
+        "command": "gopls",
+        "filetypes": ["go"],
+        "initializationOptions": {
+            "gocodeCompletionEnabled": true,
+            "diagnosticsEnabled": true,
+            "lintTool": "golint"
+        }
+    }	    
+}
