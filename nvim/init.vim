@@ -192,6 +192,11 @@ au FileType go nmap <leader>c :GoCoverageToggle<CR>
 au FileType go nmap <leader>i :GoInfo<CR>
 au FileType go nmap <leader>l :GoMetaLinter!<CR>
 
+""" C++
+let g:LanguageClient_serverCommands = {
+\ 'cpp': ['clangd'],
+\ }
+
 " Make Y consitent with D and C (yank til end)
 map Y y$
 
