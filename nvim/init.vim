@@ -5,6 +5,7 @@ Plug 'morhetz/gruvbox'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
 Plug 'andymass/vim-matchup'
+Plug 'jackguo380/vim-lsp-cxx-highlight'
 
 " Fuzzy Finder
 Plug 'airblade/vim-rooter'
@@ -24,6 +25,7 @@ Plug 'plasticboy/vim-markdown'
 Plug 'rhysd/vim-clang-format'
 Plug 'rust-lang/rust.vim', { 'for': 'rust' }
 Plug 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
+Plug 'ludovicchabant/vim-gutentags'
 call plug#end()
 
 """ Colorscheme Options
@@ -109,7 +111,7 @@ nnoremap <silent> <Leader>hh :History<CR>
 nnoremap <silent> <Leader>h: :History:<CR>
 nnoremap <silent> <Leader>h/ :History/<CR>
 
-""" Rust
+""" Rust and C++
 lua <<EOF
 
 -- nvim_lsp object
@@ -134,13 +136,21 @@ nvim_lsp.rust_analyzer.setup({
     }
 })
 
+-- Enable ccls (Requires https://github.com/MaskRay/ccls/wiki/Build)
+nvim_lsp.ccls.setup({
+    init_options = {
+        compilationDatabaseDirectory = "build",
+        highlight = {lsRanges = true},
+    }
+})
+
 -- Enable diagnostics
 vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
-  vim.lsp.diagnostic.on_publish_diagnostics, {
-    virtual_text = true,
-    signs = true,
-    update_in_insert = true,
-  }
+    vim.lsp.diagnostic.on_publish_diagnostics, {
+        virtual_text = true,
+        signs = true,
+        update_in_insert = true,
+    }
 )
 EOF
 
@@ -192,10 +202,19 @@ au FileType go nmap <leader>c :GoCoverageToggle<CR>
 au FileType go nmap <leader>i :GoInfo<CR>
 au FileType go nmap <leader>l :GoMetaLinter!<CR>
 
-""" C++
-let g:LanguageClient_serverCommands = {
-\ 'cpp': ['clangd'],
-\ }
+" clang-format settings
+let g:clang_format#code_style = 'llvm'
+autocmd FileType c,cpp,objc nnoremap <buffer><Leader>cf :<C-u>ClangFormat<CR>
+autocmd FileType c,cpp,objc vnoremap <buffer><Leader>cf :ClangFormat<CR>
+autocmd FileType c ClangFormatAutoEnable
+
+" gutentags
+let g:gutentags_ctags_tagfile = '.tags'
+let s:vim_tags = expand('~/.cache/tags')
+let g:gutentags_cache_dir = s:vim_tags
+let g:gutentags_ctags_extra_args = ['--fields=+niazS', '--extra=+q']
+let g:gutentags_ctags_extra_args += ['--c++-kinds=+px']
+let g:gutentags_ctags_extra_args += ['--c-kinds=+px']
 
 " Make Y consitent with D and C (yank til end)
 map Y y$
