@@ -136,14 +136,6 @@ nvim_lsp.rust_analyzer.setup({
     }
 })
 
--- Enable ccls (Requires https://github.com/MaskRay/ccls/wiki/Build)
-nvim_lsp.ccls.setup({
-    init_options = {
-        compilationDatabaseDirectory = "build",
-        highlight = {lsRanges = true},
-    }
-})
-
 -- Enable diagnostics
 vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
     vim.lsp.diagnostic.on_publish_diagnostics, {
@@ -201,6 +193,11 @@ au FileType go nmap <leader>b :GoBuild!<CR>
 au FileType go nmap <leader>c :GoCoverageToggle<CR>
 au FileType go nmap <leader>i :GoInfo<CR>
 au FileType go nmap <leader>l :GoMetaLinter!<CR>
+
+" clangd
+let g:LanguageClient_serverCommands = {
+\ 'cpp': ['clangd'],
+\ }
 
 " clang-format settings
 let g:clang_format#code_style = 'llvm'
