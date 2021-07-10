@@ -1,32 +1,32 @@
-""" Vim-Plug
+" Vim-Plug
 call plug#begin()
-""" GUI Enhancements
+" GUI Enhancements
 Plug 'morhetz/gruvbox'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
-Plug 'jackguo380/vim-lsp-cxx-highlight'
 
-""" Fuzzy Finder
+" Fuzzy Finder
 Plug 'airblade/vim-rooter'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 
-""" Syntactic language support
-Plug 'neovim/nvim-lspconfig'
-Plug 'nvim-lua/lsp_extensions.nvim'
+" Syntactic language support
 Plug 'rhysd/vim-clang-format'
 Plug 'rust-lang/rust.vim', { 'for': 'rust' }
 Plug 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
 Plug 'ludovicchabant/vim-gutentags'
 call plug#end()
 
-""" Colorscheme Options
+" Colorscheme Options
 set bg=dark
 colorscheme gruvbox
 let g:airline_theme='gruvbox'
 let g:gruvbox_contrast_dark = 'hard'
 
-""" fzf-vim
+" Mark trailing spaces as errors
+match ErrorMsg '\s\+$'
+
+" fzf-vim
 let g:fzf_action = {
   \ 'ctrl-t': 'tab split',
   \ 'ctrl-s': 'split',
@@ -46,7 +46,7 @@ let g:fzf_colors =
   \ 'spinner': ['fg', 'Label'],
   \ 'header':  ['fg', 'Comment'] }
 
-""" Remappings
+" Remappings
 let mapleader=" "
 nnoremap <silent> <Leader>b :Buffers<CR>
 nnoremap <silent> <C-f> :Files<CR>
@@ -59,65 +59,7 @@ nnoremap <silent> <Leader>hh :History<CR>
 nnoremap <silent> <Leader>h: :History:<CR>
 nnoremap <silent> <Leader>h/ :History/<CR>
 
-""" Rust and C++
-lua <<EOF
-
--- nvim_lsp object
-local nvim_lsp = require'lspconfig'
-
--- function to attach completion when setting up lsp
-local on_attach = function(client)
-    require'completion'.on_attach(client)
-end
-
--- Enable rust_analyzer
-nvim_lsp.rust_analyzer.setup({
-    on_attach=on_attach,
-    settings = {
-        ["rust-analyzer"] = {
-            diagnostics = {
-                enable = true,
-                disabled = {"unresolved-proc-macro"},
-                enableExperimental = true,
-            }
-        }
-    }
-})
-
--- Enable diagnostics
-vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
-    vim.lsp.diagnostic.on_publish_diagnostics, {
-        virtual_text = true,
-        signs = true,
-        update_in_insert = true,
-    }
-)
-EOF
-
-inoremap <expr> <Tab>   pumvisible() ? "\<C-n>" : "\<Tab>"
-inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
-imap <Tab> <Plug>(completion_smart_tab)
-imap <S-Tab> <Plug>(completion_smart_s_tab)
-nnoremap <silent> <c-]> <cmd>lua vim.lsp.buf.definition()<CR>
-nnoremap <silent> K     <cmd>lua vim.lsp.buf.hover()<CR>
-nnoremap <silent> gD    <cmd>lua vim.lsp.buf.implementation()<CR>
-nnoremap <silent> <c-k> <cmd>lua vim.lsp.buf.signature_help()<CR>
-nnoremap <silent> 1gD   <cmd>lua vim.lsp.buf.type_definition()<CR>
-nnoremap <silent> gr    <cmd>lua vim.lsp.buf.references()<CR>
-nnoremap <silent> g0    <cmd>lua vim.lsp.buf.document_symbol()<CR>
-nnoremap <silent> gW    <cmd>lua vim.lsp.buf.workspace_symbol()<CR>
-nnoremap <silent> gd    <cmd>lua vim.lsp.buf.declaration()<CR>
-nnoremap <silent> ga    <cmd>lua vim.lsp.buf.code_action()<CR>
-autocmd CursorHold * lua vim.lsp.diagnostic.show_line_diagnostics()
-nnoremap <silent> g[ <cmd>lua vim.lsp.diagnostic.goto_prev()<CR>
-nnoremap <silent> g] <cmd>lua vim.lsp.diagnostic.goto_next()<CR>
-autocmd CursorMoved,InsertLeave,BufEnter,BufWinEnter,TabEnter,BufWritePost *
-\ lua require'lsp_extensions'.inlay_hints{ prefix = '', highlight = "Comment", enabled = {"TypeHint", "ChainingHint", "ParameterHint"} }
-nmap <F5> <Plug>(lcn-menu)
-autocmd FileType rust nmap <silent> gr <Plug>(lcn-rename)
-let g:rustfmt_autosave = 1
-
-""" Go
+" Go
 let g:go_fmt_fail_silently = 0
 let g:go_fmt_command = 'goimports'
 let g:go_fmt_autosave = 1
@@ -142,18 +84,13 @@ au FileType go nmap <leader>c :GoCoverageToggle<CR>
 au FileType go nmap <leader>i :GoInfo<CR>
 au FileType go nmap <leader>l :GoMetaLinter!<CR>
 
-""" clangd
-let g:LanguageClient_serverCommands = {
-\ 'cpp': ['clangd'],
-\ }
-
-""" clang-format settings
+" clang-format settings
 let g:clang_format#code_style = 'llvm'
 autocmd FileType c,cpp,objc nnoremap <buffer><Leader>cf :<C-u>ClangFormat<CR>
 autocmd FileType c,cpp,objc vnoremap <buffer><Leader>cf :ClangFormat<CR>
 autocmd FileType c ClangFormatAutoEnable
 
-""" gutentags
+" gutentags
 let g:gutentags_ctags_tagfile = '.tags'
 let s:vim_tags = expand('~/.cache/tags')
 let g:gutentags_cache_dir = s:vim_tags
@@ -161,13 +98,13 @@ let g:gutentags_ctags_extra_args = ['--fields=+niazS', '--extra=+q']
 let g:gutentags_ctags_extra_args += ['--c++-kinds=+px']
 let g:gutentags_ctags_extra_args += ['--c-kinds=+px']
 
-""" Make Y consitent with D and C (yank til end)
+" Make Y consitent with D and C (yank til end)
 map Y y$
 
-""" Start at last place you were editing
+" Start at last place you were editing
 au BufReadPost * if line("'\"") > 1 && line("'\"") <= line("$") | exe "normal! g'\"" | endif
 
-""" Functions keys
+" Functions keys
 map <F1> :set number!<CR> :set relativenumber!<CR>
 set pastetoggle=<F2>
 map <F3> :set list!<CR>
@@ -175,7 +112,7 @@ map <F4> :set cursorline!<CR>
 map <F5> :set spell!<CR>
 map <F6> :set fdm=indent<CR>
 
-""" Other Configurations
+" Other Configurations
 let skip_defaults_vim=1
 set nocompatible
 set autoindent
