@@ -1,27 +1,19 @@
 """ Vim-Plug
 call plug#begin()
-" GUI Enhancements
+""" GUI Enhancements
 Plug 'morhetz/gruvbox'
 Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
-Plug 'andymass/vim-matchup'
 Plug 'jackguo380/vim-lsp-cxx-highlight'
 
-" Fuzzy Finder
+""" Fuzzy Finder
 Plug 'airblade/vim-rooter'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 
-" Semantic language support
-Plug 'neoclide/coc.nvim', { 'branch': 'release' }
-
-" Syntactic language support
+""" Syntactic language support
 Plug 'neovim/nvim-lspconfig'
 Plug 'nvim-lua/lsp_extensions.nvim'
-Plug 'nvim-lua/completion-nvim'
-Plug 'cespare/vim-toml'
-Plug 'stephpy/vim-yaml'
-Plug 'plasticboy/vim-markdown'
 Plug 'rhysd/vim-clang-format'
 Plug 'rust-lang/rust.vim', { 'for': 'rust' }
 Plug 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
@@ -33,50 +25,6 @@ set bg=dark
 colorscheme gruvbox
 let g:airline_theme='gruvbox'
 let g:gruvbox_contrast_dark = 'hard'
-
-" Base default color changes (gruvbox dark friendly)
-hi StatusLine ctermfg=black ctermbg=NONE
-hi StatusLineNC ctermfg=black ctermbg=NONE
-hi Normal ctermbg=NONE
-hi Special ctermfg=cyan
-hi LineNr ctermfg=black ctermbg=NONE
-hi SpecialKey ctermfg=black ctermbg=NONE
-hi ModeMsg ctermfg=black cterm=NONE ctermbg=NONE
-hi MoreMsg ctermfg=black ctermbg=NONE
-hi NonText ctermfg=black ctermbg=NONE
-hi vimGlobal ctermfg=black ctermbg=NONE
-hi ErrorMsg ctermbg=234 ctermfg=darkred cterm=NONE
-hi Error ctermbg=234 ctermfg=darkred cterm=NONE
-hi SpellBad ctermbg=234 ctermfg=darkred cterm=NONE
-hi SpellRare ctermbg=234 ctermfg=darkred cterm=NONE
-hi Search ctermbg=236 ctermfg=darkred
-hi vimTodo ctermbg=236 ctermfg=darkred
-hi Todo ctermbg=236 ctermfg=darkred
-hi IncSearch ctermbg=236 cterm=NONE ctermfg=darkred
-hi MatchParen ctermbg=236 ctermfg=darkred
-
-" Color overrides
-au FileType * hi StatusLine ctermfg=black ctermbg=NONE
-au FileType * hi StatusLineNC ctermfg=black ctermbg=NONE
-au FileType * hi Normal ctermbg=NONE
-au FileType * hi Special ctermfg=cyan
-au FileType * hi LineNr ctermfg=black ctermbg=NONE
-au FileType * hi SpecialKey ctermfg=black ctermbg=NONE
-au FileType * hi ModeMsg ctermfg=black cterm=NONE ctermbg=NONE
-au FileType * hi MoreMsg ctermfg=black ctermbg=NONE
-au FileType * hi NonText ctermfg=black ctermbg=NONE
-au FileType * hi vimGlobal ctermfg=black ctermbg=NONE
-au FileType * hi ErrorMsg ctermbg=234 ctermfg=darkred cterm=NONE
-au FileType * hi Error ctermbg=234 ctermfg=darkred cterm=NONE
-au FileType * hi SpellBad ctermbg=234 ctermfg=darkred cterm=NONE
-au FileType * hi SpellRare ctermbg=234 ctermfg=darkred cterm=NONE
-au FileType * hi Search ctermbg=236 ctermfg=darkred
-au FileType * hi vimTodo ctermbg=236 ctermfg=darkred
-au FileType * hi Todo ctermbg=236 ctermfg=darkred
-au FileType * hi IncSearch ctermbg=236 cterm=NONE ctermfg=darkred
-au FileType * hi MatchParen ctermbg=236 ctermfg=darkred
-au FileType markdown,pandoc hi Title ctermfg=yellow ctermbg=NONE
-au FileType markdown,pandoc hi Operator ctermfg=yellow ctermbg=NONE
 
 """ fzf-vim
 let g:fzf_action = {
@@ -194,18 +142,18 @@ au FileType go nmap <leader>c :GoCoverageToggle<CR>
 au FileType go nmap <leader>i :GoInfo<CR>
 au FileType go nmap <leader>l :GoMetaLinter!<CR>
 
-" clangd
+""" clangd
 let g:LanguageClient_serverCommands = {
 \ 'cpp': ['clangd'],
 \ }
 
-" clang-format settings
+""" clang-format settings
 let g:clang_format#code_style = 'llvm'
 autocmd FileType c,cpp,objc nnoremap <buffer><Leader>cf :<C-u>ClangFormat<CR>
 autocmd FileType c,cpp,objc vnoremap <buffer><Leader>cf :ClangFormat<CR>
 autocmd FileType c ClangFormatAutoEnable
 
-" gutentags
+""" gutentags
 let g:gutentags_ctags_tagfile = '.tags'
 let s:vim_tags = expand('~/.cache/tags')
 let g:gutentags_cache_dir = s:vim_tags
@@ -213,27 +161,13 @@ let g:gutentags_ctags_extra_args = ['--fields=+niazS', '--extra=+q']
 let g:gutentags_ctags_extra_args += ['--c++-kinds=+px']
 let g:gutentags_ctags_extra_args += ['--c-kinds=+px']
 
-" Make Y consitent with D and C (yank til end)
+""" Make Y consitent with D and C (yank til end)
 map Y y$
 
-" Disable arrow keys (vi muscle memory)
-inoremap <up> <NOP>
-inoremap <down> <NOP>
-inoremap <left> <NOP>
-inoremap <right> <NOP>
-
-" Map alternatives the <ESC> key (<C-[> already is)
-inoremap jj <Esc>
-cnoremap jj <Esc>
-inoremap kk <Esc>
-cnoremap kk <Esc>
-inoremap kj <Esc>
-cnoremap kj <Esc>
-
-" Start at last place you were editing
+""" Start at last place you were editing
 au BufReadPost * if line("'\"") > 1 && line("'\"") <= line("$") | exe "normal! g'\"" | endif
 
-" Functions keys
+""" Functions keys
 map <F1> :set number!<CR> :set relativenumber!<CR>
 set pastetoggle=<F2>
 map <F3> :set list!<CR>
