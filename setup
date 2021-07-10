@@ -12,7 +12,7 @@ ln -sf "$PWD/scripts" "$HOME/.local/bin/scripts"
 which fdfind &>/dev/null && ln -sf $(which fdfind) ~/.local/bin/fd
 
 # Call subsequent setup scripts for other configurations
-for i in gh lynx tmux nvim; do
+for i in gh lynx tmux vim; do
     cd $i && ./setup
     cd -
 done

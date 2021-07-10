@@ -1,9 +1,0 @@
-#!/bin/sh
-if [ -z "$(which nvim)" ]; then
-    echo Need to install full Neovim.
-    exit 1
-fi
-
-[ -d "$HOME/.config/nvim" ] || mkdir -p "$HOME/.config/nvim"
-ln -sf "$PWD/init.vim" "$HOME/.config/nvim/init.vim"
-ln -sf "$PWD/coc-settings.json" "$HOME/.config/nvim/coc-settings.json"
