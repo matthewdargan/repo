@@ -140,11 +140,9 @@ set scrolloff=8
 set colorcolumn=80
 set signcolumn=yes
 set showmatch
-set mouse=v
 set wildmode=longest,list
 set cmdheight=2
 set updatetime=300
 set ttyfast
-set mouse=a
 filetype plugin indent on
 syntax on
