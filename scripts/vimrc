@@ -1,2 +1,2 @@
 #!/bin/sh
-vim $HOME/.config/nvim/init.vim
+vim $HOME/.vimrc
