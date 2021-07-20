@@ -12,7 +12,6 @@ Plug 'junegunn/fzf.vim'
 
 " Syntactic language support
 Plug 'rhysd/vim-clang-format'
-Plug 'rust-lang/rust.vim', { 'for': 'rust' }
 Plug 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
 Plug 'ludovicchabant/vim-gutentags'
 call plug#end()
