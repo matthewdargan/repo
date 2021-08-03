@@ -4,6 +4,8 @@ export SCRIPTS=~/.local/bin/scripts
 test ! -d "$SCRIPTS" && mkdir -p "$SCRIPTS"
 export REPOS="${HOME}/repos"
 export DOTFILES="${REPOS}/github.com/${GITUSER}/dotfiles"
+export PLAN9="${HOME}/plan9port"
+export DISPLAY=$(route.exe print | grep 0.0.0.0 | head -1 | awk '{print $4}'):0.0
 test -e /etc/bashrc && source /etc/bashrc
 
 case $- in
@@ -52,7 +54,8 @@ pathprepend \
     "${HOME}/.local/go/bin" \
     "${HOME}/.cargo/bin" \
     "${HOME}/.poetry/bin" \
-    "${HOME}/bin"
+    "${HOME}/bin" \
+    "${PLAN9}/bin"
 
 pathappend \
     "/usr/local/opt/coreutils/libexec/gnubin" \
@@ -186,19 +189,6 @@ owncomp=(pdf md auth config ./setup)
 for i in ${owncomp[@]}; do complete -C $i $i; done
 
 type gh &>/dev/null && . <(gh completion -s bash)
-
-if test -x /usr/bin/lesspipe; then
-  	export LESSOPEN="| /usr/bin/lesspipe %s";
-  	export LESSCLOSE="/usr/bin/lesspipe %s %s";
-fi
-
-export LESS_TERMCAP_mb="[35m" # magenta
-export LESS_TERMCAP_md="[33m" # yellow
-export LESS_TERMCAP_me="" # "0m"
-export LESS_TERMCAP_se="" # "0m"
-export LESS_TERMCAP_so="[34m" # blue
-export LESS_TERMCAP_ue="" # "0m"
-export LESS_TERMCAP_us="[4m"  # underline
 
 export GOPRIVATE="github.com/$GITUSER/*,github.com/eBay-Swippy-Swappy-Funtime/*"
 export GOPATH="$HOME/.local/go"
