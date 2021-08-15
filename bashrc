@@ -4,8 +4,6 @@ export SCRIPTS=~/.local/bin/scripts
 test ! -d "$SCRIPTS" && mkdir -p "$SCRIPTS"
 export REPOS="${HOME}/repos"
 export DOTFILES="${REPOS}/github.com/${GITUSER}/dotfiles"
-export PLAN9="${HOME}/plan9port"
-export DISPLAY=$(route.exe print | grep 0.0.0.0 | head -1 | awk '{print $4}'):0.0
 test -e /etc/bashrc && source /etc/bashrc
 
 case $- in
