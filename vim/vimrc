@@ -6,12 +6,10 @@ Plug 'vim-airline/vim-airline'
 Plug 'vim-airline/vim-airline-themes'
 
 " Fuzzy Finder
-Plug 'airblade/vim-rooter'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 
 " Syntactic language support
-Plug 'rhysd/vim-clang-format'
 Plug 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
 Plug 'ludovicchabant/vim-gutentags'
 call plug#end()
@@ -20,7 +18,7 @@ call plug#end()
 set bg=dark
 colorscheme gruvbox
 let g:airline_theme='gruvbox'
-let g:gruvbox_contrast_dark = 'hard'
+let g:gruvbox_contrast_dark='hard'
 
 " Mark trailing spaces as errors
 match ErrorMsg '\s\+$'
@@ -59,23 +57,23 @@ nnoremap <silent> <Leader>h: :History:<CR>
 nnoremap <silent> <Leader>h/ :History/<CR>
 
 " Go
-let g:go_fmt_fail_silently = 0
-let g:go_fmt_command = 'goimports'
-let g:go_fmt_autosave = 1
-let g:go_gopls_enabled = 1
-let g:go_highlight_types = 1
-let g:go_highlight_fields = 1
-let g:go_highlight_functions = 1
-let g:go_highlight_function_calls = 1
-let g:go_highlight_operators = 1
-let g:go_highlight_extra_types = 1
-let g:go_highlight_variable_declarations = 1
-let g:go_highlight_variable_assignments = 1
-let g:go_highlight_build_constraints = 1
-let g:go_highlight_diagnostic_errors = 1
-let g:go_highlight_diagnostic_warnings = 1
-let g:go_auto_type_info = 1
-let g:go_auto_sameids = 0
+let g:go_fmt_fail_silently=0
+let g:go_fmt_command='goimports'
+let g:go_fmt_autosave=1
+let g:go_gopls_enabled=1
+let g:go_highlight_types=1
+let g:go_highlight_fields=1
+let g:go_highlight_functions=1
+let g:go_highlight_function_calls=1
+let g:go_highlight_operators=1
+let g:go_highlight_extra_types=1
+let g:go_highlight_variable_declarations=1
+let g:go_highlight_variable_assignments=1
+let g:go_highlight_build_constraints=1
+let g:go_highlight_diagnostic_errors=1
+let g:go_highlight_diagnostic_warnings=1
+let g:go_auto_type_info=1
+let g:go_auto_sameids=0
 au FileType go nmap <leader>t :GoTest!<CR>
 au FileType go nmap <leader>v :GoVet!<CR>
 au FileType go nmap <leader>b :GoBuild!<CR>
@@ -84,18 +82,18 @@ au FileType go nmap <leader>i :GoInfo<CR>
 au FileType go nmap <leader>l :GoMetaLinter!<CR>
 
 " clang-format settings
-let g:clang_format#code_style = 'llvm'
+let g:clang_format#code_style='llvm'
 autocmd FileType c,cpp,objc nnoremap <buffer><Leader>cf :<C-u>ClangFormat<CR>
 autocmd FileType c,cpp,objc vnoremap <buffer><Leader>cf :ClangFormat<CR>
 autocmd FileType c ClangFormatAutoEnable
 
 " gutentags
-let g:gutentags_ctags_tagfile = '.tags'
-let s:vim_tags = expand('~/.cache/tags')
-let g:gutentags_cache_dir = s:vim_tags
-let g:gutentags_ctags_extra_args = ['--fields=+niazS', '--extra=+q']
-let g:gutentags_ctags_extra_args += ['--c++-kinds=+px']
-let g:gutentags_ctags_extra_args += ['--c-kinds=+px']
+let g:gutentags_ctags_tagfile='.tags'
+let s:vim_tags=expand('~/.cache/tags')
+let g:gutentags_cache_dir=s:vim_tags
+let g:gutentags_ctags_extra_args=['--fields=+niazS', '--extra=+q']
+let g:gutentags_ctags_extra_args+=['--c++-kinds=+px']
+let g:gutentags_ctags_extra_args+=['--c-kinds=+px']
 
 " Make Y consitent with D and C (yank til end)
 map Y y$
