@@ -1,24 +1,14 @@
 " Vim-Plug
 call plug#begin()
-" GUI Enhancements
-Plug 'morhetz/gruvbox'
 Plug 'vim-airline/vim-airline'
-Plug 'vim-airline/vim-airline-themes'
-
-" Fuzzy Finder
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
-
-" Syntactic language support
 Plug 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
 Plug 'ludovicchabant/vim-gutentags'
 call plug#end()
 
 " Colorscheme Options
 set bg=dark
-colorscheme gruvbox
-let g:airline_theme='gruvbox'
-let g:gruvbox_contrast_dark='hard'
 
 " Mark trailing spaces as errors
 match ErrorMsg '\s\+$'
@@ -81,12 +71,6 @@ au FileType go nmap <leader>c :GoCoverageToggle<CR>
 au FileType go nmap <leader>i :GoInfo<CR>
 au FileType go nmap <leader>l :GoMetaLinter!<CR>
 
-" clang-format settings
-let g:clang_format#code_style='llvm'
-autocmd FileType c,cpp,objc nnoremap <buffer><Leader>cf :<C-u>ClangFormat<CR>
-autocmd FileType c,cpp,objc vnoremap <buffer><Leader>cf :ClangFormat<CR>
-autocmd FileType c ClangFormatAutoEnable
-
 " gutentags
 let g:gutentags_ctags_tagfile='.tags'
 let s:vim_tags=expand('~/.cache/tags')
@@ -135,7 +119,6 @@ set viminfo='20,<1000,s1000
 set termguicolors
 set scrolloff=8
 set colorcolumn=80
-set signcolumn=yes
 set showmatch
 set wildmode=longest,list
 set cmdheight=2
