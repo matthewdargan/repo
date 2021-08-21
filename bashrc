@@ -85,9 +85,6 @@ shopt -s histappend
 set -o vi
 set -o noclobber
 
-PROMPT_LONG=80
-PROMPT_MAX=95
-
 __ps1() {
     local P='$' # Changes to hashtag when root
 
