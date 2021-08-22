@@ -52,8 +52,7 @@ pathprepend \
     "${HOME}/.local/go/bin" \
     "${HOME}/.cargo/bin" \
     "${HOME}/.poetry/bin" \
-    "${HOME}/bin" \
-    "${PLAN9}/bin"
+    "${HOME}/bin"
 
 pathappend \
     "/usr/local/opt/coreutils/libexec/gnubin" \
@@ -154,8 +153,8 @@ for i in ${owncomp[@]}; do complete -C $i $i; done
 type gh &>/dev/null && . <(gh completion -s bash)
 
 export GOPRIVATE="github.com/$GITUSER/*,github.com/eBay-Swippy-Swappy-Funtime/*"
-export GOPATH="$HOME/.local/go"
-export GOBIN="$HOME/.local/go/bin"
+export GOPATH="${HOME}/.local/go"
+export GOBIN="${GOPATH}/bin"
 export GOPROXY=direct
 export CGO_ENABLED=0
 
