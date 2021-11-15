@@ -4,7 +4,7 @@ Plug 'vim-airline/vim-airline'
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 Plug 'fatih/vim-go', { 'do': ':GoInstallBinaries' }
-Plug 'ludovicchabant/vim-gutentags'
+Plug 'prabirshrestha/vim-lsp'
 call plug#end()
 
 " Colorscheme Options
@@ -71,13 +71,22 @@ au FileType go nmap <leader>c :GoCoverageToggle<CR>
 au FileType go nmap <leader>i :GoInfo<CR>
 au FileType go nmap <leader>l :GoMetaLinter!<CR>
 
-" gutentags
-let g:gutentags_ctags_tagfile='.tags'
-let s:vim_tags=expand('~/.cache/tags')
-let g:gutentags_cache_dir=s:vim_tags
-let g:gutentags_ctags_extra_args=['--fields=+niazS', '--extra=+q']
-let g:gutentags_ctags_extra_args+=['--c++-kinds=+px']
-let g:gutentags_ctags_extra_args+=['--c-kinds=+px']
+" Rust
+if executable('rust-analyzer')
+  au User lsp_setup call lsp#register_server({
+        \   'name': 'Rust Language Server',
+        \   'cmd': {server_info->['rust-analyzer']},
+        \   'whitelist': ['rust'],
+        \   'initialization_options': {
+        \     'cargo': {
+        \       'loadOutDirsFromCheck': v:true,
+        \     },
+        \     'procMacro': {
+        \       'enable': v:true,
+        \     },
+        \   },
+        \ })
+endif
 
 " Make Y consitent with D and C (yank til end)
 map Y y$
