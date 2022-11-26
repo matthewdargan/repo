@@ -85,42 +85,42 @@ set -o vi
 set -o noclobber
 
 __ps1() {
-    local P='$' # Changes to hashtag when root
+   local P='$' # Changes to hashtag when root
 
-    # Set shortcuts for all the colors
-    local r='\[\e[31m\]'
-    local g='\[\e[30m\]'
-    local h='\[\e[34m\]'
-    local u='\[\e[33m\]'
-    local p='\[\e[33m\]'
-    local w='\[\e[35m\]'
-    local b='\[\e[36m\]'
-    local x='\[\e[0m\]'
+   # Set shortcuts for all the colors
+   local r='\[\e[31m\]'
+   local g='\[\e[30m\]'
+   local h='\[\e[34m\]'
+   local u='\[\e[33m\]'
+   local p='\[\e[33m\]'
+   local w='\[\e[35m\]'
+   local b='\[\e[36m\]'
+   local x='\[\e[0m\]'
 
-    # Watch out, you're root
-    if test "${EUID}" == 0; then
-        P='#'
-        u=$r
-        p=$u
-    fi
+   # Watch out, you're root
+   if test "${EUID}" == 0; then
+       P='#'
+       u=$r
+       p=$u
+   fi
 
-    local dir="$(basename $PWD)"
-    if test "${dir}" = _ ; then
-        dir=${PWD#*${PWD%/*/_}}
-        dir=${dir#/}
-    elif test "${dir}" = work; then
-        dir=${PWD#*${PWD%/*/work}}
-        dir=${dir#/}
-    fi
+   local dir="$(basename $PWD)"
+   if test "${dir}" = _ ; then
+       dir=${PWD#*${PWD%/*/_}}
+       dir=${dir#/}
+   elif test "${dir}" = work; then
+       dir=${PWD#*${PWD%/*/work}}
+       dir=${dir#/}
+   fi
 
-    local B=$(git branch --show-current 2>/dev/null)
-    test "${dir}" = "${B}" && B='.'
-    local countme="$USER@$(hostname):$dir($B)\$ "
+   local B=$(git branch --show-current 2>/dev/null)
+   test "${dir}" = "${B}" && B='.'
+   local countme="$USER@$(hostname):$dir($B)\$ "
 
-    test "${B}" = master -o "${B}" = main && b=$r
-    test -n "${B}" && B="$g($b$B$g)"
+   test "${B}" = master -o "${B}" = main && b=$r
+   test -n "${B}" && B="$g($b$B$g)"
 
-    PS1="$u\u$g@$h\h$g:$w$dir$B$p$P$x "
+   PS1="$u\u$g@$h\h$g:$w$dir$B$p$P$x "
 }
 
 PROMPT_COMMAND="__ps1"
