@@ -42,6 +42,11 @@ export GOPATH="$HOME/go"
 # Private GitHub organizations
 export GOPRIVATE="github.com/eBay-Swippy-Swappy-Funtime"
 
+# Private API keys
+if [[ -f "$HOME/.api_keys" ]]; then
+    source "$HOME/.api_keys"
+fi
+
 alias ls='ls -h --color=auto'
 alias ll='ls -alF'
 alias la='ls -A'
