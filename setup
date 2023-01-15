@@ -4,6 +4,9 @@ ln -sf "$PWD/zshrc" "$HOME/.zshrc"
 mkdir -p "$HOME/bin" || true
 ln -sf "$PWD/bin/"* "$HOME/bin"
 
+mkdir -p "$HOME/lib" || true
+ln -sf "$PWD/lib/"* "$HOME/lib"
+
 # Call subsequent setup scripts for other configurations
 for i in vim; do
     cd $i && ./setup
