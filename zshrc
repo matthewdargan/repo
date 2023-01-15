@@ -1,3 +1,5 @@
+export PLAN9="/usr/local/plan9"
+export GOPATH="$HOME/go"
 path=(
     "$HOME/.cargo/bin"
     "$HOME/bin"
@@ -8,10 +10,11 @@ path=(
     "/usr/sbin"
     "/bin"
     "/sbin"
+    "$PLAN9/bin"
+    "$GOPATH/bin"
     "$path"
 )
-
-export PATH="$PATH:$(go env GOPATH)/bin"
+export PATH="$PATH"
 
 # Path to your oh-my-zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
@@ -36,8 +39,6 @@ source $ZSH/oh-my-zsh.sh
 export EDITOR="vim"
 export VISUAL="vim"
 bindkey -v
-
-export GOPATH="$HOME/go"
 
 # Private GitHub organizations
 export GOPRIVATE="github.com/eBay-Swippy-Swappy-Funtime"
