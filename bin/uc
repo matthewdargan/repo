@@ -1,0 +1,6 @@
+#!/bin/sh
+symbol="$1"
+if [ ! "$symbol" ]; then
+	symbol='\/\/ '
+fi
+sed "s/^$symbol//"
