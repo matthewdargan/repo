@@ -24,11 +24,6 @@ ZSH_THEME="gitster"
 # Standard plugins can be found in $ZSH/plugins/
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 plugins=(
-    autoupdate
-    aws
-    docker
-    docker-compose
-    golang
     zsh-autosuggestions
     zsh-syntax-highlighting
 )
