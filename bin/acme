@@ -10,4 +10,4 @@ unset FCEDIT VISUAL
 
 fontsrv &
 plumber &
-$PLAN9/bin/acme -a -f $font -F $ffont $*
+$GOPATH/bin/acme -a -f $font -F $ffont $*
