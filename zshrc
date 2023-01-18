@@ -33,6 +33,7 @@ source $ZSH/oh-my-zsh.sh
 # User configuration
 export EDITOR="vim"
 export VISUAL="vim"
+export BROWSER="brave-browser"
 bindkey -v
 
 # Private GitHub organizations
