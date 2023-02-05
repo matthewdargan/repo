@@ -1,7 +1,6 @@
 PLAN9=/usr/local/plan9
 EDITOR=editinacme
 PAGER=nobs
-SHELL=$PLAN9/bin/rc
 BROWSER=brave-browser
 font=/mnt/font/GoRegular/14a/font
 ffont=/mnt/font/GoMono/14a/font
@@ -10,4 +9,4 @@ unset FCEDIT VISUAL
 
 fontsrv &
 plumber &
-$GOPATH/bin/acme -a -f $font -F $ffont $*
+$PLAN9/bin/acme -a -f $font -F $ffont $*
