@@ -10,7 +10,6 @@ ln -sf "$PWD/lib/"* "$HOME/lib"
 
 # Call subsequent setup scripts for other configurations
 for i in vim; do
-    cd $i && ./setup
-    cd -
+	cd $i && ./setup
+	cd -
 done
-
