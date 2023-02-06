@@ -7,6 +7,6 @@ ffont=/mnt/font/GoMono/14a/font
 
 unset FCEDIT VISUAL
 
-fontsrv &
-plumber &
+pidof fontsrv >/dev/null || fontsrv &
+pidof plumber >/dev/null || plumber &
 $PLAN9/bin/acme -a -f $font -F $ffont $*
