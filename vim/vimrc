@@ -1,5 +1,42 @@
+if has("eval")
+    let skip_defaults_vim=1
+endif
+
+set nocompatible
+set noerrorbells
+set autoindent
+set autowrite
+set number
+set ruler
+set relativenumber
+set tabstop=4 softtabstop=4 shiftwidth=4
+set smartindent
+set smarttab
+set expandtab
+set hlsearch
+set incsearch
+set wrapscan
+set textwidth=72
+set linebreak
+set nobackup
+set noswapfile
+set nowritebackup
+set icon
+set viminfo='20,<1000,s1000
+set noshowmatch
+set wildmenu
+set hidden
+set history=100
+set ttyfast
+set updatetime=300
+set background=dark
+filetype plugin indent on
+syntax on
+
+let mapleader=" "
+
 " Mark trailing spaces as errors
-match ErrorMsg '\s\+$'
+match IncSearch '\s\+$'
 
 " Make Y consitent with D and C (yank til end)
 map Y y$
@@ -13,38 +50,8 @@ set pastetoggle=<F2>
 map <F3> :set list!<CR>
 map <F4> :set cursorline!<CR>
 map <F5> :set spell!<CR>
-map <F6> :set fdm=indent<CR>
 
-" Other Configurations
-let skip_defaults_vim=1
-set nocompatible
-set autoindent
-set autowrite
-set encoding=utf-8
-set exrc
-set ruler
-set relativenumber
-set nu
-set hidden
-set noerrorbells
-set tabstop=4 softtabstop=4 shiftwidth=4
-set expandtab
-set smartindent
-set smarttab
-set icon
-set nowrap
-set smartcase
-set incsearch
-set hlsearch
-set linebreak
-set viminfo='20,<1000,s1000
-set termguicolors
-set scrolloff=8
-set colorcolumn=80
-set showmatch
-set wildmode=longest,list
-set cmdheight=2
-set updatetime=300
-set ttyfast
-filetype plugin indent on
-syntax on
+" Better use of arrow keys, number increment/decrement
+nnoremap <up> <C-a>
+nnoremap <down> <C-x>
+
