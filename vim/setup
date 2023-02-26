@@ -4,4 +4,4 @@ if [ -z "$(which vim)" ]; then
 	exit 1
 fi
 
-ln -sf "$PWD/vimrc" "$HOME/.vimrc"
+ln -sf "$PWD/.vimrc" "$HOME/.vimrc"
