@@ -2,7 +2,7 @@
 ln -sf "$PWD/zshrc" "$HOME/.zshrc"
 
 # Call subsequent setup scripts for other configurations
-for i in vim; do
+for i in vim tmux; do
 	cd $i && ./setup
 	cd -
 done
