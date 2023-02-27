@@ -95,6 +95,11 @@ if filereadable(expand("~/.vim/autoload/plug.vim"))
     let g:go_highlight_diagnostic_errors=1
     let g:go_highlight_diagnostic_warnings=1
     let g:go_auto_sameids=0
+    au FileType go nmap <leader>t :GoTest!<CR>
+    au FileType go nmap <leader>b :GoBuild!<CR>
+    au FileType go nmap <leader>r :GoRun %<CR>
+    au FileType go nmap <leader>i :GoInfo<CR>
+    au FileType go nmap <leader>l :GoMetaLinter!<CR>
     au FileType go nmap <leader>n iif err != nil {return err}<CR><ESC>
 else
     autocmd BufWritePost *.go !gofmt -w %    " gofmt backup if vim-go fails
