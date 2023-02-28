@@ -1,7 +1,11 @@
 #!/bin/sh
-ln -sf "$PWD/zshrc" "$HOME/.zshrc"
+set -e
 
-# Call subsequent setup scripts for other configurations
+ln -sf "$PWD/.bashrc" "$HOME/.bashrc"
+ln -sf "$PWD/.inputrc" "$HOME/.inputrc"
+ln -sf "$PWD/.profile" "$HOME/.profile"
+ln -sf "$PWD/.profile" "$HOME/.bash_profile"
+
 for i in vim tmux; do
 	cd $i && ./setup
 	cd -
