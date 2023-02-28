@@ -33,6 +33,14 @@ if [[ -x /usr/bin/lesspipe.sh ]]; then
 	export LESSCLOSE="/usr/bin/lesspipe.sh %s %s"
 fi
 
+if _have dircolors; then
+	if [[ -r "$HOME/.dircolors" ]]; then
+		eval "$(dircolors -b "$HOME/.dircolors")"
+	else
+		eval "$(dircolors -b)"
+	fi
+fi
+
 export PATH="$HOME/bin:$GOPATH/bin:$HOME/.cargo/bin:/usr/local/go/bin:$PATH"
 
 export HISTCONTROL=ignoreboth
