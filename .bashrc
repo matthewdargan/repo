@@ -25,11 +25,12 @@ export LESS_TERMCAP_se=$''
 export LESS_TERMCAP_so=$'\e[34m' # blue
 export LESS_TERMCAP_ue=$''
 export LESS_TERMCAP_us=$'\e[4m' # underline
+export GROFF_NO_SGR=1           # Required for termcap colors to work on some terminal emulators
 
 # Pager
-if [[ -x /usr/bin/lesspipe ]]; then
-	export LESSOPEN="| /usr/bin/lesspipe %s"
-	export LESSCLOSE="/usr/bin/lesspipe %s %s"
+if [[ -x /usr/bin/lesspipe.sh ]]; then
+	export LESSOPEN="| /usr/bin/lesspipe.sh %s"
+	export LESSCLOSE="/usr/bin/lesspipe.sh %s %s"
 fi
 
 export PATH="$HOME/bin:$GOPATH/bin:$HOME/.cargo/bin:/usr/local/go/bin:$PATH"
@@ -70,6 +71,7 @@ alias ls='ls -h --color=auto'
 alias ll='ls -alF'
 alias l='ls -CF'
 alias diff='diff --color'
+alias grep='grep --color'
 alias temp='cd $(mktemp -d)'
 alias view='vi -R' # which is usually linked to vim
 alias clear='printf "\e[H\e[2J"'
