@@ -79,7 +79,7 @@ alias ls='ls -h --color=auto'
 alias ll='ls -alF'
 alias l='ls -CF'
 alias diff='diff --color'
-alias grep='grep --color'
+alias grep='grep --color --ignore-case'
 alias temp='cd $(mktemp -d)'
 alias view='vi -R' # which is usually linked to vim
 alias clear='printf "\e[H\e[2J"'
