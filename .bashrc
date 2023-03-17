@@ -8,6 +8,9 @@ if [[ $- == *i* ]]; then
 	bind '"\e[B": history-search-forward'
 fi
 
+# Add bash completions for specific commands
+source "$(pkg-config --variable=completionsdir bash-completion)/git"
+
 function _have() {
 	type "$1" &>/dev/null
 }
