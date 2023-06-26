@@ -9,7 +9,7 @@ if [[ $- == *i* ]]; then
 fi
 
 # Add bash completions for specific commands
-source "$(pkg-config --variable=completionsdir bash-completion)/git"
+source /usr/share/bash-completion/completions/git
 
 function _have() {
 	type "$1" &>/dev/null
@@ -84,8 +84,12 @@ alias l='ls -CF'
 alias diff='diff --color'
 alias grep='grep --color --ignore-case'
 alias temp='cd $(mktemp -d)'
-alias view='vi -R' # which is usually linked to vim
+alias view='vi -R' # which is usually linked to nvim
 alias clear='printf "\e[H\e[2J"'
 alias more='less'
 
-_have vim && alias vi=vim
+_have nvim && alias vi=nvim && alias vim=nvim
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
