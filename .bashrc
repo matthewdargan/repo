@@ -9,7 +9,15 @@ if [[ $- == *i* ]]; then
 fi
 
 # Add bash completions for specific commands
-source "$(pkg-config --variable=completionsdir bash-completion)/git"
+if [[ $(uname) == "Darwin" ]]; then
+	source /opt/homebrew/etc/bash_completion.d/git-completion.bash
+else
+	source /usr/share/bash-completion/completions/git
+fi
+
+if [[ $(uname) == "Darwin" ]]; then
+	eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
 
 function _have() {
 	type "$1" &>/dev/null
@@ -44,7 +52,7 @@ if _have dircolors; then
 	fi
 fi
 
-export PATH="$HOME/bin:$GOPATH/bin:$HOME/.cargo/bin:/usr/local/go/bin:$PATH"
+export PATH="$HOME/bin:$GOPATH/bin:/usr/local/go/bin:$PATH"
 
 export HISTCONTROL=ignoreboth
 export HISTSIZE=5000
@@ -89,3 +97,7 @@ alias clear='printf "\e[H\e[2J"'
 alias more='less'
 
 _have vim && alias vi=vim
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
