@@ -84,11 +84,11 @@ alias l='ls -CF'
 alias diff='diff --color'
 alias grep='grep --color --ignore-case'
 alias temp='cd $(mktemp -d)'
-alias view='vi -R' # which is usually linked to nvim
+alias view='vi -R' # which is usually linked to vim
 alias clear='printf "\e[H\e[2J"'
 alias more='less'
 
-_have nvim && alias vi=nvim && alias vim=nvim
+_have vim && alias vi=vim
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm

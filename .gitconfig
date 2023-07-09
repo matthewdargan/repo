@@ -3,4 +3,4 @@ name = Matthew Dargan
 email = matthewdargan57@gmail.com
 
 [core]
-	editor = nvim
+	editor = vim
