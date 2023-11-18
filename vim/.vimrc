@@ -130,4 +130,3 @@ nmap <leader>p :set paste<CR>i
 " Better use of arrow keys, number increment/decrement
 nnoremap <up> <C-a>
 nnoremap <down> <C-x>
-

@@ -1,7 +1,0 @@
-#!/bin/sh
-if [ -z "$(which tmux)" ]; then
-	echo Need to install tmux.
-	exit 1
-fi
-
-ln -sf "$PWD/.tmux.conf" "$HOME/.tmux.conf"

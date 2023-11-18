@@ -1,6 +1,6 @@
 case $- in
-*i*) ;; # interactive
-*) return ;;
+	*i*) ;; # interactive
+	*) return ;;
 esac
 
 if [[ $- == *i* ]]; then
@@ -8,63 +8,20 @@ if [[ $- == *i* ]]; then
 	bind '"\e[B": history-search-forward'
 fi
 
-# Add bash completions for specific commands
 if [[ $(uname) == "Darwin" ]]; then
 	source /opt/homebrew/etc/bash_completion.d/git-completion.bash
+	eval "$(/opt/homebrew/bin/brew shellenv)"
 else
 	source /usr/share/bash-completion/completions/git
 fi
 
-if [[ $(uname) == "Darwin" ]]; then
-	eval "$(/opt/homebrew/bin/brew shellenv)"
-fi
-
-function _have() {
-	type "$1" &>/dev/null
-}
-
-export TERM=xterm-256color
-export EDITOR=vi
-export VISUAL=vi
-export GOPATH="$HOME/go"
-
-export LESS="-FXR"
-export LESS_TERMCAP_mb=$'\e[35m' # magenta
-export LESS_TERMCAP_md=$'\e[33m' # yellow
-export LESS_TERMCAP_me=$''
-export LESS_TERMCAP_se=$''
-export LESS_TERMCAP_so=$'\e[34m' # blue
-export LESS_TERMCAP_ue=$''
-export LESS_TERMCAP_us=$'\e[4m' # underline
-export GROFF_NO_SGR=1           # Required for termcap colors to work on some terminal emulators
-
-# Pager
-if [[ -x /usr/bin/lesspipe.sh ]]; then
-	export LESSOPEN="| /usr/bin/lesspipe.sh %s"
-	export LESSCLOSE="/usr/bin/lesspipe.sh %s %s"
-fi
-
-if _have dircolors; then
-	if [[ -r "$HOME/.dircolors" ]]; then
-		eval "$(dircolors -b "$HOME/.dircolors")"
-	else
-		eval "$(dircolors -b)"
-	fi
-fi
-
-export PATH="$HOME/bin:$GOPATH/bin:/usr/local/go/bin:$PATH"
-
 export HISTCONTROL=ignoreboth
 export HISTSIZE=5000
 export HISTFILESIZE=10000
-
-shopt -s checkwinsize
-shopt -s expand_aliases
-shopt -s globstar
-shopt -s dotglob
-shopt -s extglob
-shopt -s histappend
-set -o vi
+export GOPATH="$HOME/go"
+export PATH="$HOME/bin:$GOPATH/bin:$PATH:/usr/local/go/bin"
+export EDITOR=vim
+export VISUAL=vim
 
 function __ps1() {
 	local P='$' dir="${PWD##*/}" B \
@@ -84,19 +41,11 @@ function __ps1() {
 }
 
 PROMPT_COMMAND="__ps1"
+set -o vi
 
-unalias -a
 alias ls='ls -h --color=auto'
 alias ll='ls -alF'
 alias l='ls -CF'
-alias diff='diff --color'
-alias grep='grep --color --ignore-case'
-alias temp='cd $(mktemp -d)'
-alias view='vi -R' # which is usually linked to vim
-alias clear='printf "\e[H\e[2J"'
-alias more='less'
-
-_have vim && alias vi=vim
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm

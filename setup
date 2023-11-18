@@ -2,12 +2,12 @@
 set -e
 
 ln -sf "$PWD/.bashrc" "$HOME/.bashrc"
-ln -sf "$PWD/.dircolors" "$HOME/.dircolors"
 ln -sf "$PWD/.inputrc" "$HOME/.inputrc"
+ln -sf "$PWD/.gitconfig" "$HOME/.gitconfig"
 ln -sf "$PWD/.profile" "$HOME/.profile"
 ln -sf "$PWD/.profile" "$HOME/.bash_profile"
 
-for i in vim tmux; do
+for i in vim; do
 	cd $i && ./setup
 	cd -
 done
