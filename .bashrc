@@ -8,12 +8,17 @@ if [[ $- == *i* ]]; then
 	bind '"\e[B": history-search-forward'
 fi
 
-if [[ $(uname) == "Darwin" ]]; then
-	source /opt/homebrew/etc/bash_completion.d/git-completion.bash
-	eval "$(/opt/homebrew/bin/brew shellenv)"
+if [[ "$(uname)" == 'Darwin' && -x '/opt/homebrew/bin/brew' ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+    git_completion_path='/opt/homebrew/etc/bash_completion.d/git-completion.bash'
+    aws_completer_path='/opt/homebrew/bin/aws_completer'
 else
-	source /usr/share/bash-completion/completions/git
+    git_completion_path='/usr/share/bash-completion/completions/git'
+    aws_completer_path='/usr/local/bin/aws_completer'
 fi
+
+[[ -r "$git_completion_path" ]] && source "$git_completion_path"
+[[ -r "$aws_completer_path" ]] && complete -C "$aws_completer_path" aws
 
 export HISTCONTROL=ignoreboth
 export HISTSIZE=5000
