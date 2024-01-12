@@ -7,7 +7,6 @@ ln -sf "$PWD/.gitconfig" "$HOME/.gitconfig"
 ln -sf "$PWD/.profile" "$HOME/.profile"
 ln -sf "$PWD/.profile" "$HOME/.bash_profile"
 
-for i in vim; do
-	cd $i && ./setup
-	cd -
-done
+mkdir -p "$HOME/.config"
+ln -sf "$PWD/nvim" "$HOME/.config"
+
