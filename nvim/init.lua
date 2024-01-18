@@ -10,6 +10,7 @@ vim.opt.rtp:prepend(lazypath)
 require("mpd.globals")
 require("lazy").setup("mpd.plugins")
 vim.cmd.colorscheme "kanagawa-wave"
+require("mpd.dap")
 require("mpd.keymaps")
 require("mpd.lsp")
 require("mpd.options")
