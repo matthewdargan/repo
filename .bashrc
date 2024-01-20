@@ -1,8 +1,3 @@
-case $- in
-  *i*) ;; # interactive
-  *) return ;;
-esac
-
 if [[ $- == *i* ]]; then
   bind '"\e[A": history-search-backward'
   bind '"\e[B": history-search-forward'
@@ -21,8 +16,6 @@ fi
 [[ -r "$aws_completer_path" ]] && complete -C "$aws_completer_path" aws
 
 export HISTCONTROL=ignoreboth
-export HISTSIZE=5000
-export HISTFILESIZE=10000
 export GOPATH="$HOME/go"
 export PATH="$HOME/bin:$GOPATH/bin:$PATH:/usr/local/go/bin"
 export EDITOR=nvim
@@ -50,10 +43,5 @@ set -o vi
 
 alias ls='ls -h --color=auto'
 alias ll='ls -alF'
-alias l='ls -CF'
 alias vim=nvim
-
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 
