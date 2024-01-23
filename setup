@@ -8,5 +8,8 @@ ln -sf "$PWD/.profile" "$HOME/.profile"
 ln -sf "$PWD/.profile" "$HOME/.bash_profile"
 
 mkdir -p "$HOME/.config"
+if [[ "$(uname)" == 'Darwin' ]]; then
+  ln -sf "$PWD/kitty" "$HOME/.config"
+fi
 ln -sf "$PWD/nvim" "$HOME/.config"
 
