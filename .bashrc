@@ -16,6 +16,8 @@ fi
 [[ -r "$aws_completer_path" ]] && complete -C "$aws_completer_path" aws
 
 export HISTCONTROL=ignoreboth
+export HISTSIZE=
+export HISTFILESIZE=
 export GOPATH="$HOME/go"
 export PATH="$HOME/bin:$GOPATH/bin:$PATH:/usr/local/go/bin"
 export EDITOR=nvim
