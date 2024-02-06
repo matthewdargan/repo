@@ -1,6 +1,8 @@
 [user]
-name = Matthew Dargan
-email = matthewdargan57@gmail.com
+    name = Matthew Dargan
+    email = matthewdargan57@gmail.com
+[init]
+    defaultBranch = main
+[safe]
+    directory = *
 
-[core]
-	defaultBranch = main
