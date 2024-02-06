@@ -3,6 +3,8 @@
     email = matthewdargan57@gmail.com
 [init]
     defaultBranch = main
+[push]
+    autoSetupRemote = true
 [safe]
     directory = *
 
