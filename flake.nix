@@ -14,7 +14,7 @@
     ...
   } @ inputs:
     flake-parts.lib.mkFlake {inherit inputs;} {
-      systems = ["x86_64-linux"];
+      systems = ["x86_64-linux" "aarch64-darwin"];
       perSystem = {
         pkgs,
         system,
@@ -26,14 +26,16 @@
         };
       };
       flake.homeConfigurations = let
-        pkgs = inputs.nixpkgs.legacyPackages."x86_64-linux";
-        homeConfig = inputs.home-manager.lib.homeManagerConfiguration {
-          inherit pkgs;
-          modules = [./home.nix];
+        pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
+        pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
+        homeConfig = pkgs: inputs.home-manager.lib.homeManagerConfiguration {
+            inherit pkgs;
+            modules = [./home.nix];
         };
       in {
-        "mpd@deere-laptop" = homeConfig;
-        "mpd@win-desktop" = homeConfig;
+        "mpd@deere-laptop" = homeConfig pkgsLinux;
+        "mpd@win-desktop" = homeConfig pkgsLinux;
+        "mdargan@sai-macbook" = homeConfig pkgsDarwin;
       };
     };
 }
