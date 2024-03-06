@@ -28,8 +28,8 @@
       flake.homeConfigurations = let
         pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
         pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
-        modulesLinux = [./home/configurations/linux.nix];
-        modulesDarwin = [./home/configurations/darwin.nix];
+        modulesLinux = [./home/configurations/common.nix ./home/configurations/linux.nix];
+        modulesDarwin = [./home/configurations/common.nix ./home/configurations/darwin.nix];
         homeConfig = {
           pkgs,
           modules,
@@ -40,7 +40,7 @@
       in {
         "mpd@deere-laptop" = homeConfig {
           pkgs = pkgsLinux;
-          modules = modulesLinux;
+          modules = modulesLinux ++ [{programs.git.userEmail = "darganmatthew@johndeere.com";}];
         };
         "mpd@win-desktop" = homeConfig {
           pkgs = pkgsLinux;
