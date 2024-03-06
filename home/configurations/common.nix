@@ -56,6 +56,10 @@
       userEmail = lib.mkDefault "matthewdargan57@gmail.com";
       userName = "Matthew Dargan";
     };
+    nixvim = {
+      enable = true;
+      globals.mapLeader = " ";
+    };
     readline = {
       enable = true;
       bindings = {

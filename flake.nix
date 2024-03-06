@@ -7,6 +7,10 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nixvim = {
+      url = "github:nix-community/nixvim";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
   outputs = {
     self,
@@ -28,8 +32,9 @@
       flake.homeConfigurations = let
         pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
         pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
-        modulesLinux = [./home/configurations/common.nix ./home/configurations/linux.nix];
-        modulesDarwin = [./home/configurations/common.nix ./home/configurations/darwin.nix];
+        modulesCommon = [inputs.nixvim.homeManagerModules.nixvim ./home/configurations/common.nix];
+        modulesLinux = modulesCommon ++ [./home/configurations/linux.nix];
+        modulesDarwin = modulesCommon ++ [./home/configurations/darwin.nix];
         homeConfig = {
           pkgs,
           modules,
