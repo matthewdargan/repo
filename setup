@@ -1,11 +1,7 @@
 #!/bin/sh
 set -e
 
-ln -sf "$PWD/.bashrc" "$HOME/.bashrc"
-ln -sf "$PWD/.inputrc" "$HOME/.inputrc"
 ln -sf "$PWD/.gitconfig" "$HOME/.gitconfig"
-ln -sf "$PWD/.profile" "$HOME/.profile"
-ln -sf "$PWD/.profile" "$HOME/.bash_profile"
 
 mkdir -p "$HOME/.config"
 if [[ "$(uname)" == 'Darwin' ]]; then
