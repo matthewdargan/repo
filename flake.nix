@@ -28,14 +28,28 @@
       flake.homeConfigurations = let
         pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
         pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
-        homeConfig = pkgs: inputs.home-manager.lib.homeManagerConfiguration {
-            inherit pkgs;
-            modules = [./home.nix];
-        };
+        modulesLinux = [./home/configurations/linux.nix];
+        modulesDarwin = [./home/configurations/darwin.nix];
+        homeConfig = {
+          pkgs,
+          modules,
+        }:
+          inputs.home-manager.lib.homeManagerConfiguration {
+            inherit pkgs modules;
+          };
       in {
-        "mpd@deere-laptop" = homeConfig pkgsLinux;
-        "mpd@win-desktop" = homeConfig pkgsLinux;
-        "mdargan@sai-macbook" = homeConfig pkgsDarwin;
+        "mpd@deere-laptop" = homeConfig {
+          pkgs = pkgsLinux;
+          modules = modulesLinux;
+        };
+        "mpd@win-desktop" = homeConfig {
+          pkgs = pkgsLinux;
+          modules = modulesLinux;
+        };
+        "mdargan@sai-macbook" = homeConfig {
+          pkgs = pkgsDarwin;
+          modules = modulesDarwin;
+        };
       };
     };
 }
