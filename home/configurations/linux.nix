@@ -3,10 +3,21 @@
   pkgs,
   ...
 }: {
-  home.username = "mpd";
+  home.file = {
+    ".gitconfig".text = ''
+        [user]
+            name = Matthew Dargan
+            email = matthewdargan57@gmail.com
+        [init]
+            defaultBranch = main
+        [push]
+            autoSetupRemote = true
+    '';
+  };
   home.homeDirectory = "/home/mpd";
-  home.stateVersion = "23.11";
   home.packages = [pkgs.alejandra pkgs.go_1_22 pkgs.terraform];
+  home.stateVersion = "23.11";
+  home.username = "mpd";
   nixpkgs.config.allowUnfree = true;
   programs = {
     bash = {
@@ -43,16 +54,16 @@
         set -o vi
       '';
     };
+    direnv = {
+      enable = true;
+      nix-direnv.enable = true;
+    };
     readline = {
       enable = true;
       bindings = {
         "\\C-[[A" = "history-search-backward";
         "\\C-[[B" = "history-search-forward";
       };
-    };
-    direnv = {
-      enable = true;
-      nix-direnv.enable = true;
     };
   };
 }
