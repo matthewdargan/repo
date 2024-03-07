@@ -1,5 +1,4 @@
 {
-  config,
   lib,
   pkgs,
   ...
@@ -138,6 +137,7 @@
             bashls.enable = true;
             gopls.enable = true;
             jsonls.enable = true;
+            nil_ls.enable = true;
             terraformls.enable = true;
             yamlls.enable = true;
           };
