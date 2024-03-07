@@ -11,16 +11,6 @@
     bash = {
       enable = true;
       historyControl = ["ignoredups" "ignorespace"];
-      sessionVariables = {
-        PATH = "$HOME/bin:$GOPATH/bin:$PATH";
-        EDITOR = "nvim";
-        VISUAL = "nvim";
-      };
-      shellAliases = {
-        ls = "ls -h --color=auto";
-        ll = "ls -alF";
-        vim = "nvim";
-      };
       initExtra = ''
         function __ps1() {
           local P='$' dir="''${PWD##*/}" B \
@@ -41,6 +31,16 @@
         PROMPT_COMMAND="__ps1"
         set -o vi
       '';
+      sessionVariables = {
+        PATH = "$HOME/bin:$GOPATH/bin:$PATH";
+        EDITOR = "nvim";
+        VISUAL = "nvim";
+      };
+      shellAliases = {
+        ls = "ls -h --color=auto";
+        ll = "ls -alF";
+        vim = "nvim";
+      };
     };
     direnv = {
       enable = true;
@@ -109,6 +109,7 @@
             };
           };
           servers = {
+            bashls.enable = true;
             gopls.enable = true;
             jsonls.enable = true;
             terraformls.enable = true;
@@ -116,12 +117,22 @@
           };
         };
         lsp-format.enable = true;
+        none-ls = {
+          enable = true;
+          enableLspFormat = true;
+          sources = {
+            formatting = {
+              alejandra.enable = true;
+              gofumpt.enable = true;
+            };
+          };
+        };
         telescope = {
           enable = true;
           keymaps = {
+            "<leader>b" = "buffers";
             "<leader>f" = "find_files";
             "<leader>g" = "live_grep";
-            "<leader>b" = "buffers";
             "gd" = "lsp_definitions";
             "gi" = "lsp_implementations";
             "gr" = "lsp_references";
