@@ -1,12 +1,3 @@
-local builtin = require("telescope.builtin")
-vim.keymap.set("n", "<leader>f", builtin.find_files)
-vim.keymap.set("n", "<leader>g", builtin.live_grep)
-vim.keymap.set("n", "<leader>b", builtin.buffers)
-vim.keymap.set("n", "<leader>h", builtin.help_tags)
-vim.keymap.set("n", "<leader>t", function()
-    vim.cmd(":!go test ./...")
-end)
-
 local dap, dapgo, dapui = require("dap"), require("dap-go"), require("dapui")
 vim.keymap.set("n", "<F1>", dap.step_back)
 vim.keymap.set("n", "<F2>", dap.step_into)

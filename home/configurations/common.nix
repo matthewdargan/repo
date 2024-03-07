@@ -59,8 +59,11 @@
     nixvim = {
       enable = true;
       clipboard.register = "unnamedplus";
-      colorschemes.kanagawa.enable = true;
-      globals.mapLeader = " ";
+      colorschemes.kanagawa = {
+        enable = true;
+        theme = "wave";
+      };
+      globals.mapleader = " ";
       keymaps = [
         {
           action = ":bnext<CR>";
@@ -103,6 +106,25 @@
         tabstop = 4;
         termguicolors = true;
         wrap = false;
+      };
+      plugins = {
+        telescope = {
+          enable = true;
+          keymaps = {
+            "<leader>f" = "find_files";
+            "<leader>g" = "live_grep";
+            "<leader>b" = "buffers";
+          };
+        };
+        treesitter = {
+          enable = true;
+          ensureInstalled = "all";
+          moduleConfig = {
+            highlight.enable = true;
+            indent.enable = true;
+          };
+          nixGrammars = true;
+        };
       };
     };
     readline = {
