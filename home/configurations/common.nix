@@ -96,6 +96,24 @@
         wrap = false;
       };
       plugins = {
+        cmp = {
+          enable = true;
+          settings = {
+            mapping = {
+              "<CR>" = "cmp.mapping.confirm({ select = true })";
+              "<S-Tab>" = "cmp.mapping(cmp.mapping.select_prev_item(), {'i', 's'})";
+              "<Tab>" = "cmp.mapping(cmp.mapping.select_next_item(), {'i', 's'})";
+            };
+            snippet.expand = "function(args) require('luasnip').lsp_expand(args.body) end";
+            sources = [
+              {name = "buffer";}
+              {name = "luasnip";}
+              {name = "nvim_lsp";}
+              {name = "path";}
+              {name = "treesitter";}
+            ];
+          };
+        };
         lsp = {
           enable = true;
           keymaps = {
@@ -117,6 +135,7 @@
           };
         };
         lsp-format.enable = true;
+        luasnip.enable = true;
         none-ls = {
           enable = true;
           enableLspFormat = true;
