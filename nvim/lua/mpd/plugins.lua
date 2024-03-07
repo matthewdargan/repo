@@ -1,10 +1,4 @@
 return {
-    { "williamboman/mason.nvim" },
-    { "neovim/nvim-lspconfig" },
-    {
-        "nvim-telescope/telescope.nvim",
-        dependencies = { "nvim-lua/plenary.nvim" },
-    },
     -- autocomplete
     { "hrsh7th/nvim-cmp" },
     { "hrsh7th/cmp-nvim-lsp" },

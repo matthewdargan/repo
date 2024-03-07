@@ -75,18 +75,6 @@
           key = "H";
           mode = ["n"];
         }
-        {
-          action = "vim.diagnostic.goto_next";
-          key = "]d";
-          lua = true;
-          mode = ["n"];
-        }
-        {
-          action = "vim.diagnostic.goto_prev";
-          key = "[d";
-          lua = true;
-          mode = ["n"];
-        }
       ];
       options = {
         backup = false;
@@ -108,12 +96,36 @@
         wrap = false;
       };
       plugins = {
+        lsp = {
+          enable = true;
+          keymaps = {
+            diagnostic = {
+              "<leader>j" = "goto_prev";
+              "<leader>k" = "goto_next";
+            };
+            lspBuf = {
+              "K" = "hover";
+              "<leader>r" = "rename";
+            };
+          };
+          servers = {
+            gopls.enable = true;
+            jsonls.enable = true;
+            terraformls.enable = true;
+            yamlls.enable = true;
+          };
+        };
+        lsp-format.enable = true;
         telescope = {
           enable = true;
           keymaps = {
             "<leader>f" = "find_files";
             "<leader>g" = "live_grep";
             "<leader>b" = "buffers";
+            "gd" = "lsp_definitions";
+            "gi" = "lsp_implementations";
+            "gr" = "lsp_references";
+            "gt" = "lsp_type_definitions";
           };
         };
         treesitter = {
