@@ -58,7 +58,27 @@
     };
     nixvim = {
       enable = true;
+      clipboard.register = "unnamedplus";
       globals.mapLeader = " ";
+      options = {
+        backup = false;
+        colorcolumn = "80";
+        expandtab = true;
+        guicursor = "";
+        mouse = "a";
+        number = true;
+        relativenumber = true;
+        scrolloff = 8;
+        shiftwidth = 4;
+        smartindent = true;
+        softtabstop = 4;
+        spelllang = "en_us";
+        spell = true;
+        swapfile = false;
+        tabstop = 4;
+        termguicolors = true;
+        wrap = false;
+      };
     };
     readline = {
       enable = true;
