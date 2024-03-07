@@ -23,8 +23,3 @@ vim.keymap.set("n", "<leader>dE", function()
 end)
 vim.keymap.set("n", "<leader>dr", dap.repl.open)
 vim.keymap.set("n", "<leader>dt", dapgo.debug_test)
-
-vim.keymap.set("n", "L", ":bnext<CR>")
-vim.keymap.set("n", "H", ":bprev<CR>")
-vim.keymap.set("n", "[d", vim.diagnostic.goto_prev)
-vim.keymap.set("n", "]d", vim.diagnostic.goto_next)

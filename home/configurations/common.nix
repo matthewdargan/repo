@@ -59,7 +59,32 @@
     nixvim = {
       enable = true;
       clipboard.register = "unnamedplus";
+      colorschemes.kanagawa.enable = true;
       globals.mapLeader = " ";
+      keymaps = [
+        {
+          action = ":bnext<CR>";
+          key = "L";
+          mode = ["n"];
+        }
+        {
+          action = ":bprev<CR>";
+          key = "H";
+          mode = ["n"];
+        }
+        {
+          action = "vim.diagnostic.goto_next";
+          key = "]d";
+          lua = true;
+          mode = ["n"];
+        }
+        {
+          action = "vim.diagnostic.goto_prev";
+          key = "[d";
+          lua = true;
+          mode = ["n"];
+        }
+      ];
       options = {
         backup = false;
         colorcolumn = "80";

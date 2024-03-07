@@ -1,10 +1,5 @@
 return {
     {
-        "rebelot/kanagawa.nvim",
-        name = "kanagawa",
-        priority = 1000,
-    },
-    {
         "nvim-treesitter/nvim-treesitter",
         build = ":TSUpdate",
         config = function()
