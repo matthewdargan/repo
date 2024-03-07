@@ -1,8 +1,9 @@
 {
   config,
+  lib,
   pkgs,
   ...
 }: {
-  home.homeDirectory = "/Users/mdargan";
-  home.username = "mdargan";
+  home.homeDirectory = lib.mkDefault "/Users/mpd";
+  home.username = lib.mkDefault "mpd";
 }

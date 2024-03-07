@@ -43,17 +43,30 @@
             inherit pkgs modules;
           };
       in {
-        "mpd@deere-laptop" = homeConfig {
-          pkgs = pkgsLinux;
-          modules = modulesLinux ++ [{programs.git.userEmail = "darganmatthew@johndeere.com";}];
-        };
         "mpd@win-desktop" = homeConfig {
           pkgs = pkgsLinux;
           modules = modulesLinux;
         };
-        "mdargan@sai-macbook" = homeConfig {
+        "mpd@deere-laptop" = homeConfig {
+          pkgs = pkgsLinux;
+          modules = modulesLinux ++ [{programs.git.userEmail = "darganmatthew@johndeere.com";}];
+        };
+        "mpd@mpd-macbook" = homeConfig {
           pkgs = pkgsDarwin;
           modules = modulesDarwin;
+        };
+        "mdargan@sai-macbook" = homeConfig {
+          pkgs = pkgsDarwin;
+          modules =
+            modulesDarwin
+            ++ [
+              {
+                home = {
+                  homeDirectory = "/Users/mdargan";
+                  username = "mdargan";
+                };
+              }
+            ];
         };
       };
     };
