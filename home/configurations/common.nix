@@ -3,7 +3,7 @@
   pkgs,
   ...
 }: {
-  home.packages = [pkgs.go_1_22 pkgs.golangci-lint pkgs.terraform];
+  home.packages = [pkgs.golangci-lint pkgs.terraform];
   home.stateVersion = "23.11";
   nixpkgs.config.allowUnfree = true;
   programs = {
@@ -53,6 +53,10 @@
       };
       userEmail = lib.mkDefault "matthewdargan57@gmail.com";
       userName = "Matthew Dargan";
+    };
+    go = {
+      enable = true;
+      package = pkgs.go_1_22;
     };
     nixvim = {
       enable = true;
