@@ -31,7 +31,6 @@
         set -o vi
       '';
       sessionVariables = {
-        PATH = "$HOME/bin:$GOPATH/bin:$PATH";
         EDITOR = "nvim";
         VISUAL = "nvim";
       };
@@ -111,14 +110,6 @@
               {name = "path";}
               {name = "treesitter";}
             ];
-          };
-        };
-        dap = {
-          enable = true;
-          extensions = {
-            dap-go.enable = true;
-            dap-ui.enable = true;
-            dap-virtual-text.enable = true;
           };
         };
         lsp = {
