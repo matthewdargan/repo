@@ -32,7 +32,7 @@
       flake.homeConfigurations = let
         pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
         pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
-        modulesCommon = [inputs.nixvim.homeManagerModules.nixvim ./home/configurations/common.nix];
+        modulesCommon = [inputs.nixvim.homeManagerModules.nixvim ./home/modules/common.nix];
         modulesLinux = modulesCommon ++ [./home/configurations/linux.nix];
         modulesDarwin = modulesCommon ++ [./home/configurations/darwin.nix];
         homeConfig = {
