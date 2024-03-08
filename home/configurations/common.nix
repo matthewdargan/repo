@@ -3,7 +3,7 @@
   pkgs,
   ...
 }: {
-  home.packages = [pkgs.alejandra pkgs.go_1_22 pkgs.golangci-lint pkgs.terraform];
+  home.packages = [pkgs.go_1_22 pkgs.golangci-lint pkgs.terraform];
   home.stateVersion = "23.11";
   nixpkgs.config.allowUnfree = true;
   programs = {
