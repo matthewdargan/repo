@@ -177,6 +177,7 @@
         "\\C-[[B" = "history-search-forward";
       };
     };
+    ripgrep.enable = true;
   };
   xdg.enable = true;
 }
