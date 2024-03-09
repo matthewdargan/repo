@@ -61,10 +61,7 @@
     nixvim = {
       enable = true;
       clipboard.register = "unnamedplus";
-      colorschemes.kanagawa = {
-        enable = true;
-        theme = "wave";
-      };
+      colorschemes.kanagawa.enable = true;
       globals.mapleader = " ";
       keymaps = [
         {
@@ -79,6 +76,7 @@
         }
       ];
       options = {
+        background = "dark";
         colorcolumn = "80";
         expandtab = true;
         guicursor = "";
