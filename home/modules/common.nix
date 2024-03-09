@@ -3,7 +3,7 @@
   pkgs,
   ...
 }: {
-  home.packages = [pkgs.golangci-lint pkgs.terraform];
+  home.packages = [pkgs.terraform];
   home.stateVersion = "23.11";
   nixpkgs.config.allowUnfree = true;
   programs = {
@@ -140,6 +140,7 @@
           enable = true;
           enableLspFormat = true;
           sources = {
+            diagnostics.golangci_lint.enable = true;
             formatting = {
               alejandra.enable = true;
               gofumpt.enable = true;
