@@ -79,7 +79,6 @@
         }
       ];
       options = {
-        backup = false;
         colorcolumn = "80";
         expandtab = true;
         guicursor = "";
@@ -92,10 +91,7 @@
         softtabstop = 4;
         spelllang = "en_us";
         spell = true;
-        swapfile = false;
         tabstop = 4;
-        termguicolors = true;
-        wrap = false;
       };
       plugins = {
         cmp = {
