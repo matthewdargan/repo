@@ -3,7 +3,7 @@
   pkgs,
   ...
 }: {
-  home.packages = [pkgs.terraform];
+  home.packages = [pkgs.terraform pkgs.wl-clipboard];
   home.stateVersion = "23.11";
   nixpkgs.config.allowUnfree = true;
   programs = {
