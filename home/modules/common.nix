@@ -11,23 +11,8 @@
       enable = true;
       historyControl = ["ignoredups" "ignorespace"];
       initExtra = ''
-        function __ps1() {
-          local P='$' dir="''${PWD##*/}" B \
-            r='\[\e[31m\]' g='\[\e[1;30m\]' h='\[\e[34m\]' \
-            u='\[\e[33m\]' p='\[\e[34m\]' w='\[\e[35m\]' \
-            b='\[\e[36m\]' x='\[\e[0m\]'
-
-          [[ $EUID == 0 ]] && P='#' && u=$r && p=$u # Root
-          [[ $PWD = / ]] && dir=/
-          [[ $PWD = "$HOME" ]] && dir='~'
-
-          B=$(git branch --show-current 2>/dev/null)
-          [[ $dir = "$B" ]] && B=.
-          [[ $B == master || $B == main ]] && b="$r"
-          [[ -n "$B" ]] && B="$g($b$B$g)"
-          PS1="$u\u$g@$h\h$g:$w$dir$B$p$P$x "
-        }
-        PROMPT_COMMAND="__ps1"
+        source ~/.nix-profile/share/git/contrib/completion/git-prompt.sh
+        PS1='\[\e[1;33m\]\u\[\e[38;5;246m\]:\[\e[1;36m\]\w$(__git_ps1 "\[\e[38;5;246m\](\[\e[1;35m\]%s\[\e[38;5;246m\])")\[\e[1;32m\]$\[\e[0m\] '
         set -o vi
       '';
       sessionVariables = {
