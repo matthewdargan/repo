@@ -112,6 +112,7 @@
             ];
           };
         };
+        lastplace.enable = true;
         lsp = {
           enable = true;
           keymaps = {
