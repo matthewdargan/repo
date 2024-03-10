@@ -12,27 +12,23 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
-  outputs = {
-    self,
-    flake-parts,
-    ...
-  } @ inputs:
+  outputs = {flake-parts, ...} @ inputs:
     flake-parts.lib.mkFlake {inherit inputs;} {
       systems = ["x86_64-linux" "aarch64-darwin"];
       perSystem = {
-        pkgs,
-        system,
         inputs',
+        pkgs,
         ...
       }: {
         devShells.default = pkgs.mkShell {
           packages = [inputs'.home-manager.packages.home-manager];
         };
+        packages.gopls = pkgs.callPackage ./packages/gopls.nix {};
       };
       flake.homeConfigurations = let
         pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
         pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
-        modulesCommon = [inputs.nixvim.homeManagerModules.nixvim ./home/modules/common.nix];
+        modulesCommon = [inputs.nixvim.homeManagerModules.nixvim (import ./home/modules/common.nix inputs)];
         modulesLinux = modulesCommon ++ [./home/configurations/linux.nix];
         modulesDarwin = modulesCommon ++ [./home/configurations/darwin.nix];
         homeConfig = {

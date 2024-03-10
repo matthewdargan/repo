@@ -1,4 +1,4 @@
-{
+{self, ...}: {
   lib,
   pkgs,
   ...
@@ -110,7 +110,10 @@
           };
           servers = {
             bashls.enable = true;
-            gopls.enable = true;
+            gopls = {
+              enable = true;
+              package = self.packages.${pkgs.system}.gopls;
+            };
             jsonls.enable = true;
             nil_ls.enable = true;
             terraformls.enable = true;
