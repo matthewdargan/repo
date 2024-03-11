@@ -5,6 +5,7 @@
 }: {
   home.packages = [pkgs.terraform pkgs.wl-clipboard];
   home.stateVersion = "23.11";
+  home.username = "mpd";
   nixpkgs.config.allowUnfree = true;
   programs = {
     bash = {

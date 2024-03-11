@@ -25,18 +25,9 @@
       pkgs = pkgsDarwin;
       modules = modulesDarwin;
     };
-    "mdargan@sai-macbook" = homeConfig {
+    "mpd@sai-macbook" = homeConfig {
       pkgs = pkgsDarwin;
-      modules =
-        modulesDarwin
-        ++ [
-          {
-            home = {
-              homeDirectory = "/Users/mdargan";
-              username = "mdargan";
-            };
-          }
-        ];
+      modules = modulesDarwin;
     };
   };
 }
