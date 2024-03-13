@@ -3,7 +3,17 @@
   pkgs,
   ...
 }: {
-  home.packages = [pkgs.terraform pkgs.wl-clipboard];
+  home.file.vale_ini = {
+    target = ".vale.ini";
+    text = ''
+      Packages = Google, write-good
+
+      [*]
+      BasedOnStyles = Google, Vale, write-good
+    '';
+    onChange = "${pkgs.vale}/bin/vale sync";
+  };
+  home.packages = [pkgs.terraform pkgs.vale pkgs.wl-clipboard];
   home.stateVersion = "23.11";
   home.username = "mpd";
   nixpkgs.config.allowUnfree = true;
@@ -55,8 +65,6 @@
         shiftwidth = 4;
         smartindent = true;
         softtabstop = 4;
-        spelllang = "en_us";
-        spell = true;
         tabstop = 4;
       };
       plugins = {
