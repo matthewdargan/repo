@@ -13,7 +13,7 @@
         inherit pkgs modules;
       };
   in {
-    "mpd@win-desktop" = homeConfig {
+    "mpd@scoop" = homeConfig {
       pkgs = pkgsLinux;
       modules = modulesLinux;
     };

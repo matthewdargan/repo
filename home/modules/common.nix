@@ -13,7 +13,7 @@
     '';
     onChange = "${pkgs.vale}/bin/vale sync";
   };
-  home.packages = [pkgs.terraform pkgs.vale pkgs.wl-clipboard];
+  home.packages = [pkgs.discord pkgs.terraform pkgs.vale pkgs.wl-clipboard];
   home.stateVersion = "23.11";
   home.username = "mpd";
   nixpkgs.config.allowUnfree = true;

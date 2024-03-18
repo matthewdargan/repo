@@ -16,6 +16,7 @@
     parts.lib.mkFlake {inherit inputs;} {
       imports = [
         ./home/configurations
+        ./nixos/configurations
         ./packages
         ./parts
       ];
