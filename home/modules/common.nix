@@ -3,19 +3,21 @@
   pkgs,
   ...
 }: {
-  home.file.vale_ini = {
-    target = ".vale.ini";
-    text = ''
-      Packages = Google, write-good
+  home = {
+    file.vale_ini = {
+      target = ".vale.ini";
+      text = ''
+        Packages = Google, write-good
 
-      [*]
-      BasedOnStyles = Google, Vale, write-good
-    '';
-    onChange = "${pkgs.vale}/bin/vale sync";
+        [*]
+        BasedOnStyles = Google, Vale, write-good
+      '';
+      onChange = "${pkgs.vale}/bin/vale sync";
+    };
+    packages = [pkgs.discord pkgs.terraform pkgs.vale];
+    stateVersion = "23.11";
+    username = "mpd";
   };
-  home.packages = [pkgs.discord pkgs.terraform pkgs.vale pkgs.wl-clipboard];
-  home.stateVersion = "23.11";
-  home.username = "mpd";
   nixpkgs.config.allowUnfree = true;
   programs = {
     direnv = {
@@ -38,7 +40,13 @@
     };
     nixvim = {
       enable = true;
-      clipboard.register = "unnamedplus";
+      clipboard = {
+        providers = {
+          wl-copy.enable = true;
+          xclip.enable = true;
+        };
+        register = "unnamedplus";
+      };
       colorschemes.kanagawa.enable = true;
       globals.mapleader = " ";
       keymaps = [
