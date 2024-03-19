@@ -17,15 +17,15 @@
       pkgs = pkgsLinux;
       modules = modulesLinux;
     };
-    "mpd@deere-laptop" = homeConfig {
+    "mpd@deere" = homeConfig {
       pkgs = pkgsLinux;
       modules = modulesLinux ++ [{programs.git.userEmail = "darganmatthew@johndeere.com";}];
     };
-    "mpd@mpd-macbook" = homeConfig {
+    "mpd@cheese" = homeConfig {
       pkgs = pkgsDarwin;
       modules = modulesDarwin;
     };
-    "mpd@sai-macbook" = homeConfig {
+    "mpd@butters" = homeConfig {
       pkgs = pkgsDarwin;
       modules = modulesDarwin;
     };
