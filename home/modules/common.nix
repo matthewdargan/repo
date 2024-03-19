@@ -24,6 +24,7 @@
       enable = true;
       nix-direnv.enable = true;
     };
+    firefox.enable = true;
     git = {
       enable = true;
       delta.enable = true;

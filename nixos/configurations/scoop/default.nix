@@ -63,7 +63,6 @@
     description = "Matthew Dargan";
     extraGroups = ["networkmanager" "wheel" "input" "systemd-journal"];
     isNormalUser = true;
-    packages = [pkgs.firefox];
     shell = pkgs.zsh;
   };
 }
