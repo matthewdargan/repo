@@ -196,8 +196,8 @@
     };
     ripgrep.enable = true;
     zsh = {
+      autosuggestion.enable = true;
       defaultKeymap = "viins";
-      enableAutosuggestions = true;
       enable = true;
       historySubstringSearch.enable = true;
       initExtra = ''
