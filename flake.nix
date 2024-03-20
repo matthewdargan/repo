@@ -1,16 +1,20 @@
 {
   description = "home config";
   inputs = {
-    nixpkgs.url = "nixpkgs/nixos-unstable";
-    parts.url = "github:hercules-ci/flake-parts";
+    firefox-addons = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
+    };
     home-manager = {
+      inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
+    nixpkgs.url = "nixpkgs/nixos-unstable";
     nixvim = {
-      url = "github:nix-community/nixvim";
       inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:nix-community/nixvim";
     };
+    parts.url = "github:hercules-ci/flake-parts";
   };
   outputs = {parts, ...} @ inputs:
     parts.lib.mkFlake {inherit inputs;} {

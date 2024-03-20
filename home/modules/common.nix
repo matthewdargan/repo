@@ -1,4 +1,5 @@
-{self, ...}: {
+{self, ...} @ inputs: {
+  config,
   lib,
   pkgs,
   ...
@@ -24,7 +25,15 @@
       enable = true;
       nix-direnv.enable = true;
     };
-    firefox.enable = true;
+    firefox = {
+      enable = true;
+      profiles.${config.home.username}.extensions = with inputs.firefox-addons.packages.${pkgs.system}; [
+        bitwarden
+        darkreader
+        refined-github
+        ublock-origin
+      ];
+    };
     git = {
       enable = true;
       delta.enable = true;
