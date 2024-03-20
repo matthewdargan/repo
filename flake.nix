@@ -9,6 +9,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/home-manager";
     };
+    nixpkgs-firefox-darwin.url = "github:bandithedoge/nixpkgs-firefox-darwin";
     nixpkgs.url = "nixpkgs/nixos-unstable";
     nixvim = {
       inputs.nixpkgs.follows = "nixpkgs";

@@ -4,7 +4,7 @@
     pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
     modulesCommon = [inputs.nixvim.homeManagerModules.nixvim (import ../modules/common.nix inputs)];
     modulesLinux = modulesCommon ++ [./linux.nix];
-    modulesDarwin = modulesCommon ++ [./darwin.nix];
+    modulesDarwin = modulesCommon ++ [(import ./darwin.nix inputs)];
     homeConfig = {
       pkgs,
       modules,
