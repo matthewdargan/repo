@@ -1,1 +1,6 @@
-{...}: {home.homeDirectory = "/home/mpd";}
+{pkgs, ...}: {
+  home = {
+    homeDirectory = "/home/mpd";
+    packages = [pkgs.lutris];
+  };
+}
