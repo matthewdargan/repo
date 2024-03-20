@@ -1,3 +1,1 @@
-{...}: {
-  home.homeDirectory = "/home/mpd";
-}
+{...}: {home.homeDirectory = "/home/mpd";}
