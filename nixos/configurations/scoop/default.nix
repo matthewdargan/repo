@@ -61,7 +61,7 @@
   time.timeZone = "America/Chicago";
   users.users.mpd = {
     description = "Matthew Dargan";
-    extraGroups = ["networkmanager" "wheel" "input" "systemd-journal"];
+    extraGroups = ["input" "networkmanager" "systemd-journal" "wheel"];
     isNormalUser = true;
     shell = pkgs.zsh;
   };

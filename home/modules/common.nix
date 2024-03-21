@@ -206,9 +206,9 @@
     };
     ripgrep.enable = true;
     zsh = {
+      enable = true;
       autosuggestion.enable = true;
       defaultKeymap = "viins";
-      enable = true;
       historySubstringSearch.enable = true;
       initExtra = ''
         source ~/.nix-profile/share/git/contrib/completion/git-prompt.sh

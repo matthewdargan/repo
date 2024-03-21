@@ -1,33 +1,33 @@
 {inputs, ...}: {
   flake.homeConfigurations = let
-    pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
-    pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
     modulesCommon = [inputs.nixvim.homeManagerModules.nixvim (import ../modules/common.nix inputs)];
-    modulesLinux = modulesCommon ++ [./linux.nix];
     modulesDarwin = modulesCommon ++ [(import ./darwin.nix inputs)];
+    modulesLinux = modulesCommon ++ [./linux.nix];
+    pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
+    pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
     homeConfig = {
-      pkgs,
       modules,
+      pkgs,
     }:
       inputs.home-manager.lib.homeManagerConfiguration {
-        inherit pkgs modules;
+        inherit modules pkgs;
       };
   in {
-    "mpd@scoop" = homeConfig {
-      pkgs = pkgsLinux;
-      modules = modulesLinux;
-    };
-    "mpd@deere" = homeConfig {
-      pkgs = pkgsLinux;
-      modules = modulesLinux ++ [{programs.git.userEmail = "darganmatthew@johndeere.com";}];
+    "mpd@butters" = homeConfig {
+      modules = modulesDarwin;
+      pkgs = pkgsDarwin;
     };
     "mpd@cheese" = homeConfig {
-      pkgs = pkgsDarwin;
       modules = modulesDarwin;
+      pkgs = pkgsDarwin;
     };
-    "mpd@butters" = homeConfig {
-      pkgs = pkgsDarwin;
-      modules = modulesDarwin;
+    "mpd@deere" = homeConfig {
+      modules = modulesLinux ++ [{programs.git.userEmail = "darganmatthew@johndeere.com";}];
+      pkgs = pkgsLinux;
+    };
+    "mpd@scoop" = homeConfig {
+      modules = modulesLinux;
+      pkgs = pkgsLinux;
     };
   };
 }
