@@ -110,7 +110,7 @@
           mode = ["n"];
         }
       ];
-      options = {
+      opts = {
         background = "dark";
         colorcolumn = "80";
         expandtab = true;
