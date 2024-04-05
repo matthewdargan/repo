@@ -39,6 +39,7 @@
       enable = true;
       delta.enable = true;
       extraConfig = {
+        commit.gpgsign = true;
         init.defaultBranch = "main";
         push.autoSetupRemote = true;
       };
@@ -49,6 +50,7 @@
       enable = true;
       package = pkgs.go_1_22;
     };
+    gpg.enable = true;
     kitty = {
       enable = true;
       font = {
@@ -224,6 +226,10 @@
         vim = "nvim";
       };
     };
+  };
+  services.gpg-agent = {
+    enable = true;
+    pinentryPackage = pkgs.pinentry-tty;
   };
   xdg.enable = true;
 }

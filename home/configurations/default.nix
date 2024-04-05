@@ -26,7 +26,7 @@
       pkgs = pkgsLinux;
     };
     "mpd@scoop" = homeConfig {
-      modules = modulesLinux;
+      modules = modulesLinux ++ [{programs.git.signing.key = "E89C55C6879C7DAB";}];
       pkgs = pkgsLinux;
     };
   };
