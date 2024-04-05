@@ -22,7 +22,16 @@
       pkgs = pkgsDarwin;
     };
     "mpd@deere" = homeConfig {
-      modules = modulesLinux ++ [{programs.git.userEmail = "darganmatthew@johndeere.com";}];
+      modules =
+        modulesLinux
+        ++ [
+          {
+            programs.git = {
+              signing.key = "524E1845B7FD26B1";
+              userEmail = "darganmatthew@johndeere.com";
+            };
+          }
+        ];
       pkgs = pkgsLinux;
     };
     "mpd@scoop" = homeConfig {
