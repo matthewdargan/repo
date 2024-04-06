@@ -18,7 +18,7 @@
       pkgs = pkgsDarwin;
     };
     "mpd@cheese" = homeConfig {
-      modules = modulesDarwin;
+      modules = modulesDarwin ++ [{programs.git.signing.key = "347727B6166BBB04";}];
       pkgs = pkgsDarwin;
     };
     "mpd@deere" = homeConfig {
