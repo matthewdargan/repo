@@ -15,7 +15,7 @@
       '';
       onChange = "${pkgs.vale}/bin/vale sync";
     };
-    packages = [inputs.watch.packages.${pkgs.system}.watch pkgs.discord pkgs.terraform pkgs.vale];
+    packages = [pkgs.discord pkgs.terraform pkgs.vale];
     stateVersion = "23.11";
     username = "mpd";
   };

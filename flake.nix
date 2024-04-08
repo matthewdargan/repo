@@ -16,10 +16,6 @@
       url = "github:nix-community/nixvim";
     };
     parts.url = "github:hercules-ci/flake-parts";
-    watch = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/watch";
-    };
   };
   outputs = {parts, ...} @ inputs:
     parts.lib.mkFlake {inherit inputs;} {
