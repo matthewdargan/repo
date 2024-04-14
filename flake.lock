@@ -231,6 +231,25 @@
         "type": "github"
       }
     },
+    "nix-go": {
+      "inputs": {
+        "nixpkgs": "nixpkgs",
+        "parts": "parts"
+      },
+      "locked": {
+        "lastModified": 1713043766,
+        "narHash": "sha256-HkLRVfpbxiT3i+rIARHSBdx9pVJb957nt/CeAcpza5o=",
+        "owner": "matthewdargan",
+        "repo": "nix-go",
+        "rev": "45ada7cf98efc4f6f364fb1e8d80009b66f6bf0a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "matthewdargan",
+        "repo": "nix-go",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1712791164,

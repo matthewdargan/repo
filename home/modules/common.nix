@@ -48,7 +48,7 @@
     };
     go = {
       enable = true;
-      package = pkgs.go_1_22;
+      package = inputs.nix-go.packages.${pkgs.system}.go;
     };
     gpg.enable = true;
     kitty = {
