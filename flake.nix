@@ -5,13 +5,22 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
     };
-    ghlink.url = "github:matthewdargan/ghlink";
+    ghlink = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:matthewdargan/ghlink";
+    };
     home-manager = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/home-manager";
     };
-    nix-go.url = "github:matthewdargan/nix-go";
-    nixpkgs-firefox-darwin.url = "github:bandithedoge/nixpkgs-firefox-darwin";
+    nix-go = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:matthewdargan/nix-go";
+    };
+    nixpkgs-firefox-darwin = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:bandithedoge/nixpkgs-firefox-darwin";
+    };
     nixpkgs.url = "nixpkgs/nixos-unstable";
     nixvim = {
       inputs.nixpkgs.follows = "nixpkgs";
