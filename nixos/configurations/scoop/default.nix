@@ -38,6 +38,7 @@
   };
   security.rtkit.enable = true;
   services = {
+    displayManager.sddm.enable = true;
     pipewire = {
       enable = true;
       alsa = {
@@ -49,7 +50,6 @@
     xserver = {
       enable = true;
       desktopManager.plasma5.enable = true;
-      displayManager.sddm.enable = true;
       xkb = {
         layout = "us";
         variant = "";
