@@ -3,7 +3,10 @@
   lib,
   pkgs,
   ...
-}: {
+}: let
+  inherit (inputs.ghlink.packages.${pkgs.system}) ghlink;
+  inherit (inputs.nix-go.packages.${pkgs.system}) go gopls;
+in {
   home = {
     file.vale_ini = {
       target = ".vale.ini";
@@ -48,7 +51,7 @@
     };
     go = {
       enable = true;
-      package = inputs.nix-go.packages.${pkgs.system}.go;
+      package = go;
     };
     gpg.enable = true;
     kitty = {
@@ -99,7 +102,7 @@
         register = "unnamedplus";
       };
       colorschemes.kanagawa.enable = true;
-      extraPackages = [inputs.ghlink.packages.${pkgs.system}.ghlink];
+      extraPackages = [ghlink];
       globals.mapleader = " ";
       keymaps = [
         {
@@ -163,7 +166,7 @@
             bashls.enable = true;
             gopls = {
               enable = true;
-              package = inputs.nix-go.packages.${pkgs.system}.gopls;
+              package = gopls;
             };
             jsonls.enable = true;
             nil_ls.enable = true;
