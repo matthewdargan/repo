@@ -333,11 +333,11 @@
         "parts": "parts_3"
       },
       "locked": {
-        "lastModified": 1713043766,
-        "narHash": "sha256-HkLRVfpbxiT3i+rIARHSBdx9pVJb957nt/CeAcpza5o=",
+        "lastModified": 1713071223,
+        "narHash": "sha256-jCZ4oViuuQdLaFW89pu4w46yXsjlcaaM1PtWlJiur9c=",
         "owner": "matthewdargan",
         "repo": "nix-go",
-        "rev": "45ada7cf98efc4f6f364fb1e8d80009b66f6bf0a",
+        "rev": "27a05f2b5165fdf8351aa8258f50c6eba55d7eba",
         "type": "github"
       },
       "original": {

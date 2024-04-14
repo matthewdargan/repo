@@ -24,7 +24,6 @@
       imports = [
         ./home/configurations
         ./nixos/configurations
-        ./packages
         ./parts
       ];
       systems = ["aarch64-darwin" "x86_64-linux"];
