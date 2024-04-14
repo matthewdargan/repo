@@ -99,6 +99,7 @@
         register = "unnamedplus";
       };
       colorschemes.kanagawa.enable = true;
+      extraPackages = [inputs.ghlink.packages.${pkgs.system}.ghlink];
       globals.mapleader = " ";
       keymaps = [
         {
