@@ -94,6 +94,12 @@ in {
     };
     nixvim = {
       enable = true;
+      autoCmd = [
+        {
+          event = ["BufWritePre"];
+          command = "lua vim.lsp.buf.format()";
+        }
+      ];
       clipboard = {
         providers = {
           wl-copy.enable = true;
@@ -174,11 +180,9 @@ in {
             yamlls.enable = true;
           };
         };
-        lsp-format.enable = true;
         luasnip.enable = true;
         none-ls = {
           enable = true;
-          enableLspFormat = true;
           sources = {
             diagnostics.golangci_lint.enable = true;
             formatting = {
