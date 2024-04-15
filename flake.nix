@@ -27,11 +27,16 @@
       url = "github:nix-community/nixvim";
     };
     parts.url = "github:hercules-ci/flake-parts";
+    pre-commit-hooks = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:cachix/pre-commit-hooks.nix";
+    };
   };
   outputs = {parts, ...} @ inputs:
     parts.lib.mkFlake {inherit inputs;} {
       imports = [
         ./home/configurations
+        inputs.pre-commit-hooks.flakeModule
         ./nixos/configurations
         ./parts
       ];

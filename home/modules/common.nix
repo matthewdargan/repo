@@ -1,4 +1,4 @@
-{self, ...} @ inputs: {
+inputs: {
   config,
   lib,
   pkgs,
@@ -96,8 +96,8 @@ in {
       enable = true;
       autoCmd = [
         {
-          event = ["BufWritePre"];
           command = "lua vim.lsp.buf.format()";
+          event = ["BufWritePre"];
         }
       ];
       clipboard = {
