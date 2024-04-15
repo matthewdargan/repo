@@ -96,7 +96,7 @@ in {
       enable = true;
       autoCmd = [
         {
-          command = "lua vim.lsp.buf.format()";
+          callback = config.nixvim.helpers.mkRaw "function() vim.lsp.buf.format() end";
           event = ["BufWritePre"];
         }
       ];
