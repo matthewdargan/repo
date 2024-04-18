@@ -8,17 +8,7 @@ inputs: {
   inherit (inputs.nix-go.packages.${pkgs.system}) go gopls;
 in {
   home = {
-    file.vale_ini = {
-      target = ".vale.ini";
-      text = ''
-        Packages = Google, write-good
-
-        [*]
-        BasedOnStyles = Google, Vale, write-good
-      '';
-      onChange = "${pkgs.vale}/bin/vale sync";
-    };
-    packages = [pkgs.discord pkgs.terraform pkgs.vale];
+    packages = [pkgs.discord];
     stateVersion = "23.11";
     username = "mpd";
   };
