@@ -18,16 +18,6 @@ in {
       enable = true;
       nix-direnv.enable = true;
     };
-    firefox = {
-      enable = true;
-      package = pkgs.firefox-bin;
-      profiles.${config.home.username}.extensions = with inputs.firefox-addons.packages.${pkgs.system}; [
-        bitwarden
-        darkreader
-        refined-github
-        ublock-origin
-      ];
-    };
     git = {
       enable = true;
       delta.enable = true;

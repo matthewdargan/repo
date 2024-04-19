@@ -17,10 +17,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:matthewdargan/nix-go";
     };
-    nixpkgs-firefox-darwin = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:bandithedoge/nixpkgs-firefox-darwin";
-    };
     nixpkgs.url = "nixpkgs/nixos-unstable";
     nixvim = {
       inputs.nixpkgs.follows = "nixpkgs";
