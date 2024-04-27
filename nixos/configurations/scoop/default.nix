@@ -32,10 +32,7 @@
     settings.experimental-features = "nix-command flakes";
   };
   nixpkgs.config.allowUnfree = true;
-  programs = {
-    steam.enable = true;
-    zsh.enable = true;
-  };
+  programs.steam.enable = true;
   security.rtkit.enable = true;
   services = {
     displayManager.sddm.enable = true;
@@ -74,6 +71,6 @@
     description = "Matthew Dargan";
     extraGroups = ["input" "networkmanager" "systemd-journal" "wheel"];
     isNormalUser = true;
-    shell = pkgs.zsh;
+    shell = pkgs.bash;
   };
 }

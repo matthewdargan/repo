@@ -14,6 +14,22 @@ in {
   };
   nixpkgs.config.allowUnfree = true;
   programs = {
+    bash = {
+      enable = true;
+      initExtra = ''
+        source ~/.nix-profile/share/git/contrib/completion/git-prompt.sh
+        PS1='\[\e[1;33m\]\u\[\e[38;5;246m\]:\[\e[1;36m\]\w$(__git_ps1 "\[\e[38;5;246m\](\[\e[1;35m\]%s\[\e[38;5;246m\])")\[\e[1;32m\]$\[\e[0m\] '
+        set -o vi
+      '';
+      sessionVariables = {
+        EDITOR = "nvim";
+        VISUAL = "nvim";
+      };
+      shellAliases = {
+        ll = "ls -alF";
+        vim = "nvim";
+      };
+    };
     direnv = {
       enable = true;
       nix-direnv.enable = true;
@@ -196,24 +212,6 @@ in {
       };
     };
     ripgrep.enable = true;
-    zsh = {
-      enable = true;
-      autosuggestion.enable = true;
-      defaultKeymap = "viins";
-      initExtra = ''
-        source ~/.nix-profile/share/git/contrib/completion/git-prompt.sh
-        setopt PROMPT_SUBST
-        PROMPT='%F{yellow}%n%F{white}:%F{cyan}%~%F{magenta}$(__git_ps1 "(%s)")%F{white}%%%f '
-      '';
-      sessionVariables = {
-        EDITOR = "nvim";
-        VISUAL = "nvim";
-      };
-      shellAliases = {
-        ll = "ls -alF";
-        vim = "nvim";
-      };
-    };
   };
   xdg.enable = true;
 }
