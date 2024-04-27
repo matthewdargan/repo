@@ -18,6 +18,7 @@ in {
       enable = true;
       nix-direnv.enable = true;
     };
+    fzf.enable = true;
     git = {
       enable = true;
       delta.enable = true;
@@ -199,7 +200,6 @@ in {
       enable = true;
       autosuggestion.enable = true;
       defaultKeymap = "viins";
-      historySubstringSearch.enable = true;
       initExtra = ''
         source ~/.nix-profile/share/git/contrib/completion/git-prompt.sh
         setopt PROMPT_SUBST
