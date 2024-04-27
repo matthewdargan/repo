@@ -105,7 +105,7 @@ in {
         register = "unnamedplus";
       };
       colorschemes.kanagawa.enable = true;
-      extraPackages = [ghlink];
+      extraPackages = [ghlink pkgs.ripgrep];
       globals.mapleader = " ";
       keymaps = [
         {
@@ -211,7 +211,6 @@ in {
         };
       };
     };
-    ripgrep.enable = true;
   };
   xdg.enable = true;
 }
