@@ -8,7 +8,7 @@ inputs: {
   inherit (inputs.nix-go.packages.${pkgs.system}) go gopls;
 in {
   home = {
-    packages = [pkgs.discord];
+    packages = [pkgs.discord pkgs.element-desktop];
     stateVersion = "23.11";
     username = "mpd";
   };
