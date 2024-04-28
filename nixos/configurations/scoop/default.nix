@@ -4,9 +4,6 @@
     efi.canTouchEfiVariables = true;
     systemd-boot.enable = true;
   };
-  environment.systemPackages = [
-    pkgs.pkgsi686Linux.gperftools # https://github.com/NixOS/nixpkgs/issues/271483#issuecomment-1838055011
-  ];
   hardware.pulseaudio.enable = false;
   i18n = {
     defaultLocale = "en_US.UTF-8";
