@@ -173,6 +173,11 @@ in {
             };
             jsonls.enable = true;
             nil_ls.enable = true;
+            rust-analyzer = {
+              enable = true;
+              installCargo = true;
+              installRustc = true;
+            };
             terraformls.enable = true;
             yamlls.enable = true;
           };
