@@ -6,7 +6,7 @@ _: {
     ...
   }: {
     devShells.default = pkgs.mkShell {
-      packages = [inputs'.home-manager.packages.home-manager];
+      packages = [inputs'.home-manager.packages.home-manager pkgs.nh];
       shellHook = "${config.pre-commit.installationScript}";
     };
     pre-commit = {
