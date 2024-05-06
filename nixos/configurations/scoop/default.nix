@@ -48,17 +48,6 @@
       };
       pulse.enable = true;
     };
-    postgresql = {
-      enable = true;
-      authentication = "local all all peer map=superuser_map";
-      ensureDatabases = ["ebay"];
-      identMap = ''
-        superuser_map mpd postgres
-        superuser_map postgres postgres
-        superuser_map /^(.*)$ \1
-      '';
-      package = pkgs.postgresql_16;
-    };
     xserver = {
       enable = true;
       desktopManager.plasma5.enable = true;
