@@ -175,8 +175,8 @@ in {
             nil_ls.enable = true;
             rust-analyzer = {
               enable = true;
-              installCargo = true;
-              installRustc = true;
+              installCargo = false;
+              installRustc = false;
             };
             terraformls.enable = true;
             yamlls.enable = true;
