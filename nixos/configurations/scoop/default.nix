@@ -26,7 +26,7 @@
   nix = {
     gc = {
       automatic = true;
-      dates = "weekly";
+      options = "--delete-older-than 5d";
     };
     nixPath = ["nixpkgs=${nixpkgs}"];
     registry.nixpkgs.flake = nixpkgs;
