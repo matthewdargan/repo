@@ -1,5 +1,5 @@
-{nixpkgs, ...}: {pkgs, ...}: {
-  imports = [./hardware.nix];
+{nixpkgs, ...} @ inputs: {pkgs, ...}: {
+  imports = [./hardware.nix inputs.manga-alert.nixosModules.manga-alert];
   boot.loader = {
     efi.canTouchEfiVariables = true;
     systemd-boot.enable = true;
@@ -40,6 +40,12 @@
   security.rtkit.enable = true;
   services = {
     displayManager.sddm.enable = true;
+    manga-alert = {
+      enable = true;
+      manga = ["one piece"];
+      timer.enable = true;
+      user = "mpd";
+    };
     pipewire = {
       enable = true;
       alsa = {
