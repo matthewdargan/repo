@@ -38,6 +38,7 @@
         ./home/configurations
         inputs.pre-commit-hooks.flakeModule
         ./nixos/configurations
+        ./packages
         ./parts
       ];
       systems = ["aarch64-darwin" "x86_64-linux"];

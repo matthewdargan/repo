@@ -1,12 +1,12 @@
-{inputs, ...}: {
+{inputs, ...} @ part-inputs: {
   flake.homeConfigurations = let
     modulesCommon = [
-      (import ../modules/common.nix inputs)
+      (import ../modules/common.nix part-inputs)
       inputs.nixvim.homeManagerModules.nixvim
       ../../modules/settings.nix
     ];
     modulesDarwin = modulesCommon ++ [./darwin.nix];
-    modulesLinux = modulesCommon ++ [(import ./linux.nix inputs)];
+    modulesLinux = modulesCommon ++ [(import ./linux.nix part-inputs)];
     pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
     pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
     homeConfig = {
