@@ -9,7 +9,7 @@ inputs: {
 in {
   home = {
     packages = [pkgs.discord pkgs.element-desktop];
-    stateVersion = "23.11";
+    stateVersion = "24.05";
     username = "mpd";
   };
   nixpkgs.config.allowUnfree = true;
