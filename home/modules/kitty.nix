@@ -36,5 +36,6 @@
       selection_foreground = "#C8C093";
       url_color = "#72A7BC";
     };
+    shellIntegration.mode = "no-cursor";
   };
 }
