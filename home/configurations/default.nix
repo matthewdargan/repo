@@ -1,11 +1,11 @@
 {inputs, ...} @ part-inputs: {
   flake.homeConfigurations = let
     modulesCommon = [
-      (import ../modules/common.nix part-inputs)
+      (import ../modules/dev.nix part-inputs)
       inputs.nixvim.homeManagerModules.nixvim
       ../../modules/settings.nix
     ];
-    modulesDarwin = modulesCommon ++ [./darwin.nix];
+    modulesDarwin = modulesCommon ++ [./darwin.nix ../modules/kitty.nix];
     modulesLinux = modulesCommon ++ [(import ./linux.nix part-inputs)];
     pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
     pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
@@ -39,7 +39,13 @@
       pkgs = pkgsLinux;
     };
     "mpd@scoop" = homeConfig {
-      modules = modulesLinux ++ [{programs.git.signing.key = "E89C55C6879C7DAB";}];
+      modules =
+        modulesLinux
+        ++ [
+          ../modules/gaming.nix
+          ../modules/kitty.nix
+          {programs.git.signing.key = "E89C55C6879C7DAB";}
+        ];
       pkgs = pkgsLinux;
     };
   };
