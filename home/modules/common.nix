@@ -19,7 +19,10 @@ in {
     stateVersion = "24.05";
     username = "mpd";
   };
-  nixpkgs.config.allowUnfree = true;
+  nixpkgs.config.allowUnfreePredicate = pkg:
+    builtins.elem (lib.getName pkg) [
+      "discord"
+    ];
   programs = {
     bash = {
       enable = true;
