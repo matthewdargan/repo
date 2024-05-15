@@ -1,8 +1,8 @@
-_: {
+{config, ...}: {
   manga-alert = {
     enable = true;
     manga = ["one piece"];
     timer.enable = true;
-    user = "mpd";
+    user = "${config.home.username}";
   };
 }
