@@ -117,11 +117,11 @@
       },
       "locked": {
         "dir": "pkgs/firefox-addons",
-        "lastModified": 1715718245,
-        "narHash": "sha256-XicsZTRCsk+VztPrVz0zucM1I9rVcy6zqFo8Q64XWkQ=",
+        "lastModified": 1715745804,
+        "narHash": "sha256-icHowawJTeJ+5m4VnSbUICosUkQsGg/TcuVNJdySGqU=",
         "owner": "rycee",
         "repo": "nur-expressions",
-        "rev": "1783bf267e50ac65bafa10ef912a963591b91bd6",
+        "rev": "2c3918e617647325fe41cb5324e4b4b61287b601",
         "type": "gitlab"
       },
       "original": {
@@ -569,11 +569,11 @@
         "pre-commit-hooks": "pre-commit-hooks_2"
       },
       "locked": {
-        "lastModified": 1715739501,
-        "narHash": "sha256-j5zqfExYAPJOwXUcoy60cP1Lo4oeY3oAx691rTBe6UM=",
+        "lastModified": 1715746358,
+        "narHash": "sha256-WKGpHEkRS/DfW5KfJ/ESKwJdX1/gHTBWy4LPdIX4JXw=",
         "owner": "matthewdargan",
         "repo": "manga-alert",
-        "rev": "469c64464fb509082e9d135b9572757aafbb6750",
+        "rev": "ff9551ccd7b26ba9d0cf17b4d6f3f6eebf7abd76",
         "type": "github"
       },
       "original": {

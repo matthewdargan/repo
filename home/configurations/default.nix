@@ -38,8 +38,10 @@
       modules =
         modulesLinux
         ++ [
+          inputs.manga-alert.homeModules.manga-alert
           ../modules/gaming.nix
           ../modules/kitty.nix
+          ../modules/manga-alert.nix
           {programs.git.signing.key = "E89C55C6879C7DAB";}
         ];
       pkgs = pkgsLinux;
