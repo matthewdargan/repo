@@ -569,11 +569,11 @@
         "pre-commit-hooks": "pre-commit-hooks_2"
       },
       "locked": {
-        "lastModified": 1715746358,
-        "narHash": "sha256-WKGpHEkRS/DfW5KfJ/ESKwJdX1/gHTBWy4LPdIX4JXw=",
+        "lastModified": 1715798990,
+        "narHash": "sha256-JLKdNLf4bMZnlbiP7VzCjNPedD433/13KuQbZHVyMwg=",
         "owner": "matthewdargan",
         "repo": "manga-alert",
-        "rev": "ff9551ccd7b26ba9d0cf17b4d6f3f6eebf7abd76",
+        "rev": "8874defb8cc41d6e7f2de6b8f3c6d0b3b7ef9179",
         "type": "github"
       },
       "original": {
