@@ -1,8 +1,4 @@
-{nixpkgs, ...}: {
-  lib,
-  pkgs,
-  ...
-}: {
+{nixpkgs, ...}: {pkgs, ...}: {
   imports = [./hardware.nix];
   boot.loader = {
     efi.canTouchEfiVariables = true;
@@ -39,12 +35,7 @@
       experimental-features = "nix-command flakes";
     };
   };
-  nixpkgs.config.allowUnfreePredicate = pkg:
-    builtins.elem (lib.getName pkg) [
-      "steam"
-      "steam-original"
-      "steam-run"
-    ];
+  nixpkgs.config.allowUnfree = true;
   programs.steam.enable = true;
   security.rtkit.enable = true;
   services = {

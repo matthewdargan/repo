@@ -14,6 +14,7 @@ in {
     stateVersion = "24.05";
     username = "mpd";
   };
+  nixpkgs.config.allowUnfree = true;
   programs = {
     bash = {
       enable = true;
@@ -36,6 +37,10 @@ in {
       nix-direnv.enable = true;
     };
     fzf.enable = true;
+    gh = {
+      enable = true;
+      extensions = [pkgs.gh-copilot];
+    };
     git = {
       enable = true;
       delta.enable = true;
