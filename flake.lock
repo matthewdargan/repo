@@ -117,11 +117,11 @@
       },
       "locked": {
         "dir": "pkgs/firefox-addons",
-        "lastModified": 1715745804,
-        "narHash": "sha256-icHowawJTeJ+5m4VnSbUICosUkQsGg/TcuVNJdySGqU=",
+        "lastModified": 1715832195,
+        "narHash": "sha256-kkzMojzLxg0hPvFP6C3KPF4QN4xLPvZawzFgp/Ci3TM=",
         "owner": "rycee",
         "repo": "nur-expressions",
-        "rev": "2c3918e617647325fe41cb5324e4b4b61287b601",
+        "rev": "9286cf84a36bd165c15ae69909ddc6df27db90c6",
         "type": "gitlab"
       },
       "original": {
@@ -388,6 +388,7 @@
       "inputs": {
         "crane": "crane",
         "fenix": "fenix",
+        "nix-filter": "nix-filter",
         "nixpkgs": [
           "nixpkgs"
         ],
@@ -395,11 +396,11 @@
         "pre-commit-hooks": "pre-commit-hooks"
       },
       "locked": {
-        "lastModified": 1715809829,
-        "narHash": "sha256-S0vSvQM/9c+hSJ61ba1XG0wYiOdBas4jX+s3hirV9eI=",
+        "lastModified": 1715908804,
+        "narHash": "sha256-H8p9DYBVWYTe2yg3Z/hwTwYScR8uSQdmYVB28iN02c4=",
         "owner": "matthewdargan",
         "repo": "ghlink",
-        "rev": "36f47649b334eac97e0525ebaa50ba45dd7163c9",
+        "rev": "d5962ff7bd11e57be5466209e3d0e9ad9054b83d",
         "type": "github"
       },
       "original": {
@@ -562,6 +563,7 @@
       "inputs": {
         "crane": "crane_2",
         "fenix": "fenix_2",
+        "nix-filter": "nix-filter_2",
         "nixpkgs": [
           "nixpkgs"
         ],
@@ -569,11 +571,11 @@
         "pre-commit-hooks": "pre-commit-hooks_2"
       },
       "locked": {
-        "lastModified": 1715809937,
-        "narHash": "sha256-KQckMjkVvVa5Disi53Kx/InMu0O7Wg9vi/L58eewErQ=",
+        "lastModified": 1715908520,
+        "narHash": "sha256-g7l41nu7CB5zeAHlmqDx3YgFBBnXZEGzvDu+Z6Ab3ZU=",
         "owner": "matthewdargan",
         "repo": "manga-alert",
-        "rev": "0cefca08b3a557c9d4d20bd9a680ba8e3fe69ca5",
+        "rev": "f8aeaa7a813fb0ae0073897d9f0111ff7bc27bb7",
         "type": "github"
       },
       "original": {
@@ -600,6 +602,36 @@
       "original": {
         "owner": "lnl7",
         "repo": "nix-darwin",
+        "type": "github"
+      }
+    },
+    "nix-filter": {
+      "locked": {
+        "lastModified": 1710156097,
+        "narHash": "sha256-1Wvk8UP7PXdf8bCCaEoMnOT1qe5/Duqgj+rL8sRQsSM=",
+        "owner": "numtide",
+        "repo": "nix-filter",
+        "rev": "3342559a24e85fc164b295c3444e8a139924675b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "nix-filter",
+        "type": "github"
+      }
+    },
+    "nix-filter_2": {
+      "locked": {
+        "lastModified": 1710156097,
+        "narHash": "sha256-1Wvk8UP7PXdf8bCCaEoMnOT1qe5/Duqgj+rL8sRQsSM=",
+        "owner": "numtide",
+        "repo": "nix-filter",
+        "rev": "3342559a24e85fc164b295c3444e8a139924675b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "nix-filter",
         "type": "github"
       }
     },
