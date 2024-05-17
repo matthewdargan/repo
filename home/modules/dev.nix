@@ -10,7 +10,7 @@
   inherit (inputs.nix-go.packages.${pkgs.system}) go;
 in {
   home = {
-    packages = [self.packages.${pkgs.system}.neovim];
+    packages = [pkgs.xclip self.packages.${pkgs.system}.neovim];
     stateVersion = "24.05";
     username = "mpd";
   };
