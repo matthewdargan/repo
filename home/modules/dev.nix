@@ -57,6 +57,7 @@ in {
       package = go;
     };
     gpg.enable = true;
+    vscode.enable = true;
   };
   xdg.enable = true;
 }
