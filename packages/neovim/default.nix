@@ -26,6 +26,7 @@ _: {
           colorschemes.kanagawa.enable = true;
           extraPackages = [ghlink pkgs.ripgrep];
           globals.mapleader = " ";
+          imports = [./copilot.nix];
           keymaps = [
             {
               action = ":bnext<CR>";
@@ -35,11 +36,6 @@ _: {
             {
               action = ":bprev<CR>";
               key = "H";
-              mode = ["n"];
-            }
-            {
-              action = ":vert Copilot panel<CR>";
-              key = "<leader>p";
               mode = ["n"];
             }
           ];
@@ -76,7 +72,6 @@ _: {
                 ];
               };
             };
-            copilot-vim.enable = true;
             lastplace.enable = true;
             lsp = {
               enable = true;
