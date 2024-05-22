@@ -1,8 +1,4 @@
-{
-  inputs,
-  self,
-  ...
-}: {
+{inputs, ...}: {
   lib,
   pkgs,
   ...
@@ -10,7 +6,7 @@
   inherit (inputs.nix-go.packages.${pkgs.system}) go;
 in {
   home = {
-    packages = [pkgs.xclip self.packages.${pkgs.system}.neovim];
+    packages = [pkgs.vim pkgs.xclip];
     stateVersion = "24.05";
     username = "mpd";
   };
@@ -24,12 +20,11 @@ in {
         set -o vi
       '';
       sessionVariables = {
-        EDITOR = "nvim";
-        VISUAL = "nvim";
+        EDITOR = "vim";
+        VISUAL = "vim";
       };
       shellAliases = {
         ll = "ls -alF";
-        vim = "nvim";
       };
     };
     direnv = {
