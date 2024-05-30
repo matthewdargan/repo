@@ -13,10 +13,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/home-manager";
     };
-    manga-alert = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/manga-alert";
-    };
     nix-go = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:matthewdargan/nix-go";
