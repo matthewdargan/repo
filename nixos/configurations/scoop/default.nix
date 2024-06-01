@@ -48,6 +48,7 @@
       };
       pulse.enable = true;
     };
+    tailscale.enable = true;
     xserver = {
       enable = true;
       desktopManager.plasma5.enable = true;
