@@ -5,10 +5,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
     };
-    ghlink = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/ghlink";
-    };
     home-manager = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/home-manager";
