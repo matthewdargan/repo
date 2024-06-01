@@ -7,7 +7,7 @@
 in {
   home = {
     packages = [pkgs.vim pkgs.xclip];
-    stateVersion = "24.05";
+    stateVersion = "24.11";
     username = "mpd";
   };
   nixpkgs.config.allowUnfree = true;
