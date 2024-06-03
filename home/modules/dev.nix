@@ -52,7 +52,7 @@ in {
       package = go;
     };
     gpg.enable = true;
-    vscode.enable = true;
+    vscode.enable = lib.mkDefault true;
   };
   xdg.enable = true;
 }

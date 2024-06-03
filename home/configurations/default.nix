@@ -26,9 +26,12 @@
         modulesLinux
         ++ [
           {
-            programs.git = {
-              signing.key = "524E1845B7FD26B1";
-              userEmail = "darganmatthew@johndeere.com";
+            programs = {
+              git = {
+                signing.key = "524E1845B7FD26B1";
+                userEmail = "darganmatthew@johndeere.com";
+              };
+              vscode.enable = false;
             };
           }
         ];
