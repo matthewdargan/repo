@@ -37,6 +37,16 @@
         ];
       pkgs = pkgsLinux;
     };
+    "mpd@nas" = homeConfig {
+      modules =
+        modulesLinux
+        ++ [
+          {
+            programs.vscode.enable = false;
+          }
+        ];
+      pkgs = pkgsLinux;
+    };
     "mpd@scoop" = homeConfig {
       modules =
         modulesLinux
