@@ -48,7 +48,7 @@
     #   autoTrim = true;
     # };
   };
-  system.stateVersion = "24.05";
+  system.stateVersion = "24.11";
   time.timeZone = "America/Chicago";
   users.users.mpd = {
     description = "Matthew Dargan";
