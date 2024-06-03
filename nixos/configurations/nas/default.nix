@@ -55,7 +55,7 @@
     extraGroups = ["input" "networkmanager" "systemd-journal" "wheel"];
     isNormalUser = true;
     openssh.authorizedKeys.keys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKQnZpdDMeA1w+d4odEva6Kj2BJSjkM9LJFvs4viqaH2 matthewdargan57@gmail.com"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILe/v2phdFJcaINc1bphWEM6vXDSlXY/e0B2zyb3ik1M matthewdargan57@gmail.com"
     ];
     shell = pkgs.bash;
   };
