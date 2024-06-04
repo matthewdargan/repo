@@ -1,10 +1,8 @@
-{inputs, ...}: {
+{
   lib,
   pkgs,
   ...
-}: let
-  inherit (inputs.nix-go.packages.${pkgs.system}) go;
-in {
+}: {
   home = {
     packages = [pkgs.vim pkgs.xclip];
     stateVersion = "24.11";
@@ -46,10 +44,6 @@ in {
       };
       userEmail = lib.mkDefault "matthewdargan57@gmail.com";
       userName = "Matthew Dargan";
-    };
-    go = {
-      enable = true;
-      package = go;
     };
     gpg.enable = true;
     vscode.enable = lib.mkDefault true;

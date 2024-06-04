@@ -9,10 +9,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/home-manager";
     };
-    nix-go = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/nix-go";
-    };
     nixpkgs.url = "nixpkgs/nixos-unstable";
     parts.url = "github:hercules-ci/flake-parts";
     pre-commit-hooks = {
