@@ -22,6 +22,10 @@
       fsType = "vfat";
       options = ["fmask=0022" "dmask=0022"];
     };
+    "/media" = {
+      device = "tank/media";
+      fsType = "zfs";
+    };
   };
   hardware.cpu.amd.updateMicrocode = config.hardware.enableRedistributableFirmware;
   networking.useDHCP = lib.mkDefault true;

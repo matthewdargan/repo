@@ -52,10 +52,10 @@
       settings.PermitRootLogin = "no";
     };
     tailscale.enable = true;
-    # zfs = {
-    #   autoScrub = true;
-    #   autoTrim = true;
-    # };
+    zfs = {
+      autoScrub.enable = true;
+      trim.enable = true;
+    };
   };
   system.stateVersion = "24.11";
   time.timeZone = "America/Chicago";
