@@ -1,6 +1,11 @@
-{nixpkgs, ...}: {pkgs, ...}: {
+{nixpkgs, ...}: {
+  config,
+  pkgs,
+  ...
+}: {
   imports = [./hardware.nix];
   boot = {
+    kernelPackages = config.boot.zfs.package.latestCompatibleLinuxPackages;
     loader = {
       efi.canTouchEfiVariables = true;
       systemd-boot.enable = true;
