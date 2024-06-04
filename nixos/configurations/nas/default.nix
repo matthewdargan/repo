@@ -1,8 +1,11 @@
 {nixpkgs, ...}: {pkgs, ...}: {
   imports = [./hardware.nix];
-  boot.loader = {
-    efi.canTouchEfiVariables = true;
-    systemd-boot.enable = true;
+  boot = {
+    loader = {
+      efi.canTouchEfiVariables = true;
+      systemd-boot.enable = true;
+    };
+    supportedFilesystems = ["ext4" "vfat" "zfs"];
   };
   i18n = {
     defaultLocale = "en_US.UTF-8";
@@ -18,7 +21,8 @@
       LC_TIME = "en_US.UTF-8";
     };
   };
-  networking = {
+  networking = rec {
+    hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "nas";
     firewall.allowedTCPPorts = [22];
     networkmanager.enable = true;
