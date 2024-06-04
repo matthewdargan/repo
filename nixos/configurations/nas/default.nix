@@ -29,7 +29,10 @@
   networking = rec {
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "nas";
-    firewall.allowedTCPPorts = [22];
+    firewall = {
+      allowedTCPPorts = [22];
+      interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [8096];
+    };
     networkmanager.enable = true;
   };
   nix = {
