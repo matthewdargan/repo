@@ -55,6 +55,10 @@
       settings.PermitRootLogin = "no";
     };
     tailscale.enable = true;
+    transmission = {
+      enable = true;
+      settings.download-dir = "/media";
+    };
     zfs = {
       autoScrub.enable = true;
       trim.enable = true;
