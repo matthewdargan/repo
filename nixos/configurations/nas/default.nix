@@ -33,7 +33,7 @@
     firewall = {
       allowedTCPPorts = [22];
       checkReversePath = "loose";
-      interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [8096];
+      interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [8096 config.services.transmission.settings.rpc-port];
     };
     networkmanager.enable = true;
   };
@@ -60,7 +60,11 @@
     tailscale.enable = true;
     transmission = {
       enable = true;
-      settings.download-dir = "/media";
+      settings = {
+        download-dir = "/media/downloads";
+        rpc-bind-address = "0.0.0.0";
+        rpc-whitelist-enabled = false;
+      };
     };
     zfs = {
       autoScrub.enable = true;
