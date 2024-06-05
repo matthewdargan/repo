@@ -2,7 +2,7 @@
   flake.homeConfigurations = let
     modulesCommon = [../modules/dev.nix ../../modules/settings.nix];
     modulesDarwin = modulesCommon ++ [./darwin.nix ../modules/kitty.nix];
-    modulesLinux = modulesCommon ++ [(import ./linux.nix part-inputs)];
+    modulesLinux = modulesCommon ++ [./linux.nix];
     pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
     pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
     homeConfig = {
@@ -51,6 +51,7 @@
       modules =
         modulesLinux
         ++ [
+          (import ../modules/firefox.nix part-inputs)
           ../modules/gaming.nix
           ../modules/kitty.nix
           {programs.git.signing.key = "E89C55C6879C7DAB";}
