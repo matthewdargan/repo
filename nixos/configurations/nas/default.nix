@@ -60,8 +60,9 @@
     tailscale.enable = true;
     transmission = {
       enable = true;
-      settings = {
-        download-dir = "/media/downloads";
+      settings = rec {
+        download-dir = "${home}/downloads";
+        home = "/media/transmission";
         rpc-bind-address = "0.0.0.0";
         rpc-whitelist-enabled = false;
       };
