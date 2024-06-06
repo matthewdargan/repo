@@ -23,7 +23,7 @@
       options = ["fmask=0022" "dmask=0022"];
     };
     "/media" = {
-      device = "8890013494972551953/media";
+      device = "zpool/media";
       fsType = "zfs";
     };
   };
