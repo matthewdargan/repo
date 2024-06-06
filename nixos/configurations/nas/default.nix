@@ -11,7 +11,6 @@
       systemd-boot.enable = true;
     };
     supportedFilesystems = ["ext4" "vfat" "zfs"];
-    zfs.devNodes = "/dev/disk/by-label";
   };
   i18n = {
     defaultLocale = "en_US.UTF-8";

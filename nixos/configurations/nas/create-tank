@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+zpool create \
+    -O acltype=posixacl \
+    -o ashift=12 \
+    -O compression=on \
+    -O mountpoint=none \
+    -O xattr=sa \
+    tank \
+    mirror /dev/disk/by-id/ata-WDC_WD40EZAZ-00SF3B0_WD-WX52D53HP5HS /dev/disk/by-id/ata-WDC_WD40EZAZ-00SF3B0_WD-WX42D43AF5AV \
+    mirror /dev/disk/by-id/ata-WDC_WD40EZAZ-00SF3B0_WD-WX62D4312S82 /dev/disk/by-id/ata-WDC_WD40EZAZ-00SF3B0_WD-WX52D53HPP9Y
+zfs create -o mountpoint=legacy tank/media
