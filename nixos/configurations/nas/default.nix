@@ -63,6 +63,7 @@
       settings = rec {
         download-dir = "${home}/downloads";
         home = "/media/transmission";
+        incomplete-dir-enabled = false;
         rpc-bind-address = "0.0.0.0";
         rpc-whitelist-enabled = false;
       };
