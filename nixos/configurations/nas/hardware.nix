@@ -23,8 +23,9 @@
       options = ["fmask=0022" "dmask=0022"];
     };
     "/media" = {
-      device = "zpool/media";
-      fsType = "zfs";
+      device = "/dev/sda";
+      fsType = "btrfs";
+      options = ["compress=zstd" "subvol=media"];
     };
   };
   hardware.cpu.amd.updateMicrocode = config.hardware.enableRedistributableFirmware;

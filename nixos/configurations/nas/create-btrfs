@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+mkfs.btrfs -m raid10 -d raid10 /dev/sda /dev/sdb /dev/sdc /dev/sdd
+mkdir -p /media
+mount /dev/sda /media
+btrfs subvolume create /media/media

@@ -5,12 +5,11 @@
 }: {
   imports = [./hardware.nix];
   boot = {
-    kernelPackages = config.boot.zfs.package.latestCompatibleLinuxPackages;
     loader = {
       efi.canTouchEfiVariables = true;
       systemd-boot.enable = true;
     };
-    supportedFilesystems = ["ext4" "vfat" "zfs"];
+    supportedFilesystems = ["btrfs" "ext4" "vfat"];
   };
   i18n = {
     defaultLocale = "en_US.UTF-8";
@@ -51,6 +50,7 @@
   };
   nixpkgs.config.allowUnfree = true;
   services = {
+    btrfs.autoScrub.enable = true;
     jellyfin.enable = true;
     openssh = {
       enable = true;
@@ -66,10 +66,6 @@
         rpc-bind-address = "0.0.0.0";
         rpc-whitelist-enabled = false;
       };
-    };
-    zfs = {
-      autoScrub.enable = true;
-      trim.enable = true;
     };
   };
   system.stateVersion = "24.11";
