@@ -88,6 +88,24 @@
     sopsFile = "${../../..}/secrets/postfix.yaml";
   };
   system.stateVersion = "24.11";
+  systemd = {
+    services.check-btrfs-errors = {
+      description = "Check BTRFS filesystem for errors";
+      path = [pkgs.mailutils];
+      requires = ["local-fs.target"];
+      script = builtins.readFile ./check-btrfs-errors;
+      serviceConfig = {
+        Type = "oneshot";
+      };
+    };
+    timers.check-btrfs-errors = {
+      description = "check-btrfs-errors.service";
+      timerConfig = {
+        OnUnitActiveSec = "1d";
+        Unit = "check-btrfs-errors.service";
+      };
+    };
+  };
   time.timeZone = "America/Chicago";
   users.users.mpd = {
     description = "Matthew Dargan";
