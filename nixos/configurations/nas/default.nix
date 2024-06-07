@@ -90,7 +90,7 @@
   system.stateVersion = "24.11";
   systemd = {
     services.check-btrfs-errors = {
-      description = "Check BTRFS filesystem for errors";
+      description = "Check BTRFS for errors";
       path = [pkgs.mailutils];
       requires = ["local-fs.target"];
       script = builtins.readFile ./check-btrfs-errors;
