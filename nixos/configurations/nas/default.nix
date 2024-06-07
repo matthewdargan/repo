@@ -1,9 +1,13 @@
-{nixpkgs, ...}: {
+{
+  nixpkgs,
+  sops-nix,
+  ...
+}: {
   config,
   pkgs,
   ...
 }: {
-  imports = [./hardware.nix];
+  imports = [./hardware.nix sops-nix.nixosModules.sops];
   boot = {
     loader = {
       efi.canTouchEfiVariables = true;
@@ -56,6 +60,17 @@
       enable = true;
       settings.PermitRootLogin = "no";
     };
+    postfix = {
+      enable = true;
+      config = {
+        smtp_sasl_auth_enable = "yes";
+        smtp_sasl_password_maps = "texthash:${config.sops.secrets."password".path}";
+        smtp_use_tls = "yes";
+        virtual_alias_maps = "inline:{ {root=matthewdargan57@gmail.com} }";
+      };
+      relayHost = "smtp.gmail.com";
+      relayPort = 587;
+    };
     tailscale.enable = true;
     transmission = {
       enable = true;
@@ -67,6 +82,10 @@
         rpc-whitelist-enabled = false;
       };
     };
+  };
+  sops.secrets."password" = {
+    owner = "postfix";
+    sopsFile = "${../../..}/secrets/postfix.yaml";
   };
   system.stateVersion = "24.11";
   time.timeZone = "America/Chicago";

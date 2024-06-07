@@ -1,0 +1,9 @@
+keys:
+  - &admin_mpd age1fqu08dnmmsepf7s2qjzcf5q83rcdxchqngnk3quf5m2hn7lf0a8svkvkpn
+  - &server_nas age10c28h0vkndfcnerrcgvegh2jhz28s5cr77ck93hve3nd8g9yzvgsq0qdn9
+creation_rules:
+  - path_regex: secrets/postfix.yaml$
+    key_groups:
+    - age:
+      - *admin_mpd
+      - *server_nas
