@@ -101,7 +101,8 @@
     timers.check-btrfs-errors = {
       description = "check-btrfs-errors.service";
       timerConfig = {
-        OnUnitActiveSec = "1d";
+        OnCalendar = "daily";
+        Persistent = "true";
         Unit = "check-btrfs-errors.service";
       };
     };
