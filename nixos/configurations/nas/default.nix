@@ -105,6 +105,7 @@
         Persistent = "true";
         Unit = "check-btrfs-errors.service";
       };
+      wantedBy = ["timers.target"];
     };
   };
   time.timeZone = "America/Chicago";
