@@ -1,3 +1,3 @@
 {pkgs, ...}: {
-  home.packages = [pkgs.discord pkgs.element-desktop pkgs.runelite];
+  home.packages = [pkgs.discord pkgs.element-desktop];
 }
