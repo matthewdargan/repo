@@ -1,9 +1,8 @@
-{pkgs, ...}: {
+{
   programs.kitty = {
     enable = true;
     font = {
-      name = "Go Mono";
-      package = pkgs.go-font;
+      name = "PragmataPro Mono";
       size = 20;
     };
     settings = {
