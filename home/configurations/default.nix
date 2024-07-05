@@ -52,7 +52,7 @@
         modulesLinux
         ++ [
           (import ../modules/firefox.nix part-inputs)
-          ../modules/gaming.nix
+          ../modules/discord.nix
           ../modules/kitty.nix
           {programs.git.signing.key = "E89C55C6879C7DAB";}
         ];
