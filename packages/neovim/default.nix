@@ -23,7 +23,10 @@ _: {
             };
             register = "unnamedplus";
           };
-          colorschemes.kanagawa.enable = true;
+          colorschemes.tokyonight = {
+            enable = true;
+            settings.style = "night";
+          };
           extraPackages = [ghlink pkgs.ripgrep];
           globals.mapleader = " ";
           keymaps = [
