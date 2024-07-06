@@ -1,7 +1,7 @@
 _: {
   perSystem = {
-    pkgs,
     inputs',
+    pkgs,
     ...
   }: let
     inherit (inputs'.ghlink.packages) ghlink;
@@ -72,6 +72,7 @@ _: {
                 snippet.expand = "function(args) require('luasnip').lsp_expand(args.body) end";
                 sources = [
                   {name = "buffer";}
+                  {name = "copilot";}
                   {name = "luasnip";}
                   {name = "nvim_lsp";}
                   {name = "path";}
