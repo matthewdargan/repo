@@ -23,6 +23,7 @@
       };
       shellAliases = {
         ll = "ls -alF";
+        vim = "nvim";
       };
     };
     direnv = {
