@@ -1,6 +1,6 @@
 {inputs, ...} @ part-inputs: {
   flake.homeConfigurations = let
-    modulesCommon = [../modules/dev.nix ../../modules/settings.nix];
+    modulesCommon = [(import ../modules/dev.nix part-inputs) ../../modules/settings.nix];
     modulesDarwin = modulesCommon ++ [./darwin.nix ../modules/kitty.nix];
     modulesLinux = modulesCommon ++ [./linux.nix];
     pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";

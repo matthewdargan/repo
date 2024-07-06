@@ -1,10 +1,10 @@
-{
+{self, ...}: {
   lib,
   pkgs,
   ...
 }: {
   home = {
-    packages = [pkgs.vim pkgs.xclip];
+    packages = [pkgs.xclip self.packages.${pkgs.system}.neovim];
     stateVersion = "24.11";
     username = "mpd";
   };
@@ -18,8 +18,8 @@
         set -o vi
       '';
       sessionVariables = {
-        EDITOR = "vim";
-        VISUAL = "vim";
+        EDITOR = "nvim";
+        VISUAL = "nvim";
       };
       shellAliases = {
         ll = "ls -alF";
