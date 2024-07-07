@@ -27,7 +27,10 @@
   };
   hardware = {
     cpu.amd.updateMicrocode = config.hardware.enableRedistributableFirmware;
-    opengl.driSupport32Bit = true;
+    graphics = {
+      enable = true;
+      enable32Bit = true;
+    };
   };
   networking.useDHCP = lib.mkDefault true;
   nixpkgs.hostPlatform = "x86_64-linux";
