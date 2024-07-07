@@ -31,20 +31,13 @@
                 signing.key = "524E1845B7FD26B1";
                 userEmail = "darganmatthew@johndeere.com";
               };
-              vscode.enable = false;
             };
           }
         ];
       pkgs = pkgsLinux;
     };
     "mpd@nas" = homeConfig {
-      modules =
-        modulesLinux
-        ++ [
-          {
-            programs.vscode.enable = false;
-          }
-        ];
+      modules = modulesLinux;
       pkgs = pkgsLinux;
     };
     "mpd@scoop" = homeConfig {

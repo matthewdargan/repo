@@ -47,7 +47,6 @@
       userName = "Matthew Dargan";
     };
     gpg.enable = true;
-    vscode.enable = lib.mkDefault true;
   };
   xdg.enable = true;
 }
