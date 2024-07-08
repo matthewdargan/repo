@@ -40,6 +40,11 @@
   security.rtkit.enable = true;
   services = {
     displayManager.sddm.enable = true;
+    ollama = {
+      enable = true;
+      acceleration = "rocm";
+      rocmOverrideGfx = "11.0.0";
+    };
     pipewire = {
       enable = true;
       alsa = {
