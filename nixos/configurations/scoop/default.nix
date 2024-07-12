@@ -52,18 +52,6 @@
       };
       pulse.enable = true;
     };
-    postgresql = {
-      enable = true;
-      authentication = "local all all peer map=superuser_map";
-      ensureDatabases = ["chatbot"];
-      extraPlugins = [pkgs.postgresql16Packages.pgvector];
-      identMap = ''
-        superuser_map mpd postgres
-        superuser_map postgres postgres
-        superuser_map /^(.*)$ \1
-      '';
-      package = pkgs.postgresql_16;
-    };
     tailscale.enable = true;
     xserver = {
       enable = true;
