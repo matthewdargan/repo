@@ -39,7 +39,11 @@
   programs.steam.enable = true;
   security.rtkit.enable = true;
   services = {
-    displayManager.sddm.enable = true;
+    desktopManager.plasma6.enable = true;
+    displayManager.sddm = {
+      enable = true;
+      wayland.enable = true;
+    };
     ollama = {
       enable = true;
       acceleration = "rocm";
@@ -68,7 +72,6 @@
     tailscale.enable = true;
     xserver = {
       enable = true;
-      desktopManager.plasma5.enable = true;
       xkb = {
         layout = "us";
         variant = "";
