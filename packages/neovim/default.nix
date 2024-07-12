@@ -131,7 +131,6 @@ _: {
             };
             treesitter = {
               enable = true;
-              ensureInstalled = "all";
               moduleConfig = {
                 highlight.enable = true;
                 indent.enable = true;
