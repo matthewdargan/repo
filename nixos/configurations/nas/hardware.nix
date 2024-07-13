@@ -31,4 +31,5 @@
   hardware.cpu.amd.updateMicrocode = config.hardware.enableRedistributableFirmware;
   networking.useDHCP = lib.mkDefault true;
   nixpkgs.hostPlatform = "x86_64-linux";
+  powerManagement.cpuFreqGovernor = "performance";
 }
