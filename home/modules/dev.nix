@@ -1,8 +1,4 @@
-{self, ...}: {
-  lib,
-  pkgs,
-  ...
-}: {
+{self, ...}: {pkgs, ...}: {
   home = {
     packages = [self.packages.${pkgs.system}.neovim];
     stateVersion = "24.11";
@@ -38,7 +34,7 @@
         init.defaultBranch = "main";
         push.autoSetupRemote = true;
       };
-      userEmail = lib.mkDefault "matthewdargan57@gmail.com";
+      userEmail = "matthewdargan57@gmail.com";
       userName = "Matthew Dargan";
     };
   };
