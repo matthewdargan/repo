@@ -37,11 +37,6 @@ _: {
               key = "H";
               mode = ["n"];
             }
-            {
-              action = ":vert Copilot panel<CR>";
-              key = "<leader>p";
-              mode = ["n"];
-            }
           ];
           opts = {
             background = "dark";
