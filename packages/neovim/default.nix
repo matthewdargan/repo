@@ -48,7 +48,6 @@ _: {
             colorcolumn = "80";
             expandtab = true;
             guicursor = "";
-            mouse = "a";
             number = true;
             relativenumber = true;
             scrolloff = 8;
