@@ -31,10 +31,6 @@
       nix-direnv.enable = true;
     };
     fzf.enable = true;
-    gh = {
-      enable = true;
-      extensions = [pkgs.gh-copilot];
-    };
     git = {
       enable = true;
       delta.enable = true;
