@@ -37,7 +37,7 @@
       checkReversePath = "loose";
       interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
         8096
-        config.services.transmission.settings.rpc-port
+        config.services.deluge.web.port
       ];
     };
     networkmanager.enable = true;
@@ -58,6 +58,11 @@
   nixpkgs.config.allowUnfree = true;
   services = {
     btrfs.autoScrub.enable = true;
+    deluge = {
+      enable = true;
+      dataDir = "/media/deluge";
+      web.enable = true;
+    };
     jellyfin.enable = true;
     openssh = {
       enable = true;
@@ -75,16 +80,6 @@
       relayPort = 587;
     };
     tailscale.enable = true;
-    transmission = {
-      enable = true;
-      settings = rec {
-        download-dir = "${home}/downloads";
-        home = "/media/transmission";
-        incomplete-dir-enabled = false;
-        rpc-bind-address = "0.0.0.0";
-        rpc-whitelist-enabled = false;
-      };
-    };
   };
   sops.secrets."password" = {
     owner = "postfix";
