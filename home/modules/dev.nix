@@ -4,7 +4,7 @@
   ...
 }: {
   home = {
-    packages = [pkgs.xclip self.packages.${pkgs.system}.neovim];
+    packages = [self.packages.${pkgs.system}.neovim];
     stateVersion = "24.11";
     username = "mpd";
   };
