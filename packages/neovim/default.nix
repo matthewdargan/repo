@@ -17,10 +17,7 @@ _: {
             }
           ];
           clipboard = {
-            providers = {
-              wl-copy.enable = true;
-              xclip.enable = true;
-            };
+            providers.wl-copy.enable = true;
             register = "unnamedplus";
           };
           colorschemes.tokyonight = {
