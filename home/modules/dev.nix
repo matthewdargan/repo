@@ -39,14 +39,12 @@
       enable = true;
       delta.enable = true;
       extraConfig = {
-        commit.gpgsign = true;
         init.defaultBranch = "main";
         push.autoSetupRemote = true;
       };
       userEmail = lib.mkDefault "matthewdargan57@gmail.com";
       userName = "Matthew Dargan";
     };
-    gpg.enable = true;
   };
   xdg.enable = true;
 }

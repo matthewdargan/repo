@@ -14,11 +14,11 @@
       };
   in {
     "mpd@butters" = homeConfig {
-      modules = modulesDarwin ++ [{programs.git.signing.key = "A2040D8058F5C0A5";}];
+      modules = modulesDarwin;
       pkgs = pkgsDarwin;
     };
     "mpd@cheese" = homeConfig {
-      modules = modulesDarwin ++ [{programs.git.signing.key = "347727B6166BBB04";}];
+      modules = modulesDarwin;
       pkgs = pkgsDarwin;
     };
     "mpd@nas" = homeConfig {
@@ -32,7 +32,6 @@
           (import ../modules/firefox.nix part-inputs)
           ../modules/discord.nix
           ../modules/kitty.nix
-          {programs.git.signing.key = "E89C55C6879C7DAB";}
         ];
       pkgs = pkgsLinux;
     };
