@@ -6,7 +6,13 @@ _: {
     ...
   }: {
     devShells.default = pkgs.mkShell {
-      packages = [inputs'.home-manager.packages.home-manager pkgs.age pkgs.nh pkgs.sops pkgs.ssh-to-age];
+      packages = [
+        inputs'.home-manager.packages.home-manager
+        pkgs.age
+        pkgs.nh
+        pkgs.sops
+        pkgs.ssh-to-age
+      ];
       shellHook = "${config.pre-commit.installationScript}";
     };
     pre-commit = {

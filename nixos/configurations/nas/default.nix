@@ -35,7 +35,10 @@
     firewall = {
       allowedTCPPorts = [22];
       checkReversePath = "loose";
-      interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [8096 config.services.transmission.settings.rpc-port];
+      interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
+        8096
+        config.services.transmission.settings.rpc-port
+      ];
     };
     networkmanager.enable = true;
   };
