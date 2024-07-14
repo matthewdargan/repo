@@ -87,9 +87,11 @@ _: {
               };
               servers = {
                 bashls.enable = true;
+                golangci-lint-ls.enable = true;
                 gopls = {
                   enable = true;
                   package = gopls;
+                  settings.gofumpt.enable = true;
                 };
                 jsonls.enable = true;
                 nil_ls.enable = true;
@@ -98,16 +100,6 @@ _: {
               };
             };
             luasnip.enable = true;
-            none-ls = {
-              enable = true;
-              sources = {
-                diagnostics.golangci_lint.enable = true;
-                formatting = {
-                  alejandra.enable = true;
-                  gofumpt.enable = true;
-                };
-              };
-            };
             telescope = {
               enable = true;
               keymaps = {
