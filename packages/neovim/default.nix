@@ -122,11 +122,10 @@ _: {
             };
             treesitter = {
               enable = true;
-              moduleConfig = {
+              settings = {
                 highlight.enable = true;
                 indent.enable = true;
               };
-              nixGrammars = true;
             };
           };
         };
