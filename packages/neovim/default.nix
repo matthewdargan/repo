@@ -39,7 +39,6 @@ _: {
             }
           ];
           opts = {
-            background = "dark";
             colorcolumn = "80";
             expandtab = true;
             guicursor = "";
