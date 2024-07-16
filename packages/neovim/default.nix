@@ -70,7 +70,11 @@ _: {
                 ];
               };
             };
-            copilot-lua.enable = true;
+            copilot-lua = {
+              enable = true;
+              panel.enabled = false;
+              suggestion.enabled = false;
+            };
             lastplace.enable = true;
             lsp = {
               enable = true;
@@ -93,7 +97,7 @@ _: {
                   settings.gofumpt.enable = true;
                 };
                 jsonls.enable = true;
-                nil_ls.enable = true;
+                nil-ls.enable = true;
                 terraformls.enable = true;
                 yamlls.enable = true;
               };
