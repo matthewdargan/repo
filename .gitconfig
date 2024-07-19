@@ -1,0 +1,11 @@
+[core]
+    pager = delta
+[init]
+    defaultBranch = main
+[interactive]
+    diffFilter = delta --color-only
+[push]
+    autoSetupRemote = true
+[user]
+    email = matthewdargan57@gmail.com
+    name = Matthew Dargan
