@@ -96,7 +96,6 @@ _: {
                   package = gopls;
                   settings.gofumpt.enable = true;
                 };
-                jsonls.enable = true;
                 nil-ls.enable = true;
                 terraformls.enable = true;
                 yamlls.enable = true;
