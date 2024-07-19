@@ -41,13 +41,6 @@ require("lazy").setup({
   { "neovim/nvim-lspconfig" },
   {
     "nvim-telescope/telescope.nvim",
-    config = function()
-      require("telescope").setup()
-      local builtin = require("telescope.builtin")
-      vim.keymap.set("n", "<leader>b", builtin.buffers)
-      vim.keymap.set("n", "<leader>f", builtin.find_files)
-      vim.keymap.set("n", "<leader>g", builtin.live_grep)
-    end,
     dependencies = { "nvim-lua/plenary.nvim" },
   },
   {
@@ -127,6 +120,12 @@ for server, settings in pairs(servers) do
     settings = settings,
   })
 end
+
+require("telescope").setup()
+local builtin = require("telescope.builtin")
+vim.keymap.set("n", "<leader>b", builtin.buffers)
+vim.keymap.set("n", "<leader>f", builtin.find_files)
+vim.keymap.set("n", "<leader>g", builtin.live_grep)
 
 vim.api.nvim_create_autocmd("BufWritePre", {
   callback = function()
