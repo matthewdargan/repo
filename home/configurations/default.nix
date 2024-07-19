@@ -1,10 +1,10 @@
 {inputs, ...} @ part-inputs: {
   flake.homeConfigurations = let
-    modulesCommon = [
+    modulesLinux = [
       (import ../modules/dev.nix part-inputs)
+      ./linux.nix
       ../../modules/settings.nix
     ];
-    modulesLinux = modulesCommon ++ [./linux.nix];
     pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
     homeConfig = {
       modules,
