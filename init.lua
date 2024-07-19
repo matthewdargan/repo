@@ -109,6 +109,7 @@ local servers = {
         },
     },
     lua_ls = {},
+    terraformls = {},
     yamlls = {},
 }
 require("mason").setup()
