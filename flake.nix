@@ -41,6 +41,6 @@
         ./packages
         ./parts
       ];
-      systems = ["aarch64-darwin" "x86_64-linux"];
+      systems = ["x86_64-linux"];
     };
 }

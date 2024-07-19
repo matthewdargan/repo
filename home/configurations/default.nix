@@ -4,9 +4,7 @@
       (import ../modules/dev.nix part-inputs)
       ../../modules/settings.nix
     ];
-    modulesDarwin = modulesCommon ++ [./darwin.nix ../modules/kitty.nix];
     modulesLinux = modulesCommon ++ [./linux.nix];
-    pkgsDarwin = inputs.nixpkgs.legacyPackages."aarch64-darwin";
     pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
     homeConfig = {
       modules,
@@ -16,14 +14,6 @@
         inherit modules pkgs;
       };
   in {
-    "mpd@butters" = homeConfig {
-      modules = modulesDarwin;
-      pkgs = pkgsDarwin;
-    };
-    "mpd@cheese" = homeConfig {
-      modules = modulesDarwin;
-      pkgs = pkgsDarwin;
-    };
     "mpd@nas" = homeConfig {
       modules = modulesLinux;
       pkgs = pkgsLinux;
