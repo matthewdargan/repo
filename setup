@@ -1,0 +1,11 @@
+#!/bin/sh
+set -euo pipefail
+
+ln -sf "${PWD}/.bashrc" "${HOME}/.bashrc"
+ln -sf "${PWD}/.inputrc" "${HOME}/.inputrc"
+ln -sf "${PWD}/.gitconfig" "${HOME}/.gitconfig"
+ln -sf "${PWD}/.profile" "${HOME}/.profile"
+mkdir -p "${HOME}/.config/kitty"
+ln -sf "${PWD}/kitty.conf" "${HOME}/.config/kitty/kitty.conf"
+mkdir -p "${HOME}/.config/nvim"
+ln -sf "${PWD}/init.lua" "${HOME}/.config/nvim/init.lua"
