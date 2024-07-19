@@ -1,4 +1,5 @@
 eval "$(/opt/homebrew/bin/brew shellenv)"
+eval "$(fzf --bash)"
 [[ -r "${HOMEBREW_PREFIX}/etc/bash_completion.d/git-completion.bash" ]] && source "${HOMEBREW_PREFIX}/etc/bash_completion.d/git-completion.bash"
 [[ -r "${HOMEBREW_PREFIX}/etc/bash_completion.d/git-prompt.sh" ]] && source "${HOMEBREW_PREFIX}/etc/bash_completion.d/git-prompt.sh"
 export EDITOR=nvim
