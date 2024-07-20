@@ -9,3 +9,5 @@
 [user]
     email = matthewdargan57@gmail.com
     name = Matthew Dargan
+[includeIf "gitdir:~/work/"]
+    path = .gitconfig-work

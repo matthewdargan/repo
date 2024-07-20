@@ -4,6 +4,7 @@ set -euo pipefail
 ln -sf "${PWD}/.bashrc" "${HOME}/.bashrc"
 ln -sf "${PWD}/.inputrc" "${HOME}/.inputrc"
 ln -sf "${PWD}/.gitconfig" "${HOME}/.gitconfig"
+ln -sf "${PWD}/.gitconfig-work" "${HOME}/.gitconfig-work"
 ln -sf "${PWD}/.profile" "${HOME}/.profile"
 mkdir -p "${HOME}/.config/kitty"
 ln -sf "${PWD}/kitty.conf" "${HOME}/.config/kitty/kitty.conf"
