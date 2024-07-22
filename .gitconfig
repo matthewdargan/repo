@@ -11,3 +11,5 @@
     name = Matthew Dargan
 [includeIf "gitdir:~/work/"]
     path = .gitconfig-work
+[url "git@github.deere.com:"]
+    insteadOf = https://github.deere.com/
