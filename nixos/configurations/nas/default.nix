@@ -89,7 +89,7 @@
   systemd = {
     services.check-btrfs-errors = {
       description = "Check BTRFS for errors";
-      path = [pkgs.mailutils];
+      path = [pkgs.btrfs-progs pkgs.mailutils];
       requires = ["local-fs.target"];
       script = builtins.readFile ./check-btrfs-errors;
       serviceConfig = {
