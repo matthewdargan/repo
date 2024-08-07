@@ -141,7 +141,6 @@ vim.api.nvim_create_autocmd("LspAttach", {
         vim.keymap.set("n", "gi", builtin.lsp_implementations)
         vim.keymap.set("n", "gr", builtin.lsp_references)
         vim.keymap.set("n", "gt", builtin.lsp_type_definitions)
-        vim.keymap.set("n", "K", vim.lsp.buf.hover, { silent = false })
         vim.keymap.set("n", "<leader>j", vim.diagnostic.goto_prev, { silent = false })
         vim.keymap.set("n", "<leader>k", vim.diagnostic.goto_next, { silent = false })
         vim.keymap.set("n", "<leader>r", vim.lsp.buf.rename, { silent = false })

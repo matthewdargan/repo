@@ -83,10 +83,7 @@ _: {
                   "<leader>j" = "goto_prev";
                   "<leader>k" = "goto_next";
                 };
-                lspBuf = {
-                  "K" = "hover";
-                  "<leader>r" = "rename";
-                };
+                lspBuf."<leader>r" = "rename";
               };
               servers = {
                 bashls.enable = true;
