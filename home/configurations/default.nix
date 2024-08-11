@@ -15,7 +15,7 @@
       };
   in {
     "mpd@nas" = homeConfig {
-      modules = modulesLinux;
+      modules = modulesLinux ++ [(import ../modules/rain.nix part-inputs)];
       pkgs = pkgsLinux;
     };
     "mpd@scoop" = homeConfig {

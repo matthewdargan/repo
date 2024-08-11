@@ -36,6 +36,7 @@
       allowedTCPPorts = [22];
       checkReversePath = "loose";
       interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
+        7246
         8096
         config.services.deluge.web.port
       ];
