@@ -4,7 +4,6 @@ _: {
     pkgs,
     ...
   }: let
-    inherit (inputs'.ghlink.packages) ghlink;
     inherit (inputs'.nix-go.packages) gopls;
   in {
     packages.neovim = inputs'.nixvim.legacyPackages.makeNixvimWithModule {
@@ -23,7 +22,7 @@ _: {
           enable = true;
           settings.style = "night";
         };
-        extraPackages = [ghlink pkgs.ripgrep];
+        extraPackages = [pkgs.ripgrep];
         globals.mapleader = " ";
         keymaps = [
           {
