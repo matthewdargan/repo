@@ -9,6 +9,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/home-manager";
     };
+    mooch = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:matthewdargan/mooch";
+    };
     nix-go = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:matthewdargan/nix-go";
