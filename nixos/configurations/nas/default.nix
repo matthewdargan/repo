@@ -38,7 +38,6 @@
       interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
         7246
         8096
-        config.services.deluge.web.port
       ];
     };
     networkmanager.enable = true;
@@ -59,11 +58,6 @@
   nixpkgs.config.allowUnfree = true;
   services = {
     btrfs.autoScrub.enable = true;
-    deluge = {
-      enable = true;
-      dataDir = "/media/deluge";
-      web.enable = true;
-    };
     jellyfin.enable = true;
     openssh = {
       enable = true;
