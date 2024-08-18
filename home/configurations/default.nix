@@ -30,7 +30,7 @@
         ++ [
           (import ../modules/firefox.nix part-inputs)
           ../modules/discord.nix
-          ../modules/kitty.nix
+          ../modules/wezterm.nix
         ];
       pkgs = pkgsLinux;
     };
