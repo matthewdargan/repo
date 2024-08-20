@@ -1,4 +1,4 @@
-{
+{inputs, ...}: {pkgs, ...}: {
   programs.wezterm = {
     enable = true;
     extraConfig = ''
@@ -17,5 +17,6 @@
 
       return config
     '';
+    package = inputs.wezterm.packages.${pkgs.system}.default;
   };
 }
