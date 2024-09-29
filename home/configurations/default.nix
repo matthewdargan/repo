@@ -17,11 +17,7 @@
     "mpd@nas" = homeConfig {
       modules =
         modulesLinux
-        ++ [
-          (import ../modules/rain.nix part-inputs)
-          inputs.mooch.homeModules.mooch
-          ../modules/mooch.nix
-        ];
+        ++ [(import ../modules/rain.nix part-inputs)];
       pkgs = pkgsLinux;
     };
     "mpd@scoop" = homeConfig {
