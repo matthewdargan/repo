@@ -1,4 +1,8 @@
-{self, ...}: {pkgs, ...}: {
+{
+  inputs,
+  self,
+  ...
+}: {pkgs, ...}: {
   home = {
     packages = [self.packages.${pkgs.system}.neovim];
     stateVersion = "24.11";
@@ -6,12 +10,20 @@
   };
   nixpkgs.config.allowUnfree = true;
   programs = {
-    bash = {
+    bash = let
+      configFile =
+        pkgs.writeText "config.txt"
+        ''
+          https://go.dev/blog/feed.atom
+          https://research.swtch.com/feed.atom
+        '';
+    in {
       enable = true;
       initExtra = ''
         source ~/.nix-profile/share/git/contrib/completion/git-prompt.sh
         PS1='\[\e[1;33m\]\u\[\e[38;5;246m\]:\[\e[1;36m\]\w$(__git_ps1 "\[\e[38;5;246m\](\[\e[1;35m\]%s\[\e[38;5;246m\])")\[\e[1;32m\]$\[\e[0m\] '
         set -o vi
+        ${inputs.rsspoll.packages.${pkgs.system}.rsspoll}/bin/rsspoll ${configFile}
       '';
       sessionVariables = {
         EDITOR = "nvim";
