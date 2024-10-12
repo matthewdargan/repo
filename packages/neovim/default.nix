@@ -1,4 +1,4 @@
-_: {
+{
   perSystem = {
     inputs',
     pkgs,
@@ -97,6 +97,11 @@ _: {
             };
           };
           luasnip.enable = true;
+          mini = {
+            enable = true;
+            modules.icons = {};
+            mockDevIcons = true;
+          };
           telescope = {
             enable = true;
             keymaps = {
