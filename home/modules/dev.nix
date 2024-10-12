@@ -1,9 +1,6 @@
 {self, ...}: {pkgs, ...}: {
   home = {
-    packages = [
-      self.packages.${pkgs.system}.neovim
-      self.packages.${pkgs.system}.plan9port
-    ];
+    packages = [self.packages.${pkgs.system}.neovim];
     stateVersion = "24.11";
     username = "mpd";
   };
