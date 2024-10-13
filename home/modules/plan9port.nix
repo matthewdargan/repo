@@ -1,16 +1,19 @@
-{self, ...}: {pkgs, ...}: {
-  home = {
-    file.".local/bin/acme" = {
-      executable = true;
+{
+  inputs,
+  self,
+  ...
+}: {pkgs, ...}: {
+  home.packages = let
+    acme = pkgs.writeShellApplication {
+      name = "acme";
+      runtimeInputs = [self.packages.${pkgs.system}.plan9port];
       text = ''
-        #!/usr/bin/env bash
-        ${self.packages.${pkgs.system}.plan9port}/bin/9 acme -a -f /mnt/font/GoRegular/18a/font -F /mnt/font/GoMono/18a/font
+        9 acme -a -f /mnt/font/GoRegular/18a/font -F /mnt/font/GoMono/18a/font
       '';
     };
-    packages = [
-      #self.packages.${pkgs.system}."9fans-go"
-      self.packages.${pkgs.system}.plan9port
-    ];
-    sessionPath = ["$HOME/.local/bin"];
-  };
+  in [
+    acme
+    inputs.plan9go.packages.${pkgs.system}.go
+    self.packages.${pkgs.system}.plan9port
+  ];
 }

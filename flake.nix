@@ -1,6 +1,10 @@
 {
   description = "home config";
   inputs = {
+    plan9go = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:matthewdargan/go";
+    };
     firefox-addons = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
