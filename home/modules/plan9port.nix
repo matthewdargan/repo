@@ -8,7 +8,18 @@
       name = "acme";
       runtimeInputs = [self.packages.${pkgs.system}.plan9port];
       text = ''
-        9 acme -a -f /mnt/font/GoRegular/18a/font -F /mnt/font/GoMono/18a/font
+        if ! pgrep -x plumber >/dev/null; then
+          9 plumber &
+          9 9p write plumb/rules < ${plumbing}
+        fi
+        EDITOR=editinacme VISUAL=editinacme 9 acme -a -f /mnt/font/GoRegular/18a/font -F /mnt/font/GoMono/18a/font
+      '';
+    };
+    plumbing = pkgs.writeTextFile {
+      name = "plumbing";
+      text = ''
+        editor = acme
+        include basic
       '';
     };
   in [
