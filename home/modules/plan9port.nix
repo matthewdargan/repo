@@ -13,7 +13,7 @@
           9 plumber &
           9 9p write plumb/rules < ${plumbing}
         fi
-        EDITOR=editinacme VISUAL=editinacme GIT_PAGER=cat 9 acme -a -f /mnt/font/GoRegular/18a/font -F /mnt/font/GoMono/18a/font
+        EDITOR=editinacme VISUAL=editinacme GIT_PAGER=cat 9 acme -a -f /mnt/font/GoRegular/20a/font -F /mnt/font/GoMono/20a/font
       '';
     };
     plumbing = builtins.readFile ./plumbing;
