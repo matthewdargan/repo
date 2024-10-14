@@ -7,7 +7,7 @@
     acme = pkgs.writeShellApplication {
       excludeShellChecks = ["SC2016" "SC2086" "SC2154"];
       name = "acme";
-      runtimeInputs = [self.packages.${pkgs.system}.plan9port];
+      runtimeInputs = [pkgs.gotools self.packages.${pkgs.system}.plan9port];
       text = ''
         if ! pgrep -x plumber >/dev/null; then
           9 plumber &
