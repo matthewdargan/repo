@@ -1,10 +1,6 @@
 {
   description = "home config";
   inputs = {
-    plan9go = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/go";
-    };
     firefox-addons = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
@@ -27,6 +23,10 @@
       url = "github:nix-community/nixvim";
     };
     parts.url = "github:hercules-ci/flake-parts";
+    plan9go = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:matthewdargan/go";
+    };
     pre-commit-hooks = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:cachix/pre-commit-hooks.nix";

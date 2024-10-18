@@ -16,7 +16,7 @@
         EDITOR=editinacme VISUAL=editinacme GIT_PAGER=cat 9 acme -a -f /mnt/font/GoRegular/20a/font -F /mnt/font/GoMono/20a/font
       '';
     };
-    plumbing = builtins.readFile ./plumbing;
+    plumbing = pkgs.writeText "plumbing" (builtins.readFile ./plumbing);
   in [
     acme
     inputs.plan9go.packages.${pkgs.system}.go
