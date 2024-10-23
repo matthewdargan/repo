@@ -85,13 +85,13 @@
             };
             servers = {
               bashls.enable = true;
-              golangci-lint-ls.enable = true;
+              golangci_lint_ls.enable = true;
               gopls = {
                 enable = true;
                 package = gopls;
                 settings.gofumpt.enable = true;
               };
-              nil-ls.enable = true;
+              nil_ls.enable = true;
               terraformls.enable = true;
               yamlls.enable = true;
             };

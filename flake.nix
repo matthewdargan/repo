@@ -39,10 +39,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:Mic92/sops-nix";
     };
-    wezterm = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:wez/wezterm?dir=nix";
-    };
+    wezterm.url = "github:wez/wezterm?dir=nix";
   };
   outputs = {parts, ...} @ inputs:
     parts.lib.mkFlake {inherit inputs;} {
