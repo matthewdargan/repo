@@ -26,7 +26,6 @@
         ++ [
           (import ../modules/firefox.nix part-inputs)
           (import ../modules/plan9port.nix part-inputs)
-          (import ../modules/rsspoll.nix part-inputs)
           (import ../modules/wezterm.nix part-inputs)
           ../modules/discord.nix
         ];
