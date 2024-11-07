@@ -17,7 +17,7 @@
         EDITOR = "nvim";
         VISUAL = "nvim";
       };
-      shellAliases.vim = "nvim";
+      shellAliases.vi = "nvim";
     };
     direnv = {
       enable = true;
