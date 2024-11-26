@@ -27,6 +27,7 @@
           (import ../modules/firefox.nix part-inputs)
           (import ../modules/wezterm.nix part-inputs)
           ../modules/discord.nix
+          ../modules/spotify.nix
         ];
       pkgs = pkgsLinux;
     };
