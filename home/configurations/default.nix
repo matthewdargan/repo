@@ -28,6 +28,7 @@
           (import ../modules/wezterm.nix part-inputs)
           ../modules/discord.nix
           ../modules/spotify.nix
+          ../modules/vscode.nix
         ];
       pkgs = pkgsLinux;
     };

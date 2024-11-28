@@ -34,7 +34,6 @@
       userEmail = "matthewdargan57@gmail.com";
       userName = "Matthew Dargan";
     };
-    vscode.enable = true;
   };
   xdg.enable = true;
 }
