@@ -31,10 +31,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:cachix/pre-commit-hooks.nix";
     };
-    rsspoll = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/rsspoll";
-    };
     sops-nix = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:Mic92/sops-nix";
