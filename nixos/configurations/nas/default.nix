@@ -1,14 +1,13 @@
 {
   mooch,
   nixpkgs,
-  sops-nix,
   ...
 }: {
   config,
   pkgs,
   ...
 }: {
-  imports = [./hardware.nix sops-nix.nixosModules.sops];
+  imports = [./hardware.nix];
   boot = {
     loader = {
       efi.canTouchEfiVariables = true;
@@ -64,84 +63,47 @@
       enable = true;
       settings.PermitRootLogin = "no";
     };
-    postfix = {
-      enable = true;
-      config = {
-        smtp_sasl_auth_enable = "yes";
-        smtp_sasl_password_maps = "texthash:${config.sops.secrets."password".path}";
-        smtp_use_tls = "yes";
-        virtual_alias_maps = "inline:{ {root=matthewdargan57@gmail.com} }";
-      };
-      relayHost = "smtp.gmail.com";
-      relayPort = 587;
-    };
     tailscale.enable = true;
-  };
-  sops.secrets."password" = {
-    owner = "postfix";
-    sopsFile = "${../../..}/secrets/postfix.yaml";
   };
   system.stateVersion = "24.11";
   systemd = {
-    services = {
-      check-btrfs-errors = {
-        description = "Check BTRFS for errors";
-        path = [pkgs.btrfs-progs pkgs.mailutils];
-        requires = ["local-fs.target"];
-        script = builtins.readFile ./check-btrfs-errors;
-        serviceConfig = {
-          Type = "oneshot";
-        };
-      };
-      mooch = let
-        configFile =
-          pkgs.writeText "config.json"
-          ''
-            {
-                "data_dir": "/media/rain",
-                "feeds": [
-                    {
-                        "url": "https://example.com/rss?user=bob",
-                        "pattern": "Popular Series - (\\d+) \\[1080p\\]\\[HEVC\\]",
-                        "dst_dir": "/media/shows/Popular Series/Season 01"
-                    },
-                    {
-                        "url": "https://another.org/feed?category=fantasy",
-                        "pattern": "Ongoing Show - S03E(\\d+) \\[720p\\]",
-                        "dst_dir": "/media/shows/Ongoing Show/Season 03"
-                    }
-                ]
-            }
-          '';
-      in {
-        description = "Download and organize torrents from RSS feeds";
-        requires = ["local-fs.target"];
-        serviceConfig = {
-          ExecStart = "${mooch.packages.${pkgs.system}.mooch}/bin/mooch ${configFile}";
-          Type = "oneshot";
-          User = "jellyfin";
-        };
+    services.mooch = let
+      configFile =
+        pkgs.writeText "config.json"
+        ''
+          {
+              "data_dir": "/media/rain",
+              "feeds": [
+                  {
+                      "url": "https://example.com/rss?user=bob",
+                      "pattern": "Popular Series - (\\d+) \\[1080p\\]\\[HEVC\\]",
+                      "dst_dir": "/media/shows/Popular Series/Season 01"
+                  },
+                  {
+                      "url": "https://another.org/feed?category=fantasy",
+                      "pattern": "Ongoing Show - S03E(\\d+) \\[720p\\]",
+                      "dst_dir": "/media/shows/Ongoing Show/Season 03"
+                  }
+              ]
+          }
+        '';
+    in {
+      description = "Download and organize torrents from RSS feeds";
+      requires = ["local-fs.target"];
+      serviceConfig = {
+        ExecStart = "${mooch.packages.${pkgs.system}.mooch}/bin/mooch ${configFile}";
+        Type = "oneshot";
+        User = "jellyfin";
       };
     };
-    timers = {
-      check-btrfs-errors = {
-        description = "check-btrfs-errors.service";
-        timerConfig = {
-          OnCalendar = "daily";
-          Persistent = "true";
-          Unit = "check-btrfs-errors.service";
-        };
-        wantedBy = ["timers.target"];
+    timers.mooch = {
+      description = "mooch.service";
+      timerConfig = {
+        OnCalendar = "daily";
+        Persistent = "true";
+        Unit = "mooch.service";
       };
-      mooch = {
-        description = "mooch.service";
-        timerConfig = {
-          OnCalendar = "daily";
-          Persistent = "true";
-          Unit = "mooch.service";
-        };
-        wantedBy = ["timers.target"];
-      };
+      wantedBy = ["timers.target"];
     };
   };
   time.timeZone = "America/Chicago";
