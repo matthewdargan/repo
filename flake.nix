@@ -23,10 +23,6 @@
       url = "github:nix-community/nixvim";
     };
     parts.url = "github:hercules-ci/flake-parts";
-    plan9go = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/go";
-    };
     pre-commit-hooks = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:cachix/pre-commit-hooks.nix";

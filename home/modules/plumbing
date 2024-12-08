@@ -1,7 +1,0 @@
-editor = acme
-include basic
-
-# git show sha1 hashes
-type is text
-data matches '[a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9]+'
-plumb start rc -c 'git -C '$wdir' show '$0' >[2=1] | plumb -i -d edit -a ''action=showdata filename=/'$wdir'/'$0''''
