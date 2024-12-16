@@ -85,6 +85,7 @@
             };
             servers = {
               bashls.enable = true;
+              clangd.enable = true;
               golangci_lint_ls.enable = true;
               gopls = {
                 enable = true;
