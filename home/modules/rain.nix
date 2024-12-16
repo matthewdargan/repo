@@ -1,3 +1,3 @@
-{self, ...}: {pkgs, ...}: {
-  home.packages = [self.packages.${pkgs.system}.rain];
+{pkgs, ...}: {
+  home.packages = [pkgs.rain-bittorrent];
 }

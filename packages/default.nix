@@ -1,3 +1,3 @@
 {
-  imports = [./neovim ./rain];
+  imports = [./neovim];
 }
