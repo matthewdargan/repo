@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -euo pipefail
 
 ln -sf "${PWD}/.bashrc" "${HOME}/.bashrc"
@@ -6,7 +6,7 @@ ln -sf "${PWD}/.inputrc" "${HOME}/.inputrc"
 ln -sf "${PWD}/.gitconfig" "${HOME}/.gitconfig"
 ln -sf "${PWD}/.gitconfig-work" "${HOME}/.gitconfig-work"
 ln -sf "${PWD}/.profile" "${HOME}/.profile"
-mkdir -p "${HOME}/.config/wezterm"
-ln -sf "${PWD}/wezterm.lua" "${HOME}/.config/wezterm/wezterm.lua"
+mkdir -p "${HOME}/.config/ghostty"
+ln -sf "${PWD}/config" "${HOME}/.config/ghostty/config"
 mkdir -p "${HOME}/.config/nvim"
 ln -sf "${PWD}/init.lua" "${HOME}/.config/nvim/init.lua"

@@ -31,7 +31,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:cachix/pre-commit-hooks.nix";
     };
-    wezterm.url = "github:wez/wezterm?dir=nix";
   };
   outputs = {parts, ...} @ inputs:
     parts.lib.mkFlake {inherit inputs;} {
