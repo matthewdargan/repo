@@ -4,7 +4,6 @@
     efi.canTouchEfiVariables = true;
     systemd-boot.enable = true;
   };
-  hardware.pulseaudio.enable = false;
   i18n = {
     defaultLocale = "en_US.UTF-8";
     extraLocaleSettings = {
