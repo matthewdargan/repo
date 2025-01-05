@@ -35,7 +35,13 @@
       options = ["compress=zstd" "subvol=media"];
     };
   };
-  hardware.cpu.amd.updateMicrocode = config.hardware.enableRedistributableFirmware;
+  hardware = {
+    cpu.amd.updateMicrocode = config.hardware.enableRedistributableFirmware;
+    graphics = {
+      enable = true;
+      enable32Bit = true;
+    };
+  };
   networking.useDHCP = lib.mkDefault true;
   nixpkgs.hostPlatform = "x86_64-linux";
   powerManagement.cpuFreqGovernor = "performance";

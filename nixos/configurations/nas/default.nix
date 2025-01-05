@@ -38,6 +38,7 @@
       interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
         7246
         8096
+        config.services.photoprism.port
       ];
     };
     networkmanager.enable = true;
@@ -62,6 +63,11 @@
     openssh = {
       enable = true;
       settings.PermitRootLogin = "no";
+    };
+    photoprism = {
+      enable = true;
+      address = "0.0.0.0";
+      originalsPath = "/media/photos";
     };
     tailscale.enable = true;
   };
