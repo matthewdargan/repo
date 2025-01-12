@@ -18,15 +18,6 @@ require("lazy").setup({
             require("nvim-lastplace").setup()
         end,
     },
-    {
-        "zbirenbaum/copilot.lua",
-        config = function()
-            require("copilot").setup({
-                panel = { enabled = false },
-                suggestion = { enabled = false },
-            })
-        end,
-    },
     { "williamboman/mason.nvim" },
     {
         "nvim-treesitter/nvim-treesitter",
@@ -66,7 +57,6 @@ require("lazy").setup({
                 },
                 sources = {
                     { name = "buffer" },
-                    { name = "copilot" },
                     { name = "nvim_lsp" },
                     { name = "path" },
                     { name = "treesitter" },
@@ -75,12 +65,6 @@ require("lazy").setup({
         end,
     },
     { "hrsh7th/cmp-buffer" },
-    {
-        "zbirenbaum/copilot-cmp",
-        config = function()
-            require("copilot_cmp").setup()
-        end,
-    },
     { "hrsh7th/cmp-nvim-lsp" },
     { "hrsh7th/cmp-path" },
 })

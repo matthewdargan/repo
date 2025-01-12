@@ -60,18 +60,12 @@
               snippet.expand = "function(args) require('luasnip').lsp_expand(args.body) end";
               sources = [
                 {name = "buffer";}
-                {name = "copilot";}
                 {name = "luasnip";}
                 {name = "nvim_lsp";}
                 {name = "path";}
                 {name = "treesitter";}
               ];
             };
-          };
-          copilot-lua = {
-            enable = true;
-            panel.enabled = false;
-            suggestion.enabled = false;
           };
           lastplace.enable = true;
           lsp = {
