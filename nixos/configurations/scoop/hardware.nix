@@ -5,6 +5,7 @@
   config,
   lib,
   modulesPath,
+  pkgs,
   ...
 }: {
   imports = [(modulesPath + "/installer/scan/not-detected.nix")];
@@ -37,6 +38,7 @@
     graphics = {
       enable = true;
       enable32Bit = true;
+      extraPackages = [pkgs.amf];
     };
   };
   networking.useDHCP = lib.mkDefault true;
