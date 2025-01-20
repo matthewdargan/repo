@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>Media Files</title>
+</head>
+
+<body>
+    <h1>Media Files in {{.Dir}}</h1>
+    <ul>
+        {{range .Files}}
+        {{if .IsDir}}
+        <li><a href="/?dir={{$.Dir}}/{{.Name}}">{{.Name}}/</a></li>
+        {{else}}
+        <li><a href="/play?file={{$.Dir}}/{{.Name}}">{{.Name}}</a></li>
+        {{end}}
+        {{end}}
+    </ul>
+</body>
+
+</html>
