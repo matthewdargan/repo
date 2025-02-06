@@ -9,7 +9,6 @@
     profiles.${config.home.username}.extensions = with inputs.firefox-addons.packages.${pkgs.system}; [
       bitwarden
       darkreader
-      refined-github
       ublock-origin
     ];
   };
