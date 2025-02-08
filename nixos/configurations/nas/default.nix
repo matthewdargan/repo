@@ -54,7 +54,10 @@
   nixpkgs.config.allowUnfree = true;
   services = {
     btrfs.autoScrub.enable = true;
-    jellyfin.enable = true;
+    jellyfin = {
+      enable = true;
+      openFirewall = true;
+    };
     openssh = {
       enable = true;
       settings.PermitRootLogin = "no";
