@@ -87,7 +87,6 @@
                 settings.gofumpt.enable = true;
               };
               nil_ls.enable = true;
-              yamlls.enable = true;
             };
           };
           luasnip.enable = true;
