@@ -87,6 +87,7 @@
                 settings.gofumpt.enable = true;
               };
               nil_ls.enable = true;
+              zls.enable = true;
             };
           };
           luasnip.enable = true;
