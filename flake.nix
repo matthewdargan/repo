@@ -1,6 +1,10 @@
 {
   description = "home config";
   inputs = {
+    epify = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:matthewdargan/epify";
+    };
     firefox-addons = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
@@ -12,6 +16,10 @@
     home-manager = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/home-manager";
+    };
+    mooch = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:matthewdargan/mooch";
     };
     nix-go = {
       inputs.nixpkgs.follows = "nixpkgs";

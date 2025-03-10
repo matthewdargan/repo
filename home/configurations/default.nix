@@ -15,7 +15,7 @@
       };
   in {
     "mpd@nas" = homeConfig {
-      modules = modulesLinux ++ [../modules/rain.nix];
+      modules = modulesLinux ++ [(import ../modules/media.nix part-inputs)];
       pkgs = pkgsLinux;
     };
     "mpd@scoop" = homeConfig {
@@ -26,6 +26,7 @@
           (import ../modules/ghostty.nix part-inputs)
           ../modules/discord.nix
           ../modules/spotify.nix
+          ../modules/vintagestory.nix
           ../modules/vscode.nix
         ];
       pkgs = pkgsLinux;
