@@ -406,11 +406,11 @@
         "pre-commit-hooks": "pre-commit-hooks_3"
       },
       "locked": {
-        "lastModified": 1742533853,
-        "narHash": "sha256-Ag4can3ZZDCKGaitd995Y9Ql1JVAhFPLGqDg5fcd7bk=",
+        "lastModified": 1742968655,
+        "narHash": "sha256-2sB6UH2mZt1eV4OppC7DhxytaPGsHcSJA64QLwvcA8o=",
         "owner": "matthewdargan",
         "repo": "mooch",
-        "rev": "78dce7a45d8fbd4e5213e489196cdecd28e4a9a2",
+        "rev": "1e4dd103a1da5024bb8aab2803f708a8da074252",
         "type": "github"
       },
       "original": {
