@@ -23,6 +23,15 @@
       enable = true;
       nix-direnv.enable = true;
     };
+    fish = {
+      enable = true;
+      interactiveShellInit = ''
+        fish_vi_key_bindings
+        set -x EDITOR nvim
+        set -x VISUAL nvim
+      '';
+      shellAbbrs.vi = "nvim";
+    };
     fzf.enable = true;
     git = {
       enable = true;
