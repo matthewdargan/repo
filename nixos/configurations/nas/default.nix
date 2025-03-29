@@ -52,6 +52,7 @@
     };
   };
   nixpkgs.config.allowUnfree = true;
+  programs.fish.enable = true;
   services = {
     btrfs.autoScrub.enable = true;
     jellyfin = {
@@ -73,6 +74,6 @@
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILe/v2phdFJcaINc1bphWEM6vXDSlXY/e0B2zyb3ik1M matthewdargan57@gmail.com"
     ];
-    shell = pkgs.bash;
+    shell = pkgs.fish;
   };
 }

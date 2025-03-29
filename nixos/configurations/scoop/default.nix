@@ -36,7 +36,10 @@
     };
   };
   nixpkgs.config.allowUnfree = true;
-  programs.steam.enable = true;
+  programs = {
+    fish.enable = true;
+    steam.enable = true;
+  };
   security.rtkit.enable = true;
   services = {
     desktopManager.plasma6.enable = true;
@@ -67,6 +70,6 @@
     description = "Matthew Dargan";
     extraGroups = ["input" "networkmanager" "systemd-journal" "wheel"];
     isNormalUser = true;
-    shell = pkgs.bash;
+    shell = pkgs.fish;
   };
 }
