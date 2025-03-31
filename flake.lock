@@ -287,7 +287,7 @@
     "gitignore_3": {
       "inputs": {
         "nixpkgs": [
-          "mooch",
+          "media-server",
           "pre-commit-hooks",
           "nixpkgs"
         ]
@@ -397,7 +397,7 @@
         "type": "github"
       }
     },
-    "mooch": {
+    "media-server": {
       "inputs": {
         "nixpkgs": [
           "nixpkgs"
@@ -406,16 +406,16 @@
         "pre-commit-hooks": "pre-commit-hooks_3"
       },
       "locked": {
-        "lastModified": 1743142494,
-        "narHash": "sha256-7mBu40LDTM+dcweiyiNCPHRRoabw1lGFaOSIPIqaHUI=",
+        "lastModified": 1743393330,
+        "narHash": "sha256-kxFI0cSFupZbqfFQDvYBjLg186YZDBKBBQ4E3GwdTos=",
         "owner": "matthewdargan",
-        "repo": "mooch",
-        "rev": "66cd1f2d102289555e443b201c60e8cce61f2290",
+        "repo": "media-server",
+        "rev": "b609b773c3903543d80cd7c9b33cae853e6e45c6",
         "type": "github"
       },
       "original": {
         "owner": "matthewdargan",
-        "repo": "mooch",
+        "repo": "media-server",
         "type": "github"
       }
     },
@@ -782,7 +782,7 @@
         "flake-compat": "flake-compat_4",
         "gitignore": "gitignore_3",
         "nixpkgs": [
-          "mooch",
+          "media-server",
           "nixpkgs"
         ]
       },
@@ -851,7 +851,7 @@
         "firefox-addons": "firefox-addons",
         "ghostty": "ghostty",
         "home-manager": "home-manager",
-        "mooch": "mooch",
+        "media-server": "media-server",
         "nix-go": "nix-go_2",
         "nixpkgs": "nixpkgs",
         "nixvim": "nixvim",

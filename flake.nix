@@ -17,9 +17,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/home-manager";
     };
-    mooch = {
+    media-server = {
       inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/mooch";
+      url = "github:matthewdargan/media-server";
     };
     nix-go = {
       inputs.nixpkgs.follows = "nixpkgs";
