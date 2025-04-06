@@ -20,6 +20,7 @@
           buildInputs = [
             pkgs.boost
             pkgs.curl
+            pkgs.ffmpeg-full
             pkgs.libtorrent-rasterbar
             pkgs.libxml2
             pkgs.pkg-config
@@ -28,6 +29,23 @@
           shellHook = "${config.pre-commit.installationScript}";
         };
         packages = {
+          media = pkgs.clangStdenv.mkDerivation {
+            buildInputs = [pkgs.ffmpeg];
+            buildPhase = "./build.sh release media";
+            installPhase = ''
+              mkdir -p "$out/bin"
+              cp ./build/media "$out/bin"
+            '';
+            meta = with lib; {
+              description = "Media server";
+              homepage = "https://github.com/matthewdargan/media-server";
+              license = licenses.bsd3;
+              maintainers = with maintainers; [matthewdargan];
+            };
+            pname = "media";
+            src = ./.;
+            version = "0.1.0";
+          };
           mooch = pkgs.clangStdenv.mkDerivation {
             buildInputs = [
               pkgs.boost
