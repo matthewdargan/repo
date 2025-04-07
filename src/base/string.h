@@ -21,6 +21,12 @@ struct string8list {
     u64 total_size;
 };
 
+typedef struct string8array string8array;
+struct string8array {
+    string8 *v;
+    u64 count;
+};
+
 typedef struct rng1u64 rng1u64;
 struct rng1u64 {
     u64 min;
@@ -99,5 +105,8 @@ internal string8node *str8_list_push(arena *a, string8list *list, string8 string
 internal string8list str8_split(arena *a, string8 string, u8 *split_chars, u64 split_char_count,
                                 string_split_flags flags);
 internal string8 str8_list_join(arena *a, string8list *list, string_join *optional_params);
+
+internal string8array str8_array_from_list(arena *a, string8list *list);
+internal string8array str8_array_reserve(arena *a, u64 count);
 
 #endif  // STRING_H

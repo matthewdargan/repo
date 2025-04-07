@@ -29,17 +29,6 @@ struct params {
     string8 query;
 };
 
-typedef struct torrent torrent;
-struct torrent {
-    string8 link;
-};
-
-typedef struct torrent_array torrent_array;
-struct torrent_array {
-    u64 count;
-    torrent *v;
-};
-
 read_only global string8 filters[] = {str8_lit("0"), str8_lit("1"), str8_lit("2")};
 read_only global string8 categories[] = {
     str8_lit("0_0"), str8_lit("1_0"), str8_lit("1_1"), str8_lit("1_2"), str8_lit("1_3"), str8_lit("1_4"),
@@ -114,8 +103,8 @@ internal size_t write_callback(void *contents, size_t size, size_t nmemb, void *
     return real_size;
 }
 
-internal torrent_array get_torrents(arena *a, params ps) {
-    torrent_array torrents = {0};
+internal string8array get_torrents(arena *a, params ps) {
+    string8array torrents = str8_array_reserve(a, ps.top_results);
     xmlXPathCompExprPtr item_expr = xmlXPathCompile(BAD_CAST "//item");
     xmlXPathCompExprPtr link_expr = xmlXPathCompile(BAD_CAST "./link");
     CURL *curl = curl_easy_init();
@@ -177,7 +166,6 @@ internal torrent_array get_torrents(arena *a, params ps) {
         return torrents;
     }
     torrents.count = item_result->nodesetval->nodeNr;
-    torrents.v = push_array_no_zero(a, torrent, torrents.count);
     for (u64 i = 0; i < torrents.count; ++i) {
         xmlNodePtr item = item_result->nodesetval->nodeTab[i];
         context->node = item;
@@ -185,13 +173,13 @@ internal torrent_array get_torrents(arena *a, params ps) {
         if (link_result && !xmlXPathNodeSetIsEmpty(link_result->nodesetval)) {
             xmlNodePtr link_node = link_result->nodesetval->nodeTab[0];
             xmlChar *link = xmlNodeGetContent(link_node);
-            torrents.v[i].link = push_str8_copy(a, str8((u8 *)link, xmlStrlen(link)));
+            torrents.v[i] = push_str8_copy(a, str8((u8 *)link, xmlStrlen(link)));
         }
     }
     return torrents;
 }
 
-internal void download_torrents(arena *a, torrent_array torrents) {
+internal void download_torrents(arena *a, string8array torrents) {
     if (torrents.count == 0) {
         return;
     }
@@ -221,8 +209,8 @@ internal void download_torrents(arena *a, torrent_array torrents) {
     u64 to_download = 0;
     for (u64 i = 0; i < torrents.count; ++i) {
         if (history_data.size > 0) {
-            if (str8_find_needle(history_data, 0, torrents.v[i].link, 0) != history_data.size) {
-                printf("mooch: already downloaded %s\n", torrents.v[i].link.str);
+            if (str8_find_needle(history_data, 0, torrents.v[i], 0) != history_data.size) {
+                printf("mooch: already downloaded %s\n", torrents.v[i].str);
                 continue;
             }
         }
@@ -231,7 +219,7 @@ internal void download_torrents(arena *a, torrent_array torrents) {
             fprintf(stderr, "mooch: could not write to temporary file: %s\n", temp_path.str);
             continue;
         }
-        curl_easy_setopt(curl, CURLOPT_URL, torrents.v[i].link.str);
+        curl_easy_setopt(curl, CURLOPT_URL, torrents.v[i].str);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
         CURLcode res = curl_easy_perform(curl);
         fclose(fp);
@@ -254,7 +242,7 @@ internal void download_torrents(arena *a, torrent_array torrents) {
         }
         ps.save_path = ".";
         session.add_torrent(ps);
-        string8 torrent_nl = push_str8_cat(a, torrents.v[i].link, str8_lit("\n"));
+        string8 torrent_nl = push_str8_cat(a, torrents.v[i], str8_lit("\n"));
         torrents_to_download = push_str8_cat(a, torrents_to_download, torrent_nl);
         ++to_download;
     }
@@ -384,7 +372,7 @@ int entry_point(cmd_line *cmd_line) {
                          arena_strdup_callback, arena_calloc_callback);
     xmlMemSetup(arena_free_callback, arena_malloc_callback, arena_realloc_callback, arena_strdup_callback);
     xmlInitParser();
-    torrent_array torrents = get_torrents(scratch.a, ps);
+    string8array torrents = get_torrents(scratch.a, ps);
     if (torrents.count == 0) {
         fprintf(stderr, "mooch: no torrents found\n");
         goto cleanup;

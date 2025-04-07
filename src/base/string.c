@@ -389,3 +389,22 @@ internal string8 str8_list_join(arena *a, string8list *list, string_join *option
     *ptr = 0;
     return result;
 }
+
+internal string8array str8_array_from_list(arena *a, string8list *list) {
+    string8array array;
+    array.count = list->node_count;
+    array.v = push_array_no_zero(a, string8, array.count);
+    u64 i = 0;
+    for (string8node *n = list->first; n != 0; n = n->next, i += 1) {
+        array.v[i] = n->string;
+    }
+    return array;
+}
+
+internal string8array str8_array_reserve(arena *a, u64 count) {
+    string8array array;
+    array.count = 0;
+    array.v = push_array(a, string8, count);
+    return array;
+}
+

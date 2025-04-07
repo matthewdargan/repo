@@ -35,8 +35,8 @@ struct torrent {
 
 typedef struct torrent_array torrent_array;
 struct torrent_array {
-    u64 count;
     torrent *v;
+    u64 count;
 };
 
 read_only global string8 filters[] = {str8_lit("0"), str8_lit("1"), str8_lit("2")};
