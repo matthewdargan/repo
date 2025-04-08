@@ -92,7 +92,7 @@
             nativeBuildInputs = [pkgs.pkg-config];
             pname = "moochrss";
             src = ./.;
-            version = "0.3.1";
+            version = "0.3.2";
           };
         };
         pre-commit = {

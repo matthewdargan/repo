@@ -94,7 +94,7 @@ internal size_t write_callback(void *contents, size_t size, size_t nmemb, void *
     u64 real_size = size * nmemb;
     string8 *chunk = (string8 *)userp;
     if (chunk->size + real_size + 1 > CHUNK_SIZE) {
-        fprintf(stderr, "mooch: HTTP response too large for chunk\n");
+        fprintf(stderr, "moochrss: HTTP response too large for chunk\n");
         return 0;
     }
     memcpy(&(chunk->str[chunk->size]), contents, real_size);
@@ -109,12 +109,12 @@ internal string8array get_torrents(arena *a, params ps) {
     xmlXPathCompExprPtr link_expr = xmlXPathCompile(BAD_CAST "./link");
     CURL *curl = curl_easy_init();
     if (curl == NULL) {
-        fprintf(stderr, "mooch: could not initialize curl\n");
+        fprintf(stderr, "moochrss: could not initialize curl\n");
         return torrents;
     }
     char *curl_encoded_query = curl_easy_escape(curl, (const char *)ps.query.str, ps.query.size);
     if (curl_encoded_query == NULL) {
-        fprintf(stderr, "mooch: could not URL encode query\n");
+        fprintf(stderr, "moochrss: could not URL encode query\n");
         curl_easy_cleanup(curl);
         return torrents;
     }
@@ -138,14 +138,14 @@ internal string8array get_torrents(arena *a, params ps) {
     curl_easy_setopt(curl, CURLOPT_URL, url.str);
     CURLcode res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
-        fprintf(stderr, "mooch: curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+        fprintf(stderr, "moochrss: curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
         curl_easy_cleanup(curl);
         return torrents;
     }
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     if (http_code != 200) {
-        fprintf(stderr, "mooch: HTTP error %ld\n", http_code);
+        fprintf(stderr, "moochrss: HTTP error %ld\n", http_code);
         curl_easy_cleanup(curl);
         return torrents;
     }
@@ -153,19 +153,19 @@ internal string8array get_torrents(arena *a, params ps) {
     xmlDocPtr doc = xmlReadMemory((const char *)chunk.str, chunk.size, (const char *)url.str, NULL,
                                   XML_PARSE_NOWARNING | XML_PARSE_NOERROR);
     if (doc == NULL) {
-        fprintf(stderr, "mooch: failed to parse XML\n");
+        fprintf(stderr, "moochrss: failed to parse XML\n");
         return torrents;
     }
     xmlXPathContextPtr context = xmlXPathNewContext(doc);
     if (context == NULL) {
-        fprintf(stderr, "mooch: unable to create XPath context\n");
+        fprintf(stderr, "moochrss: unable to create XPath context\n");
         return torrents;
     }
     xmlXPathObjectPtr item_result = xmlXPathCompiledEval(item_expr, context);
     if (item_result == NULL || xmlXPathNodeSetIsEmpty(item_result->nodesetval)) {
         return torrents;
     }
-    torrents.count = item_result->nodesetval->nodeNr;
+    torrents.count = MIN(ps.top_results, item_result->nodesetval->nodeNr);
     for (u64 i = 0; i < torrents.count; ++i) {
         xmlNodePtr item = item_result->nodesetval->nodeTab[i];
         context->node = item;
@@ -199,7 +199,7 @@ internal void download_torrents(arena *a, string8array torrents) {
     libtorrent::session session(pack);
     CURL *curl = curl_easy_init();
     if (curl == NULL) {
-        fprintf(stderr, "mooch: could not initialize curl\n");
+        fprintf(stderr, "moochrss: could not initialize curl\n");
         return;
     }
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "mooch/1.0");
@@ -210,13 +210,13 @@ internal void download_torrents(arena *a, string8array torrents) {
     for (u64 i = 0; i < torrents.count; ++i) {
         if (history_data.size > 0) {
             if (str8_find_needle(history_data, 0, torrents.v[i], 0) != history_data.size) {
-                printf("mooch: already downloaded %s\n", torrents.v[i].str);
+                fprintf(stderr, "moochrss: already downloaded %s\n", torrents.v[i].str);
                 continue;
             }
         }
         FILE *fp = fopen((const char *)temp_path.str, "wb");
         if (fp == NULL) {
-            fprintf(stderr, "mooch: could not write to temporary file: %s\n", temp_path.str);
+            fprintf(stderr, "moochrss: could not write to temporary file: %s\n", temp_path.str);
             continue;
         }
         curl_easy_setopt(curl, CURLOPT_URL, torrents.v[i].str);
@@ -224,20 +224,20 @@ internal void download_torrents(arena *a, string8array torrents) {
         CURLcode res = curl_easy_perform(curl);
         fclose(fp);
         if (res != CURLE_OK) {
-            fprintf(stderr, "mooch: curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+            fprintf(stderr, "moochrss: curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
             continue;
         }
         long http_code = 0;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
         if (http_code != 200) {
-            fprintf(stderr, "mooch: HTTP error %ld\n", http_code);
+            fprintf(stderr, "moochrss: HTTP error %ld\n", http_code);
             continue;
         }
         libtorrent::add_torrent_params ps;
         libtorrent::error_code ec;
         ps.ti = std::make_shared<libtorrent::torrent_info>((const char *)temp_path.str, ec);
         if (ec) {
-            fprintf(stderr, "mooch: failed to parse torrent file: %s\n", ec.message().c_str());
+            fprintf(stderr, "moochrss: failed to parse torrent file: %s\n", ec.message().c_str());
             continue;
         }
         ps.save_path = ".";
@@ -249,7 +249,7 @@ internal void download_torrents(arena *a, string8array torrents) {
     unlink((const char *)temp_path.str);
     curl_easy_cleanup(curl);
     if (to_download == 0) {
-        fprintf(stderr, "mooch: no torrents to download\n");
+        fprintf(stderr, "moochrss: no torrents to download\n");
         return;
     }
     os_append_data_to_file_path(history_path, torrents_to_download);
@@ -280,7 +280,7 @@ internal void download_torrents(arena *a, string8array torrents) {
                         status_str = (u8 *)"other";
                         break;
                 }
-                printf("mooch: name=%s, status=%s, downloaded=%ld, peers=%d\n", s.name.c_str(), status_str,
+                printf("moochrss: name=%s, status=%s, downloaded=%ld, peers=%d\n", s.name.c_str(), status_str,
                        s.total_done, s.num_peers);
                 all_done &=
                     (s.state == libtorrent::torrent_status::seeding || s.state == libtorrent::torrent_status::finished);
@@ -288,7 +288,7 @@ internal void download_torrents(arena *a, string8array torrents) {
         }
         os_sleep_milliseconds(100);
     }
-    printf("mooch: downloaded %lu torrents\n", to_download);
+    printf("moochrss: downloaded %lu torrents\n", to_download);
 }
 
 internal void *arena_malloc_callback(u64 size) {
@@ -374,7 +374,7 @@ int entry_point(cmd_line *cmd_line) {
     xmlInitParser();
     string8array torrents = get_torrents(scratch.a, ps);
     if (torrents.count == 0) {
-        fprintf(stderr, "mooch: no torrents found\n");
+        fprintf(stderr, "moochrss: no torrents found\n");
         goto cleanup;
     }
     download_torrents(scratch.a, torrents);
