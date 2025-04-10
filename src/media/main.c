@@ -1,12 +1,6 @@
 #include <dirent.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <libavformat/avformat.h>
-#include <stdarg.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -23,15 +17,6 @@ typedef struct f64array f64array;
 struct f64array {
     f64 *v;
     u64 count;
-};
-
-typedef struct stream_variant stream_variant;
-struct stream_variant {
-    string8 name;
-    string8 uri;
-    u32 width;
-    u32 height;
-    u32 bitrate;
 };
 
 int entry_point(cmd_line *cmd_line) {
@@ -71,28 +56,20 @@ int entry_point(cmd_line *cmd_line) {
         fprintf(stderr, "failed to create output context\n");
         return 1;
     }
-    AVStream *out_stream = avformat_new_stream(output_context, NULL);
-    if (!out_stream) {
+    AVStream *output_stream = avformat_new_stream(output_context, NULL);
+    if (!output_stream) {
         fprintf(stderr, "failed to create output stream\n");
         return 1;
     }
-    if (avcodec_parameters_copy(out_stream->codecpar, video_stream->codecpar) < 0) {
+    if (avcodec_parameters_copy(output_stream->codecpar, video_stream->codecpar) < 0) {
         fprintf(stderr, "failed to copy codec parameters\n");
         return 1;
     }
-    AVDictionary *options = NULL;
-    av_dict_set(&options, "adaptation_sets", "id=0,streams=v", 0);
-    av_dict_set(&options, "seg_duration", "4", 0);  // 4 second segments
-    av_dict_set(&options, "frag_type", "duration", 0);
-    av_dict_set(&options, "frag_duration", "4", 0);  // 4 second fragments
-    av_dict_set(&options, "window_size", "5", 0);
-    av_dict_set(&options, "extra_window_size", "5", 0);
-    av_dict_set(&options, "remove_at_exit", "0", 0);  // Keep files after program exits
     if (avio_open(&output_context->pb, "manifest.mpd", AVIO_FLAG_WRITE) < 0) {
         fprintf(stderr, "failed to open output file\n");
         return 1;
     }
-    if (avformat_write_header(output_context, &options) < 0) {
+    if (avformat_write_header(output_context, NULL) < 0) {
         fprintf(stderr, "failed to write header\n");
         return 1;
     }
@@ -100,7 +77,6 @@ int entry_point(cmd_line *cmd_line) {
         fprintf(stderr, "failed to write trailer\n");
         return 1;
     }
-    av_dict_free(&options);
     avio_closep(&output_context->pb);
     avformat_free_context(output_context);
     avformat_close_input(&input_context);
