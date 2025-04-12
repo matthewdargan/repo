@@ -25,7 +25,12 @@
             pkgs.libxml2
             pkgs.pkg-config
           ];
-          packages = [pkgs.clang pkgs.gdb pkgs.libllvm pkgs.valgrind];
+          packages = [
+            pkgs.bear
+            pkgs.clang
+            pkgs.gdb
+            pkgs.valgrind
+          ];
           shellHook = "${config.pre-commit.installationScript}";
         };
         packages = {
