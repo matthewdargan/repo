@@ -72,6 +72,12 @@ internal u8 char_to_upper(u8 c);
 internal u64 cstring8_length(u8 *c);
 
 #define str8_lit(s) str8((u8 *)(s), sizeof(s) - 1)
+#define str8_lit_comp(s) \
+    {                    \
+        (u8 *)(s),       \
+        sizeof(s) - 1,   \
+    }
+
 internal string8 str8(u8 *str, u64 size);
 internal string8 str8_range(u8 *first, u8 *one_past_last);
 internal string8 str8_zero(void);
@@ -108,5 +114,10 @@ internal string8 str8_list_join(arena *a, string8list *list, string_join *option
 
 internal string8array str8_array_from_list(arena *a, string8list *list);
 internal string8array str8_array_reserve(arena *a, u64 count);
+
+internal string8 str8_chop_last_slash(string8 string);
+internal string8 str8_skip_last_slash(string8 string);
+internal string8 str8_chop_last_dot(string8 string);
+internal string8 str8_skip_last_dot(string8 string);
 
 #endif  // STRING_H

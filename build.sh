@@ -17,7 +17,7 @@ if [ -n "${mooch:-}" ] || [ -n "${moochrss:-}" ]; then
   link_mooch="$(pkg-config --cflags --libs libxml-2.0 libtorrent-rasterbar) -lcurl"
 fi
 if [ -n "${media:-}" ]; then
-  link_media='-lavcodec -lavformat -lavutil'
+  link_media='-lavcodec -lavformat -lavutil -lswscale'
 fi
 
 if [ -n "${debug:-}" ];   then

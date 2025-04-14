@@ -213,13 +213,13 @@ internal torrent_array get_torrents(arena *a, params ps) {
         long http_code = 0;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
         if (http_code != 200) {
-            fprintf(stderr, "mooch: HTTP error %ld for page %zu\n", http_code, page);
+            fprintf(stderr, "mooch: HTTP error %ld for page %lu\n", http_code, page);
             continue;
         }
         htmlDocPtr doc = htmlReadMemory((const char *)chunk.str, chunk.size, (const char *)query_url.str, NULL,
                                         HTML_PARSE_NOWARNING | HTML_PARSE_NOERROR);
         if (doc == NULL) {
-            fprintf(stderr, "mooch: failed to parse HTML for page %zu\n", page);
+            fprintf(stderr, "mooch: failed to parse HTML for page %lu\n", page);
             continue;
         }
         if (page == 1) {

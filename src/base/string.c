@@ -408,3 +408,65 @@ internal string8array str8_array_reserve(arena *a, u64 count) {
     return array;
 }
 
+internal string8 str8_chop_last_slash(string8 string) {
+    if (string.size > 0) {
+        u8 *ptr = string.str + string.size - 1;
+        for (; ptr >= string.str; --ptr) {
+            if (*ptr == '/' || *ptr == '\\') {
+                break;
+            }
+        }
+        if (ptr >= string.str) {
+            string.size = (u64)(ptr - string.str);
+        } else {
+            string.size = 0;
+        }
+    }
+    return string;
+}
+
+internal string8 str8_skip_last_slash(string8 string) {
+    if (string.size > 0) {
+        u8 *ptr = string.str + string.size - 1;
+        for (; ptr >= string.str; --ptr) {
+            if (*ptr == '/' || *ptr == '\\') {
+                break;
+            }
+        }
+        if (ptr >= string.str) {
+            ++ptr;
+            string.size = (u64)(string.str + string.size - ptr);
+            string.str = ptr;
+        }
+    }
+    return string;
+}
+
+internal string8 str8_chop_last_dot(string8 string) {
+    if (string.size > 0) {
+        u8 *ptr = string.str + string.size - 1;
+        for (; ptr >= string.str; --ptr) {
+            if (*ptr == '.') {
+                string.size = (u64)(ptr - string.str);
+                string.str[string.size] = 0;
+                break;
+            }
+        }
+    }
+    return string;
+}
+
+internal string8 str8_skip_last_dot(string8 string) {
+    if (string.size > 0) {
+        u8 *ptr = string.str + string.size - 1;
+        for (; ptr >= string.str; --ptr) {
+            if (*ptr == '.') {
+                ++ptr;
+                string.size = (u64)(string.str + string.size - ptr);
+                string.str = ptr;
+                break;
+            }
+        }
+    }
+    return string;
+}
