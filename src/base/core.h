@@ -18,11 +18,11 @@
 #define MEMORY_MATCH(a, b, z) (memcmp((a), (b), (z)) == 0)
 
 #define ASSERT_ALWAYS(x)      \
-    do {                      \
-        if (!(x)) {           \
-            __builtin_trap(); \
-        }                     \
-    } while (0)
+	do {                      \
+		if (!(x)) {           \
+			__builtin_trap(); \
+		}                     \
+	} while (0)
 #if BUILD_DEBUG
 #define ASSERT(x) ASSERT_ALWAYS(x)
 #else
@@ -36,18 +36,18 @@
 #define SET_NIL(nil, p) ((p) = nil)
 
 #define SLL_QUEUE_PUSH_NZ(nil, f, l, n, next)                       \
-    (CHECK_NIL(nil, f) ? ((f) = (l) = (n), SET_NIL(nil, (n)->next)) \
-                       : ((l)->next = (n), (l) = (n), SET_NIL(nil, (n)->next)))
+	(CHECK_NIL(nil, f) ? ((f) = (l) = (n), SET_NIL(nil, (n)->next)) \
+	                   : ((l)->next = (n), (l) = (n), SET_NIL(nil, (n)->next)))
 
 #define SLL_QUEUE_PUSH(f, l, n) SLL_QUEUE_PUSH_NZ(0, f, l, n, next)
 
 #define ARRAY_COUNT(a) (sizeof(a) / sizeof((a)[0]))
 #define SWAP(T, a, b) \
-    do {              \
-        T t__ = a;    \
-        a = b;        \
-        b = t__;      \
-    } while (0)
+	do {              \
+		T t__ = a;    \
+		a = b;        \
+		b = t__;      \
+	} while (0)
 #define ALIGN_POW2(x, b) (((x) + (b) - 1) & (~((b) - 1)))
 
 typedef uint8_t u8;
@@ -79,64 +79,64 @@ global s16 min_s16 = (s16)0xffff;
 global s8 min_s8 = (s8)0xff;
 
 typedef enum week_day {
-    WeekDay_Sun,
-    WeekDay_Mon,
-    WeekDay_Tue,
-    WeekDay_Wed,
-    WeekDay_Thu,
-    WeekDay_Fri,
-    WeekDay_Sat,
-    WeekDay_COUNT,
+	WeekDay_Sun,
+	WeekDay_Mon,
+	WeekDay_Tue,
+	WeekDay_Wed,
+	WeekDay_Thu,
+	WeekDay_Fri,
+	WeekDay_Sat,
+	WeekDay_COUNT,
 } week_day;
 
 typedef enum month {
-    MONTH_JAN,
-    MONTH_FEB,
-    MONTH_MAR,
-    MONTH_APR,
-    MONTH_MAY,
-    MONTH_JUN,
-    MONTH_JUL,
-    MONTH_AUG,
-    MONTH_SEP,
-    MONTH_OCT,
-    MONTH_NOV,
-    MONTH_DEC,
-    MONTH_COUNT,
+	MONTH_JAN,
+	MONTH_FEB,
+	MONTH_MAR,
+	MONTH_APR,
+	MONTH_MAY,
+	MONTH_JUN,
+	MONTH_JUL,
+	MONTH_AUG,
+	MONTH_SEP,
+	MONTH_OCT,
+	MONTH_NOV,
+	MONTH_DEC,
+	MONTH_COUNT,
 } month;
 
 typedef struct date_time date_time;
 struct date_time {
-    u16 micro_sec;  // [0,999]
-    u16 msec;       // [0,999]
-    u16 sec;        // [0,60]
-    u16 min;        // [0,59]
-    u16 hour;       // [0,24]
-    u16 day;        // [0,30]
-    union {
-        week_day week_day;
-        u32 wday;
-    };
-    union {
-        month month;
-        u32 mon;
-    };
-    u32 year;  // 1 = 1 CE, 0 = 1 BC
+	u16 micro_sec;  // [0,999]
+	u16 msec;       // [0,999]
+	u16 sec;        // [0,60]
+	u16 min;        // [0,59]
+	u16 hour;       // [0,24]
+	u16 day;        // [0,30]
+	union {
+		week_day week_day;
+		u32 wday;
+	};
+	union {
+		month month;
+		u32 mon;
+	};
+	u32 year;  // 1 = 1 CE, 0 = 1 BC
 };
 
 typedef u64 dense_time;
 
 typedef u32 file_property_flags;
 enum {
-    FILE_PROPERTY_FLAG_IS_FOLDER = (1 << 0),
+	FILE_PROPERTY_FLAG_IS_FOLDER = (1 << 0),
 };
 
 typedef struct file_properties file_properties;
 struct file_properties {
-    u64 size;
-    u64 modified;
-    u64 created;
-    file_property_flags flags;
+	u64 size;
+	u64 modified;
+	u64 created;
+	file_property_flags flags;
 };
 
 internal dense_time dense_time_from_date_time(date_time dt);

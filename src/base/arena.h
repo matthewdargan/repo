@@ -5,32 +5,32 @@
 
 typedef u64 arena_flags;
 enum {
-    ARENA_FLAGS_LARGE_PAGES = (1 << 0),
+	ARENA_FLAGS_LARGE_PAGES = (1 << 0),
 };
 
 typedef struct arena_params arena_params;
 struct arena_params {
-    arena_flags flags;
-    u64 reserve_size;
-    u64 commit_size;
+	arena_flags flags;
+	u64 reserve_size;
+	u64 commit_size;
 };
 
 typedef struct arena arena;
 struct arena {
-    arena_flags flags;
-    u64 cmt_size;
-    u64 res_size;
-    u64 base_pos;
-    u64 pos;
-    u64 cmt;
-    u64 res;
+	arena_flags flags;
+	u64 cmt_size;
+	u64 res_size;
+	u64 base_pos;
+	u64 pos;
+	u64 cmt;
+	u64 res;
 };
 STATIC_ASSERT(sizeof(arena) <= ARENA_HEADER_SIZE, arena_header_size_check);
 
 typedef struct temp temp;
 struct temp {
-    arena *a;
-    u64 pos;
+	arena *a;
+	u64 pos;
 };
 
 global u64 arena_default_reserve_size = MB(64);

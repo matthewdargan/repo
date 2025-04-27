@@ -3,10 +3,10 @@
 
 typedef struct os_system_info os_system_info;
 struct os_system_info {
-    u32 logical_processor_count;
-    u64 page_size;
-    u64 large_page_size;
-    u64 allocation_granularity;
+	u32 logical_processor_count;
+	u64 page_size;
+	u64 large_page_size;
+	u64 allocation_granularity;
 };
 
 typedef u64 os_handle;
