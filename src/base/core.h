@@ -4,6 +4,7 @@
 #define internal static
 #define global static
 #define read_only __attribute__((section(".rodata")))
+#define nil NULL
 
 #define KB(n) (((u64)(n)) << 10)
 #define MB(n) (((u64)(n)) << 20)

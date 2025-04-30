@@ -32,7 +32,7 @@ mkdir -p build
 cd build
 if [ -n "${mooch:-}" ];    then didbuild=1 && $compile_cpp ../src/mooch/main.cpp $link_mooch $out mooch; fi
 if [ -n "${moochrss:-}" ]; then didbuild=1 && $compile_cpp ../src/moochrss/main.cpp $link_mooch $out moochrss; fi
-if [ -n "${media:-}" ];    then didbuild=1 && $compile_c ../src/media/main.c $link_media $out media; fi
+if [ -n "${media:-}" ];    then didbuild=1 && $compile_c ../src/media/main2.c $link_media $out media; fi
 cd ..
 
 if [ -z "${didbuild:-}" ]; then

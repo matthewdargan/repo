@@ -512,32 +512,29 @@ str8_skip_last_slash(string8 s)
 internal string8
 str8_chop_last_dot(string8 s)
 {
-	if (s.size > 0) {
-		u8 *ptr = s.str + s.size - 1;
-		for (; ptr >= s.str; --ptr) {
-			if (*ptr == '.') {
-				s.size = (u64)(ptr - s.str);
-				s.str[s.size] = 0;
-				break;
-			}
+	string8 result = s;
+	u64 p = s.size;
+	for (; p > 0;) {
+		--p;
+		if (s.str[p] == '.') {
+			result = str8_prefix(s, p);
+			break;
 		}
 	}
-	return s;
+	return result;
 }
 
 internal string8
 str8_skip_last_dot(string8 s)
 {
-	if (s.size > 0) {
-		u8 *ptr = s.str + s.size - 1;
-		for (; ptr >= s.str; --ptr) {
-			if (*ptr == '.') {
-				++ptr;
-				s.size = (u64)(s.str + s.size - ptr);
-				s.str = ptr;
-				break;
-			}
+	string8 result = s;
+	u64 p = s.size;
+	for (; p > 0;) {
+		--p;
+		if (s.str[p] == '.') {
+			result = str8_skip(s, p + 1);
+			break;
 		}
 	}
-	return s;
+	return result;
 }
