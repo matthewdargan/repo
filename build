@@ -1,0 +1,69 @@
+#!/bin/sh
+set -eu
+
+usage() {
+	echo 'usage: build [debug|release] target...' 1>&2
+	exit 1
+}
+
+debug=1
+didbuild=0
+targets=''
+opt='-O3 -DBUILD_DEBUG=0'
+[ "$debug" -eq 1 ] && opt='-O0 -DBUILD_DEBUG=1'
+common='-I../ -g -fdiagnostics-absolute-paths -W -Wall -Wextra -Xclang -flto-visibility-public-std'
+cpp="clang++ -g $opt $common"
+cc="clang -g $opt $common"
+media_libs='-lavcodec -lavformat -lavutil -lswscale'
+
+for i
+do
+	case "$i" in
+	debug)
+		debug=1
+		;;
+	release)
+		debug=0
+		;;
+	mediasrv|tor|tordl|torrss)
+		targets="$targets $i"
+		;;
+	*)
+		usage
+		;;
+	esac
+done
+
+mkdir -p bin
+cd bin || exit 1
+for t in $targets
+do
+	case "$t" in
+	mediasrv)
+		$cc ../cmd/mediasrv/main.c $media_libs -o mediasrv
+		didbuild=1
+		;;
+	tor)
+		tor_libs="$(pkg-config --cflags --libs libxml-2.0) -lcurl"
+		$cc ../cmd/tor/main.c $tor_libs -o tor
+		didbuild=1
+		;;
+	tordl)
+		tor_libs="$(pkg-config --cflags --libs libtorrent-rasterbar)"
+		$cpp ../cmd/tordl/main.cpp $tor_libs -o tordl
+		didbuild=1
+		;;
+	torrss)
+		tor_libs="$(pkg-config --cflags --libs libxml-2.0 libtorrent-rasterbar) -lcurl"
+		$cpp ../cmd/torrss/main.cpp $tor_libs -o torrss
+		didbuild=1
+		;;
+	esac
+done
+
+cd ..
+if [ "$didbuild" -eq 0 ]
+then
+	echo 'no target specified; available targets: mediasrv tor tordl torrss' 1>&2
+	exit 1
+fi

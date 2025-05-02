@@ -34,12 +34,12 @@
           shellHook = "${config.pre-commit.installationScript}";
         };
         packages = {
-          media = pkgs.clangStdenv.mkDerivation {
+          mediasrv = pkgs.clangStdenv.mkDerivation {
             buildInputs = [pkgs.ffmpeg];
-            buildPhase = "./build.sh release media";
+            buildPhase = "./build release mediasrv";
             installPhase = ''
               mkdir -p "$out/bin"
-              cp ./build/media "$out/bin"
+              cp ./bin/mediasrv "$out/bin"
             '';
             meta = with lib; {
               description = "Media server";
@@ -47,35 +47,55 @@
               license = licenses.bsd3;
               maintainers = with maintainers; [matthewdargan];
             };
-            pname = "media";
+            pname = "mediasrv";
             src = ./.;
             version = "0.1.0";
           };
-          mooch = pkgs.clangStdenv.mkDerivation {
+          tor = pkgs.clangStdenv.mkDerivation {
             buildInputs = [
-              pkgs.boost
               pkgs.curl
-              pkgs.libtorrent-rasterbar
               pkgs.libxml2
               pkgs.pkg-config
             ];
-            buildPhase = "./build.sh release mooch";
+            buildPhase = "./build release tor";
             installPhase = ''
               mkdir -p "$out/bin"
-              cp ./build/mooch "$out/bin"
+              cp ./bin/tor "$out/bin"
             '';
             meta = with lib; {
-              description = "Queries and downloads torrents";
+              description = "Queries for torrents";
               homepage = "https://github.com/matthewdargan/media-server";
               license = licenses.bsd3;
               maintainers = with maintainers; [matthewdargan];
             };
             nativeBuildInputs = [pkgs.pkg-config];
-            pname = "mooch";
+            pname = "tor";
             src = ./.;
-            version = "0.6.1";
+            version = "0.1.0";
           };
-          moochrss = pkgs.clangStdenv.mkDerivation {
+          tordl = pkgs.clangStdenv.mkDerivation {
+            buildInputs = [
+              pkgs.boost
+              pkgs.libtorrent-rasterbar
+              pkgs.pkg-config
+            ];
+            buildPhase = "./build release tordl";
+            installPhase = ''
+              mkdir -p "$out/bin"
+              cp ./bin/tordl "$out/bin"
+            '';
+            meta = with lib; {
+              description = "Downloads provided torrents";
+              homepage = "https://github.com/matthewdargan/media-server";
+              license = licenses.bsd3;
+              maintainers = with maintainers; [matthewdargan];
+            };
+            nativeBuildInputs = [pkgs.pkg-config];
+            pname = "tordl";
+            src = ./.;
+            version = "0.1.0";
+          };
+          torrss = pkgs.clangStdenv.mkDerivation {
             buildInputs = [
               pkgs.boost
               pkgs.curl
@@ -83,10 +103,10 @@
               pkgs.libxml2
               pkgs.pkg-config
             ];
-            buildPhase = "./build.sh release moochrss";
+            buildPhase = "./build release torrss";
             installPhase = ''
               mkdir -p "$out/bin"
-              cp ./build/moochrss "$out/bin"
+              cp ./bin/torrss "$out/bin"
             '';
             meta = with lib; {
               description = "Queries RSS feeds and downloads torrents automatically";
@@ -95,9 +115,9 @@
               maintainers = with maintainers; [matthewdargan];
             };
             nativeBuildInputs = [pkgs.pkg-config];
-            pname = "moochrss";
+            pname = "torrss";
             src = ./.;
-            version = "0.3.2";
+            version = "0.1.0";
           };
         };
         pre-commit = {

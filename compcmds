@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+bear -- ./build mediasrv
+bear --append -- ./build tor
+bear --append -- ./build tordl
+bear --append -- ./build torrss
