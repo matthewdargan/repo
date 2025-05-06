@@ -10,10 +10,7 @@ debug=1
 didbuild=0
 targets=''
 opt='-O3 -DBUILD_DEBUG=0'
-[ "$debug" -eq 1 ] && opt='-O0 -DBUILD_DEBUG=1'
 common='-I../ -g -fdiagnostics-absolute-paths -W -Wall -Wextra -Xclang -flto-visibility-public-std'
-cpp="clang++ -g $opt $common"
-cc="clang -g $opt $common"
 media_libs='-lavcodec -lavformat -lavutil -lswscale'
 
 for i
@@ -33,6 +30,10 @@ do
 		;;
 	esac
 done
+
+[ "$debug" -eq 1 ] && opt='-O0 -DBUILD_DEBUG=1'
+cc="clang -g $opt $common"
+cpp="clang++ -g $opt $common"
 
 mkdir -p bin
 cd bin || exit 1
