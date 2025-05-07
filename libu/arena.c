@@ -1,68 +1,78 @@
 static Arena *
-arena_alloc(ArenaParams params)
+arenaalloc(Arenaparams params)
 {
-	u64 res_size = params.res_size;
-	u64 cmt_size = params.cmt_size;
-	if (params.flags & ARENA_FLAGS_LARGE_PAGES) {
-		res_size = ALIGN_POW2(res_size, sys_info.large_page_size);
-		cmt_size = ALIGN_POW2(cmt_size, sys_info.large_page_size);
+	u64 ressz, cmtsz;
+	void *base;
+	Arena *a;
+
+	ressz = params.ressz;
+	cmtsz = params.cmtsz;
+	if (params.flags & LARGEPAGES) {
+		ressz = roundup(ressz, sysinfo.lpagesz);
+		cmtsz = roundup(cmtsz, sysinfo.lpagesz);
 	} else {
-		res_size = ALIGN_POW2(res_size, sys_info.page_size);
-		cmt_size = ALIGN_POW2(cmt_size, sys_info.page_size);
+		ressz = roundup(ressz, sysinfo.pagesz);
+		cmtsz = roundup(cmtsz, sysinfo.pagesz);
 	}
-	void *base = 0;
-	if (params.flags & ARENA_FLAGS_LARGE_PAGES) {
-		base = os_reserve_large(res_size);
-	} else {
-		base = os_reserve(res_size);
-	}
-	os_commit(base, cmt_size);
-	Arena *a = (Arena *)base;
+	if (params.flags & LARGEPAGES)
+		base = osreservelarge(ressz);
+	else
+		base = osreserve(ressz);
+	oscommit(base, cmtsz);
+	a = (Arena *)base;
 	a->flags = params.flags;
-	a->cmt_size = params.cmt_size;
-	a->res_size = params.res_size;
-	a->base_pos = 0;
-	a->pos = ARENA_HEADER_SIZE;
-	a->cmt = cmt_size;
-	a->res = res_size;
+	a->cmtsz = params.cmtsz;
+	a->ressz = params.ressz;
+	a->basepos = 0;
+	a->pos = ARENAHDRSZ;
+	a->cmt = cmtsz;
+	a->res = ressz;
 	return a;
 }
 
 static void
-arena_release(Arena *a)
+arenarelease(Arena *a)
 {
-	os_release(a, a->res);
+	osrelease(a, a->res);
 }
 
 static void *
-arena_push(Arena *a, u64 size, u64 align)
+arenapush(Arena *a, u64 size, u64 align)
 {
-	u64 pre = ALIGN_POW2(a->pos, align);
-	u64 post = pre + size;
+	u64 pre, post, ressz, cmtsz, alignpos, clamp;
+	Arenaparams params;
+	Arena *b;
+	u8 *cmtp;
+	void *p;
+
+	pre = roundup(a->pos, align);
+	post = pre + size;
 	if (a->res < post) {
-		u64 res_size = a->res_size;
-		u64 cmt_size = a->cmt_size;
-		if (size + ARENA_HEADER_SIZE > res_size) {
-			res_size = ALIGN_POW2(size + ARENA_HEADER_SIZE, align);
-			cmt_size = ALIGN_POW2(size + ARENA_HEADER_SIZE, align);
+		ressz = a->ressz;
+		cmtsz = a->cmtsz;
+		if (size + ARENAHDRSZ > ressz) {
+			ressz = roundup(size + ARENAHDRSZ, align);
+			cmtsz = roundup(size + ARENAHDRSZ, align);
 		}
-		ArenaParams params = {.flags = a->flags, .res_size = res_size, .cmt_size = cmt_size};
-		Arena *b = arena_alloc(params);
-		b->base_pos = a->base_pos + a->res;
+		params.flags = a->flags;
+		params.ressz = ressz;
+		params.cmtsz = cmtsz;
+		b = arenaalloc(params);
+		b->basepos = a->basepos + a->res;
 		a = b;
-		pre = ALIGN_POW2(a->pos, align);
+		pre = roundup(a->pos, align);
 		post = pre + size;
 	}
 	if (a->cmt < post) {
-		u64 aligned = post + a->cmt_size - 1;
-		aligned -= aligned % a->cmt_size;
-		u64 clamped = MIN(aligned, a->res);
-		u64 cmt_size = clamped - a->cmt;
-		u8 *cmt_p = (u8 *)a + a->cmt;
-		os_commit(cmt_p, cmt_size);
-		a->cmt = clamped;
+		alignpos = post + a->cmtsz - 1;
+		alignpos -= alignpos % a->cmtsz;
+		clamp = min(alignpos, a->res);
+		cmtsz = clamp - a->cmt;
+		cmtp = (u8 *)a + a->cmt;
+		oscommit(cmtp, cmtsz);
+		a->cmt = clamp;
 	}
-	void *p = 0;
+	p = NULL;
 	if (a->cmt >= post) {
 		p = (u8 *)a + pre;
 		a->pos = post;
@@ -71,48 +81,53 @@ arena_push(Arena *a, u64 size, u64 align)
 }
 
 static u64
-arena_pos(Arena *a)
+arenapos(Arena *a)
 {
-	return a->base_pos + a->pos;
+	return a->basepos + a->pos;
 }
 
 static void
-arena_pop_to(Arena *a, u64 pos)
+arenapopto(Arena *a, u64 pos)
 {
-	u64 safe = MAX(ARENA_HEADER_SIZE, pos);
-	if (a->base_pos >= safe) {
-		os_release(a, a->res);
-	}
-	u64 new_pos = safe - a->base_pos;
-	ASSERT_ALWAYS(new_pos <= a->pos);
-	a->pos = new_pos;
+	u64 safe, npos;
+
+	safe = max(ARENAHDRSZ, pos);
+	if (a->basepos >= safe)
+		osrelease(a, a->res);
+	npos = safe - a->basepos;
+	a->pos = npos;
 }
 
 static void
-arena_clear(Arena *a)
+arenaclear(Arena *a)
 {
-	arena_pop_to(a, 0);
+	arenapopto(a, 0);
 }
 
 static void
-arena_pop(Arena *a, u64 size)
+arenapop(Arena *a, u64 size)
 {
-	u64 old = arena_pos(a);
-	u64 dst = old;
-	if (size < old) {
+	u64 old, dst;
+
+	old = arenapos(a);
+	dst = old;
+	if (size < old)
 		dst = old - size;
-	}
-	arena_pop_to(a, dst);
+	arenapopto(a, dst);
 }
 
 static Temp
-temp_begin(Arena *a)
+tempbegin(Arena *a)
 {
-	return (Temp){.a = a, .pos = arena_pos(a)};
+	Temp t;
+
+	t.a = a;
+	t.pos = arenapos(a);
+	return t;
 }
 
 static void
-temp_end(Temp t)
+tempend(Temp t)
 {
-	arena_pop_to(t.a, t.pos);
+	arenapopto(t.a, t.pos);
 }

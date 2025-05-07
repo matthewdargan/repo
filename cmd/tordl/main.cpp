@@ -5,7 +5,7 @@
 #include <libtorrent/magnet_uri.hpp>
 #include <libtorrent/session.hpp>
 
-// clang-format off
+/* clang-format off */
 #include "libu/u.h"
 #include "libu/arena.h"
 #include "libu/string.h"
@@ -16,44 +16,55 @@
 #include "libu/string.c"
 #include "libu/cmd.c"
 #include "libu/os.c"
-// clang-format on
+/* clang-format on */
 
-static String8Array
-parse_torrents(Arena *a, String8 data)
+static String8array
+parsetorrents(Arena *a, String8 data)
 {
-	String8Array torrents = {0};
-	u64 nlines = 0;
-	for (u64 i = 0; i < data.len; ++i) {
+	String8array torrents;
+	u64 nlines, i, eolpos, tabpos;
+	String8 line, magnet;
+
+	nlines = 0;
+	for (i = 0; i < data.len; i++)
 		nlines += (data.str[i] == '\n');
-	}
-	torrents.v = push_array_no_zero(a, String8, nlines);
-	for (String8 line = str8_zero(); data.len > 0;) {
-		u64 eol_pos = str8_index(data, 0, str8_lit("\n"), 0);
-		line = (eol_pos == data.len) ? data : str8_substr(data, rng1u64(0, eol_pos));
-		data = (eol_pos == data.len) ? str8_zero() : str8_skip(data, eol_pos + 1);
-		u64 tab_pos = str8_index(line, 0, str8_lit("\t"), 0);
-		if (tab_pos < line.len) {
-			String8 magnet = str8_substr(line, rng1u64(tab_pos + 1, line.len));
-			torrents.v[torrents.cnt++] = push_str8_copy(a, magnet);
+	torrents.v = pusharrnoz(a, String8, nlines);
+	torrents.cnt = 0;
+	for (line = str8zero(); data.len > 0;) {
+		eolpos = str8index(data, 0, str8lit("\n"), 0);
+		line = (eolpos == data.len) ? data : str8substr(data, rng1u64(0, eolpos));
+		data = (eolpos == data.len) ? str8zero() : str8skip(data, eolpos + 1);
+		tabpos = str8index(line, 0, str8lit("\t"), 0);
+		if (tabpos < line.len) {
+			magnet = str8substr(line, rng1u64(tabpos + 1, line.len));
+			torrents.v[torrents.cnt] = pushstr8cpy(a, magnet);
+			torrents.cnt++;
 		}
 	}
 	return torrents;
 }
 
 static void
-download_torrents(String8Array torrents)
+downloadtorrents(String8array torrents)
 {
-	if (torrents.cnt == 0) {
-		return;
-	}
 	libtorrent::settings_pack pack;
+	u64 i, j;
+	time_t lastupdate, now;
+	libtorrent::add_torrent_params ps;
+	libtorrent::error_code ec;
+	b32 done;
+	std::vector<libtorrent::torrent_handle> handles;
+	libtorrent::torrent_handle h;
+	libtorrent::torrent_status s;
+	u8 *statusstr;
+
+	if (torrents.cnt == 0)
+		return;
 	pack.set_int(libtorrent::settings_pack::alert_mask,
 	             libtorrent::alert::status_notification | libtorrent::alert::error_notification);
 	libtorrent::session session(pack);
-	for (u64 i = 0; i < torrents.cnt; ++i) {
+	for (i = 0; i < torrents.cnt; i++) {
 		try {
-			libtorrent::add_torrent_params ps;
-			libtorrent::error_code ec;
 			libtorrent::parse_magnet_uri((char *)torrents.v[i].str, ps, ec);
 			if (ec) {
 				fprintf(stderr, "tordl: failed to parse magnet URI: %s\n", ec.message().c_str());
@@ -65,40 +76,39 @@ download_torrents(String8Array torrents)
 			fprintf(stderr, "tordl: failed to add torrent: %s\n", e.what());
 		}
 	}
-	time_t last_update = time(0);
-	for (b32 all_done = 0; !all_done;) {
-		time_t now = time(0);
-		if (now - last_update >= 1) {
-			last_update = now;
-			std::vector<libtorrent::torrent_handle> handles = session.get_torrents();
-			all_done = 1;
-			for (libtorrent::torrent_handle h : handles) {
-				if (!h.is_valid()) {
+	lastupdate = time(0);
+	for (done = 0; !done;) {
+		now = time(0);
+		if (now - lastupdate >= 1) {
+			lastupdate = now;
+			handles = session.get_torrents();
+			done = 1;
+			for (j = 0; j < handles.size(); j++) {
+				h = handles[j];
+				if (!h.is_valid())
 					continue;
-				}
-				libtorrent::torrent_status s = h.status();
-				u8 *status_str;
+				s = h.status();
 				switch (s.state) {
 					case libtorrent::torrent_status::seeding:
-						status_str = (u8 *)"seeding";
+						statusstr = (u8 *)"seeding";
 						break;
 					case libtorrent::torrent_status::finished:
-						status_str = (u8 *)"finished";
+						statusstr = (u8 *)"finished";
 						break;
 					case libtorrent::torrent_status::downloading:
-						status_str = (u8 *)"downloading";
+						statusstr = (u8 *)"downloading";
 						break;
 					default:
-						status_str = (u8 *)"other";
+						statusstr = (u8 *)"other";
 						break;
 				}
-				printf("tordl: name=%s, status=%s, downloaded=%ld, peers=%d\n", s.name.c_str(), status_str,
-				       s.total_done, s.num_peers);
-				all_done &=
+				printf("tordl: name=%s, status=%s, downloaded=%ld, peers=%d\n", s.name.c_str(), statusstr, s.total_done,
+				       s.num_peers);
+				done &=
 				    (s.state == libtorrent::torrent_status::seeding || s.state == libtorrent::torrent_status::finished);
 			}
 		}
-		os_sleep_ms(100);
+		sleepms(100);
 	}
 	printf("tordl: downloads complete\n");
 }
@@ -106,53 +116,61 @@ download_torrents(String8Array torrents)
 int
 main(int argc, char *argv[])
 {
-	sys_info.nprocs = (u32)sysconf(_SC_NPROCESSORS_ONLN);
-	sys_info.page_size = (u64)sysconf(_SC_PAGESIZE);
-	sys_info.large_page_size = MB(2);
-	arena = arena_alloc((ArenaParams){
-	    .flags = arena_default_flags, .res_size = arena_default_res_size, .cmt_size = arena_default_cmt_size});
-	String8List args = os_args(arena, argc, argv);
-	Cmd parsed = cmd_parse(arena, args);
-	Temp scratch = temp_begin(arena);
-	String8 path = str8_zero();
-	if (cmd_has_arg(&parsed, str8_lit("f"))) {
-		path = cmd_str(&parsed, str8_lit("f"));
-	}
-	String8 data = str8_zero();
+	Arenaparams ap;
+	String8list args;
+	Cmd parsed;
+	Temp scratch;
+	String8 path, data, chunk;
+	u8 buf[4096];
+	ssize_t n;
+	String8array torrents;
+
+	sysinfo.nprocs = (u32)sysconf(_SC_NPROCESSORS_ONLN);
+	sysinfo.pagesz = (u64)sysconf(_SC_PAGESIZE);
+	sysinfo.lpagesz = 0x200000;
+	ap.flags = arenaflags;
+	ap.ressz = arenaressz;
+	ap.cmtsz = arenacmtsz;
+	arena = arenaalloc(ap);
+	args = osargs(arena, argc, argv);
+	parsed = cmdparse(arena, args);
+	scratch = tempbegin(arena);
+	path = str8zero();
+	if (cmdhasarg(&parsed, str8lit("f")))
+		path = cmdstr(&parsed, str8lit("f"));
+	data = str8zero();
 	if (path.len > 0) {
-		data = os_read_file(arena, path);
+		data = readfile(arena, path);
 		if (data.len == 0) {
 			fprintf(stderr, "tordl: failed to read file: %s\n", path.str);
-			temp_end(scratch);
-			arena_release(arena);
+			tempend(scratch);
+			arenarelease(arena);
 			return 1;
 		}
 	} else {
-		u8 buf[4096] = {0};
 		for (;;) {
-			ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
-			if (n <= 0) {
+			n = read(STDIN_FILENO, buf, sizeof(buf));
+			if (n <= 0)
 				break;
-			}
-			String8 chunk = str8(buf, (u64)n);
-			data = push_str8_cat(scratch.a, data, chunk);
+			chunk = str8(buf, (u64)n);
+			data = pushstr8cat(scratch.a, data, chunk);
 		}
 	}
 	if (data.len == 0) {
 		fprintf(stderr, "tordl: no data read\n");
-		temp_end(scratch);
-		arena_release(arena);
+		tempend(scratch);
+		arenarelease(arena);
 		return 1;
 	}
-	String8Array torrents = parse_torrents(scratch.a, data);
+	torrents = parsetorrents(scratch.a, data);
 	if (torrents.cnt == 0) {
 		fprintf(stderr, "tordl: no torrents found\n");
-		temp_end(scratch);
-		arena_release(arena);
+		tempend(scratch);
+		arenarelease(arena);
 		return 1;
 	}
-	download_torrents(torrents);
-	temp_end(scratch);
-	arena_release(arena);
+	downloadtorrents(torrents);
+	tempend(scratch);
+	arenarelease(arena);
 	return 0;
 }

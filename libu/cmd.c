@@ -1,153 +1,172 @@
 static u64
-cmd_hash(String8 s)
+cmdhash(String8 s)
 {
-	u64 h = 5381;
-	for (u64 i = 0; i < s.len; ++i) {
+	u64 h, i;
+
+	h = 5381;
+	for (i = 0; i < s.len; i++)
 		h = ((h << 5) + h) + s.str[i];
-	}
 	return h;
 }
 
-static CmdOpt **
-cmd_slot(Cmd *c, String8 s)
+static Cmdopt **
+cmdslot(Cmd *c, String8 s)
 {
-	CmdOpt **slot = 0;
-	if (c->opt_table_size != 0) {
-		u64 h = cmd_hash(s);
-		u64 bucket = h % c->opt_table_size;
-		slot = &c->opt_table[bucket];
+	Cmdopt **slot;
+	u64 h, bucket;
+
+	slot = NULL;
+	if (c->optabsz != 0) {
+		h = cmdhash(s);
+		bucket = h % c->optabsz;
+		slot = &c->optab[bucket];
 	}
 	return slot;
 }
 
-static CmdOpt *
-cmd_slot_to_opt(CmdOpt **slot, String8 s)
+static Cmdopt *
+cmdslottoopt(Cmdopt **slot, String8 s)
 {
-	CmdOpt *opt = 0;
-	for (CmdOpt *v = *slot; v != NULL; v = v->hash_next) {
-		if (str8_cmp(s, v->str, 0)) {
+	Cmdopt *opt, *v;
+
+	opt = NULL;
+	for (v = *slot; v != NULL; v = v->hash_next)
+		if (str8cmp(s, v->str, 0)) {
 			opt = v;
 			break;
 		}
-	}
 	return opt;
 }
 
 static void
-cmd_push_opt(CmdOptList *list, CmdOpt *v)
+cmdpushopt(Cmdoptlist *list, Cmdopt *v)
 {
-	SLL_QUEUE_PUSH(list->start, list->end, v);
-	++list->cnt;
+	if (list->start == NULL) {
+		list->start = v;
+		list->end = v;
+	} else {
+		list->end->next = v;
+		list->end = v;
+	}
+	v->next = NULL;
+	list->cnt++;
 }
 
-static CmdOpt *
-cmd_insert_opt(Arena *a, Cmd *c, String8 s, String8List vals)
+static Cmdopt *
+cmdinsertopt(Arena *a, Cmd *c, String8 s, String8list vals)
 {
-	CmdOpt *v = 0;
-	CmdOpt **slot = cmd_slot(c, s);
-	CmdOpt *existing = cmd_slot_to_opt(slot, s);
-	if (existing != NULL) {
-		v = existing;
-	} else {
-		v = push_array(a, CmdOpt, 1);
+	Cmdopt *v, *found;
+	Cmdopt **slot;
+	Stringjoin join;
+
+	slot = cmdslot(c, s);
+	found = cmdslottoopt(slot, s);
+	if (found != NULL)
+		v = found;
+	else {
+		v = pusharr(a, Cmdopt, 1);
 		v->hash_next = *slot;
-		v->hash = cmd_hash(s);
-		v->str = push_str8_copy(a, s);
+		v->hash = cmdhash(s);
+		v->str = pushstr8cpy(a, s);
 		v->vals = vals;
-		StringJoin join = {0};
-		join.pre = str8_lit("");
-		join.sep = str8_lit(",");
-		join.post = str8_lit("");
-		v->val = str8_list_join(a, &v->vals, &join);
+		join.pre = str8lit("");
+		join.sep = str8lit(",");
+		join.post = str8lit("");
+		v->val = str8listjoin(a, &v->vals, &join);
 		*slot = v;
-		cmd_push_opt(&c->opts, v);
+		cmdpushopt(&c->opts, v);
 	}
 	return v;
 }
 
 static Cmd
-cmd_parse(Arena *a, String8List args)
+cmdparse(Arena *a, String8list args)
 {
-	Cmd parsed = {0};
+	Cmd parsed;
+	b32 afterdash, firstarg, isopt;
+	String8node *node, *next;
+	String8 optname;
+	String8list optvals;
+	u64 eqpos, i;
+
+	memset(&parsed, 0, sizeof(parsed));
 	parsed.exe = args.start->str;
-	parsed.opt_table_size = 4096;
-	parsed.opt_table = push_array(a, CmdOpt *, parsed.opt_table_size);
-	b32 after_pass = 0;
-	b32 first_pass = 1;
-	for (String8Node *node = args.start->next, *next = 0; node != NULL; node = next) {
+	parsed.optabsz = 4096;
+	parsed.optab = pusharr(a, Cmdopt *, parsed.optabsz);
+	afterdash = 0;
+	firstarg = 1;
+	for (node = args.start->next, next = NULL; node != NULL; node = next) {
 		next = node->next;
-		String8 opt_name = node->str;
-		b32 is_opt = 1;
-		if (!after_pass) {
-			if (str8_cmp(node->str, str8_lit("--"), 0)) {
-				after_pass = 1;
-				is_opt = 0;
-			} else if (str8_cmp(str8_prefix(node->str, 2), str8_lit("--"), 0)) {
-				opt_name = str8_skip(opt_name, 2);
-			} else if (str8_cmp(str8_prefix(node->str, 1), str8_lit("-"), 0)) {
-				opt_name = str8_skip(opt_name, 1);
-			} else {
-				is_opt = 0;
-			}
-		} else {
-			is_opt = 0;
-		}
-		if (is_opt) {
-			String8List opt_vals = {0};
-			u64 arg_pos = str8_index(opt_name, 0, str8_lit("="), 0);
-			if (arg_pos < opt_name.len) {
-				str8_list_push(a, &opt_vals, str8_skip(opt_name, arg_pos + 1));
-				opt_name = str8_prefix(opt_name, arg_pos);
+		optname = node->str;
+		isopt = 1;
+		if (!afterdash) {
+			if (str8cmp(node->str, str8lit("--"), 0)) {
+				afterdash = 1;
+				isopt = 0;
+			} else if (str8cmp(str8prefix(node->str, 2), str8lit("--"), 0))
+				optname = str8skip(optname, 2);
+			else if (str8cmp(str8prefix(node->str, 1), str8lit("-"), 0))
+				optname = str8skip(optname, 1);
+			else
+				isopt = 0;
+		} else
+			isopt = 0;
+		if (isopt) {
+			memset(&optvals, 0, sizeof(optvals));
+			eqpos = str8index(optname, 0, str8lit("="), 0);
+			if (eqpos < optname.len) {
+				str8listpush(a, &optvals, str8skip(optname, eqpos + 1));
+				optname = str8prefix(optname, eqpos);
 			} else if (next != NULL && next->str.len > 0 && next->str.str[0] != '-') {
-				str8_list_push(a, &opt_vals, next->str);
+				str8listpush(a, &optvals, next->str);
 				next = next->next;
 			}
-			cmd_insert_opt(a, &parsed, opt_name, opt_vals);
+			cmdinsertopt(a, &parsed, optname, optvals);
 		} else {
-			if (!str8_cmp(node->str, str8_lit("--"), 0)) {
-				after_pass = 1;
-			}
-			if (after_pass || !first_pass) {
-				str8_list_push(a, &parsed.inputs, node->str);
-			}
-			first_pass = 0;
+			if (!str8cmp(node->str, str8lit("--"), 0))
+				afterdash = 1;
+			if (afterdash || !firstarg)
+				str8listpush(a, &parsed.inputs, node->str);
+			firstarg = 0;
 		}
 	}
-	parsed.argc = args.node_cnt;
-	parsed.argv = push_array(a, char *, parsed.argc);
-	u64 i = 0;
-	for (String8Node *node = args.start; node != NULL; node = node->next) {
-		parsed.argv[i++] = (char *)push_str8_copy(a, node->str).str;
-	}
+	parsed.argc = args.nnode;
+	parsed.argv = pusharr(a, char *, parsed.argc);
+	for (node = args.start, i = 0; node != NULL; node = node->next, i++)
+		parsed.argv[i] = (char *)pushstr8cpy(a, node->str).str;
 	return parsed;
 }
 
-static CmdOpt *
-cmd_opt(Cmd *c, String8 name)
+static Cmdopt *
+cmdopt(Cmd *c, String8 name)
 {
-	return cmd_slot_to_opt(cmd_slot(c, name), name);
+	return cmdslottoopt(cmdslot(c, name), name);
 }
 
 static String8
-cmd_str(Cmd *c, String8 name)
+cmdstr(Cmd *c, String8 name)
 {
-	String8 s = str8_zero();
-	CmdOpt *v = cmd_opt(c, name);
-	if (v != NULL) {
+	String8 s;
+	Cmdopt *v;
+
+	s = str8zero();
+	v = cmdopt(c, name);
+	if (v != NULL)
 		s = v->val;
-	}
 	return s;
 }
 
 static b32
-cmd_has_flag(Cmd *c, String8 name)
+cmdhasflag(Cmd *c, String8 name)
 {
-	return cmd_opt(c, name) != NULL;
+	return cmdopt(c, name) != NULL;
 }
 
 static b32
-cmd_has_arg(Cmd *c, String8 name)
+cmdhasarg(Cmd *c, String8 name)
 {
-	CmdOpt *v = cmd_opt(c, name);
-	return v != NULL && v->vals.node_cnt > 0;
+	Cmdopt *v;
+
+	v = cmdopt(c, name);
+	return v != NULL && v->vals.nnode > 0;
 }

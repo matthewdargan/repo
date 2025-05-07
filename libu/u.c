@@ -1,8 +1,21 @@
-static DenseTime
-date_time_to_dense_time(DateTime dt)
+static u64
+max(u64 a, u64 b)
 {
-	DenseTime t = 0;
-	t += dt.year;
+	return a < b ? b : a;
+}
+
+static u64
+min(u64 a, u64 b)
+{
+	return a > b ? b : a;
+}
+
+static u64
+datetimetodense(Datetime dt)
+{
+	u64 t;
+
+	t = dt.year;
 	t *= 12;
 	t += dt.mon;
 	t *= 31;
@@ -18,10 +31,11 @@ date_time_to_dense_time(DateTime dt)
 	return t;
 }
 
-static DateTime
-dense_time_to_date_time(DenseTime t)
+static Datetime
+densetodatetime(u64 t)
 {
-	DateTime dt = {0};
+	Datetime dt;
+
 	dt.msec = t % 1000;
 	t /= 1000;
 	dt.sec = t % 61;
@@ -34,7 +48,6 @@ dense_time_to_date_time(DenseTime t)
 	t /= 31;
 	dt.mon = t % 12;
 	t /= 12;
-	ASSERT(t <= max_u32);
-	dt.year = (u32)t;
+	dt.year = t;
 	return dt;
 }

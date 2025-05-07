@@ -47,19 +47,19 @@ struct quality_info {
 	u32 bit_rate;
 };
 
-read_only static quality_info qualities[] = {
-    {.name = str8_lit_comp("1080p"), .width = 1920, .height = 1080, .bit_rate = 4000000},
-    {.name = str8_lit_comp("720p"), .width = 1280, .height = 720, .bit_rate = 2000000},
-    {.name = str8_lit_comp("480p"), .width = 854, .height = 480, .bit_rate = 1000000},
-    {.name = str8_lit_comp("360p"), .width = 640, .height = 360, .bit_rate = 500000}};
+readonly static quality_info qualities[] = {
+    {.name = str8litc("1080p"), .width = 1920, .height = 1080, .bit_rate = 4000000},
+    {.name = str8litc("720p"), .width = 1280, .height = 720, .bit_rate = 2000000},
+    {.name = str8litc("480p"), .width = 854, .height = 480, .bit_rate = 1000000},
+    {.name = str8litc("360p"), .width = 640, .height = 360, .bit_rate = 500000}};
 
 static b32
 vctx_init(arena *a, video_context *ctx, string8 input_path)
 {
-	ctx->input_path = push_str8_copy(a, input_path);
+	ctx->input_path = pushstr8cpy(a, input_path);
 	ctx->output_path = str8_chop_last_dot(str8_skip_last_slash(input_path));
 	ctx->segment_duration_msec = 4000;  // 4 second segments
-	if (!os_dir_exists(ctx->output_path) && !os_mkdir(ctx->output_path)) {
+	if (!direxists(ctx->output_path) && !osmkdir(ctx->output_path)) {
 		fprintf(stderr, "failed to create output directory: %s\n", ctx->output_path.str);
 		return 0;
 	}
@@ -87,7 +87,7 @@ vctx_init(arena *a, video_context *ctx, string8 input_path)
 	}
 	ctx->video_stream = ctx->input_context->streams[video_stream_idx];
 	ctx->duration = ctx->input_context->duration / (f64)AV_TIME_BASE;
-	ctx->keyframes.v = push_array(a, f64, KB(1));
+	ctx->keyframes.v = pusharr(a, f64, 0x400);
 	ctx->keyframes.count = 0;
 	packet = av_packet_alloc();
 	if (!packet) {
@@ -118,9 +118,9 @@ err:
 static b32
 init_segments(arena *a, video_context *ctx)
 {
-	for (u64 i = 0; i < ARRAY_COUNT(qualities); ++i) {
-		string8 segment_path = push_str8f(a, (char *)"%s/init-stream%u.m4s", ctx->output_path.str, i);
-		qualities[i].init_segment_path = push_str8_copy(a, segment_path);
+	for (u64 i = 0; i < nelem(qualities); ++i) {
+		string8 segment_path = pushstr8f(a, (char *)"%s/init-stream%u.m4s", ctx->output_path.str, i);
+		qualities[i].init_segment_path = pushstr8cpy(a, segment_path);
 		AVFormatContext *output_context = NULL;
 		if (avformat_alloc_output_context2(&output_context, NULL, "mp4", (char *)segment_path.str) < 0) {
 			fprintf(stderr, "failed to create output context\n");
@@ -197,8 +197,8 @@ init_segments(arena *a, video_context *ctx)
 static b32
 generate_manifest(arena *a, video_context *ctx)
 {
-	string8 manifest_path = push_str8_cat(a, ctx->output_path, str8_lit("/manifest.mpd"));
-	string8 manifest_content = push_str8f(a, (char *)"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+	string8 manifest_path = pushstr8cat(a, ctx->output_path, str8lit("/manifest.mpd"));
+	string8 manifest_content = pushstr8f(a, (char *)"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                                                 "<MPD xmlns=\"urn:mpeg:dash:schema:mpd:2011\" "
                                                 "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" "
                                                 "xsi:schemaLocation=\"urn:mpeg:dash:schema:mpd:2011 DASH-MPD.xsd\" "
@@ -209,7 +209,7 @@ generate_manifest(arena *a, video_context *ctx)
                                                 "  <Period start=\"PT0S\" duration=\"PT%.3fS\">\n"
                                                 "    <AdaptationSet contentType=\"video\" mimeType=\"video/mp4\" segmentAlignment=\"true\" startWithSAP=\"1\">\n",
                                                 ctx->duration, ctx->duration);
-	for (u64 i = 0; i < ARRAY_COUNT(qualities); ++i) {
+	for (u64 i = 0; i < nelem(qualities); ++i) {
 		struct stat st = {0};
 		if (stat((const char *)qualities[i].init_segment_path.str, &st) != 0) {
 			fprintf(stderr, "failed to stat init segment file: %s\n", qualities[i].init_segment_path.str);
@@ -218,7 +218,7 @@ generate_manifest(arena *a, video_context *ctx)
 		u64 init_range_end = (st.st_size > 0) ? st.st_size - 1 : 0;
 		f64 avg_segment_duration_sec = ctx->duration / (ctx->keyframes.count > 1 ? ctx->keyframes.count - 1 : 1);
 		u64 avg_duration_time = (u64)(avg_segment_duration_sec * 90000.0 + 0.5);
-		string8 representation = push_str8f(a, (char *)"      <Representation id=\"%llu\" codecs=\"avc1.64001f\" "
+		string8 representation = pushstr8f(a, (char *)"      <Representation id=\"%llu\" codecs=\"avc1.64001f\" "
                                                         "width=\"%u\" height=\"%u\" frameRate=\"%d/%d\" "
                                                         "bandwidth=\"%u\">\n"
                                                         "        <SegmentList timescale=\"90000\" duration=\"%llu\">\n"
@@ -236,17 +236,16 @@ generate_manifest(arena *a, video_context *ctx)
 			f64 end_time = ctx->keyframes.v[j + 1];
 			f64 duration_sec = end_time - start_time;
 			u64 duration = (u64)(duration_sec * 90000.0 + 0.5);
-			string8 segment_path = push_str8f(a, (char *)"chunk-stream%llu-%llu.m4s", i, j + 1);
-			string8 segment = push_str8f(a, (char *)"          <SegmentURL media=\"%s\" duration=\"%llu\"/>\n",
-			                             segment_path.str, duration);
-			representation = push_str8_cat(a, representation, segment);
+			string8 segment_path = pushstr8f(a, (char *)"chunk-stream%llu-%llu.m4s", i, j + 1);
+			string8 segment = pushstr8f(a, (char *)"          <SegmentURL media=\"%s\" duration=\"%llu\"/>\n",
+			                            segment_path.str, duration);
+			representation = pushstr8cat(a, representation, segment);
 		}
-		representation =
-		    push_str8_cat(a, representation, str8_lit("        </SegmentList>\n      </Representation>\n"));
-		manifest_content = push_str8_cat(a, manifest_content, representation);
+		representation = pushstr8cat(a, representation, str8lit("        </SegmentList>\n      </Representation>\n"));
+		manifest_content = pushstr8cat(a, manifest_content, representation);
 	}
-	manifest_content = push_str8_cat(a, manifest_content, str8_lit("    </AdaptationSet>\n  </Period>\n</MPD>\n"));
-	return os_append_file(manifest_path, manifest_content);
+	manifest_content = pushstr8cat(a, manifest_content, str8lit("    </AdaptationSet>\n  </Period>\n</MPD>\n"));
+	return appendfile(manifest_path, manifest_content);
 }
 
 static b32
@@ -254,7 +253,7 @@ transcode_segment(arena *a, video_context *ctx, string8 quality, u32 segment_idx
 {
 	quality_info *qi = NULL;
 	u64 quality_idx = 0;
-	for (u64 i = 0; i < ARRAY_COUNT(qualities); ++i) {
+	for (u64 i = 0; i < nelem(qualities); ++i) {
 		if (str8_match(quality, qualities[i].name, 0)) {
 			qi = &qualities[i];
 			quality_idx = i;
@@ -272,7 +271,7 @@ transcode_segment(arena *a, video_context *ctx, string8 quality, u32 segment_idx
 	f64 start_time = ctx->keyframes.v[segment_idx];
 	f64 end_time = ctx->keyframes.v[segment_idx + 1];
 	string8 segment_path =
-	    push_str8f(a, (char *)"%s/chunk-stream%u-%u.m4s", ctx->output_path.str, quality_idx, segment_idx + 1);
+	    pushstr8f(a, (char *)"%s/chunk-stream%u-%u.m4s", ctx->output_path.str, quality_idx, segment_idx + 1);
 	struct stat st = {0};
 	if (stat((const char *)segment_path.str, &st) == 0) {
 		fprintf(stderr, "segment file %s already exists\n", segment_path.str);
@@ -583,7 +582,7 @@ transcode_all_segments(arena *a, video_context *ctx)
 	if (!init_segments(a, ctx)) {
 		return 0;
 	}
-	for (u64 i = 0; i < ARRAY_COUNT(qualities); ++i) {
+	for (u64 i = 0; i < nelem(qualities); ++i) {
 		printf("transcoding %s\n", qualities[i].name.str);
 		for (u64 j = 0; j < ctx->keyframes.count - 1; ++j) {
 			printf("    segment %lu/%lu\n", j + 1, ctx->keyframes.count - 1);
@@ -601,7 +600,7 @@ get_segment(arena *a, video_context *ctx, string8 quality, u32 segment_idx)
 {
 	quality_info *qi = NULL;
 	u64 quality_idx = 0;
-	for (u64 i = 0; i < ARRAY_COUNT(qualities); ++i) {
+	for (u64 i = 0; i < nelem(qualities); ++i) {
 		if (str8_match(quality, qualities[i].name, 0)) {
 			qi = &qualities[i];
 			quality_idx = i;
@@ -613,7 +612,7 @@ get_segment(arena *a, video_context *ctx, string8 quality, u32 segment_idx)
 		return 0;
 	}
 	string8 segment_path =
-	    push_str8f(a, (char *)"%s/chunk-stream%u-%u.m4s", ctx->output_path.str, quality_idx, segment_idx + 1);
+	    pushstr8f(a, (char *)"%s/chunk-stream%u-%u.m4s", ctx->output_path.str, quality_idx, segment_idx + 1);
 	struct stat st = {0};
 	if (stat((const char *)segment_path.str, &st) == 0) {
 		fprintf(stderr, "segment file %s already exists\n", segment_path.str);
@@ -625,13 +624,13 @@ get_segment(arena *a, video_context *ctx, string8 quality, u32 segment_idx)
 int
 entry_point(Cmd *c)
 {
-	temp scratch = temp_begin(arena);
-	string8 input_path = str8_lit("testdata/h264_sample.mp4");
+	temp scratch = tempbegin(arena);
+	string8 input_path = str8lit("testdata/h264_sample.mp4");
 	video_context ctx = {0};
 	int ret = 1;
 	if (!vctx_init(scratch.a, &ctx, input_path)) {
 		fprintf(stderr, "failed to initialize video context\n");
-		temp_end(scratch);
+		tempend(scratch);
 		return 1;
 	}
 	if (ctx.keyframes.count == 0) {
@@ -659,6 +658,6 @@ entry_point(Cmd *c)
 	ret = 0;
 err:
 	avformat_close_input(&ctx.input_context);
-	temp_end(scratch);
+	tempend(scratch);
 	return ret;
 }
