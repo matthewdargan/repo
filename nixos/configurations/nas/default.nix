@@ -29,7 +29,7 @@
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "nas";
     firewall = {
-      allowedTCPPorts = [22];
+      allowedTCPPorts = [22 4500];
       checkReversePath = "loose";
       interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
         7246
@@ -66,6 +66,30 @@
     tailscale.enable = true;
   };
   system.stateVersion = "24.11";
+  systemd = let
+    mountDir = "/home/mpd/9drive";
+    port = "4500";
+    user = "mpd";
+  in {
+    services."u9fs@" = {
+      after = ["network.target"];
+      description = "serves directory as a 9p root filesystem";
+      serviceConfig = {
+        ExecStart = "${pkgs.u9fs}/bin/u9fs -D -a none -u ${user} -d ${mountDir}";
+        StandardInput = "socket";
+        StandardError = "journal";
+        User = "${user}";
+      };
+    };
+    sockets.u9fs = {
+      description = "9P filesystem server socket";
+      socketConfig = {
+        Accept = "yes";
+        ListenStream = port;
+      };
+      wantedBy = ["sockets.target"];
+    };
+  };
   time.timeZone = "America/Chicago";
   users.users.mpd = {
     description = "Matthew Dargan";

@@ -65,6 +65,28 @@
     };
   };
   system.stateVersion = "24.11";
+  systemd.user.services."9pfuse-nas" = let
+    mountPoint = "%h/n/nas";
+    transport = "tcp";
+    host = "nas";
+    port = "4500";
+    socket = "${transport}!${host}!${port}";
+  in {
+    enable = true;
+    after = ["network-online.target"];
+    description = "mounts 9p filesystem to directory";
+    path = [
+      "/run/wrappers" # needed for fusermount with setuid
+    ];
+    serviceConfig = {
+      ExecStart = "${pkgs.plan9port}/plan9/bin/9pfuse '${socket}' '${mountPoint}'";
+      ExecStop = "/run/wrappers/bin/fusermount -u '${mountPoint}'";
+      RemainAfterExit = "yes";
+      Type = "forking";
+    };
+    wants = ["network-online.target"];
+    wantedBy = ["multi-user.target"];
+  };
   time.timeZone = "America/Chicago";
   users.users.mpd = {
     description = "Matthew Dargan";
