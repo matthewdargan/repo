@@ -26,7 +26,6 @@
           (import ../modules/ghostty.nix part-inputs)
           ../modules/discord.nix
           ../modules/spotify.nix
-          ../modules/vintagestory.nix
           ../modules/vscode.nix
         ];
       pkgs = pkgsLinux;
