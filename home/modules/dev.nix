@@ -1,7 +1,7 @@
 {self, ...}: {pkgs, ...}: {
   home = {
     packages = [self.packages.${pkgs.system}.neovim];
-    stateVersion = "24.11";
+    stateVersion = "25.11";
     username = "mpd";
   };
   nixpkgs.config.allowUnfree = true;

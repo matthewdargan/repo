@@ -64,7 +64,7 @@
       };
     };
   };
-  system.stateVersion = "24.11";
+  system.stateVersion = "25.05";
   systemd.user.services."9pfuse-nas" = let
     mountPoint = "%h/n/nas";
     transport = "tcp";
