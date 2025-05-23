@@ -10,10 +10,12 @@
 #include "libu/u.h"
 #include "libu/arena.h"
 #include "libu/string.h"
+#include "libu/cmd.h"
 #include "libu/os.h"
 #include "libu/u.c"
 #include "libu/arena.c"
 #include "libu/string.c"
+#include "libu/cmd.c"
 #include "libu/os.c"
 /* clang-format on */
 
@@ -46,7 +48,7 @@ mkmpd(Arena *a, String8 path, String8 dir)
 		goto end;
 	}
 	avformat_alloc_output_context2(&octx, NULL, "dash", (char *)mpdpath.str);
-	if (!octx) {
+	if (octx == NULL) {
 		fprintf(stderr, "mkmpd: can't create output context\n");
 		ret = -1;
 		goto end;
@@ -112,9 +114,11 @@ end:
 }
 
 int
-main(void)
+main(int argc, char *argv[])
 {
 	Arenaparams ap;
+	String8list args;
+	Cmd parsed;
 	Temp scratch;
 	String8 path, dir;
 
@@ -125,8 +129,16 @@ main(void)
 	ap.ressz = arenaressz;
 	ap.cmtsz = arenacmtsz;
 	arena = arenaalloc(ap);
+	args = osargs(arena, argc, argv);
+	parsed = cmdparse(arena, args);
 	scratch = tempbegin(arena);
-	path = str8lit("testdata/bbb_1080_full_h264.mp4");
+	path = str8zero();
+	if (cmdhasarg(&parsed, str8lit("p")))
+		path = cmdstr(&parsed, str8lit("p"));
+	if (path.len == 0) {
+		fprintf(stderr, "usage: mediasrv -p path\n");
+		return 1;
+	}
 	dir = str8lit("output");
 	if (!direxists(dir) && !osmkdir(dir)) {
 		fprintf(stderr, "mediasrv: cannot create directory '%s'\n", dir.str);
