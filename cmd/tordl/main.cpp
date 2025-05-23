@@ -30,7 +30,8 @@ parsetorrents(Arena *a, String8 data)
 		nlines += (data.str[i] == '\n');
 	torrents.v = pusharrnoz(a, String8, nlines);
 	torrents.cnt = 0;
-	for (line = str8zero(); data.len > 0;) {
+	line = str8zero();
+	while (data.len > 0) {
 		eolpos = str8index(data, 0, str8lit("\n"), 0);
 		line = (eolpos == data.len) ? data : str8substr(data, rng1u64(0, eolpos));
 		data = (eolpos == data.len) ? str8zero() : str8skip(data, eolpos + 1);

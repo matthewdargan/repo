@@ -59,9 +59,8 @@ mkmpd(Arena *a, String8 path, String8 dir)
 			goto end;
 		}
 		ret = avcodec_parameters_copy(ostream->codecpar, istream->codecpar);
-		if (ret < 0) {
+		if (ret < 0)
 			goto end;
-		}
 	}
 	av_dict_set(&opts, "hwaccel", "auto", 0);
 	av_dict_set(&opts, "index_correction", "1", 0);
@@ -76,7 +75,8 @@ mkmpd(Arena *a, String8 path, String8 dir)
 		fprintf(stderr, "mkmpd: can't write header\n");
 		goto end;
 	}
-	for (pkt = av_packet_alloc(); av_read_frame(ictx, pkt) >= 0;) {
+	pkt = av_packet_alloc();
+	while (av_read_frame(ictx, pkt) >= 0) {
 		istream = ictx->streams[pkt->stream_index];
 		ostream = octx->streams[pkt->stream_index];
 		pts = pkt->pts;

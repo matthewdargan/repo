@@ -164,21 +164,15 @@ str8index(String8 s, u64 pos, String8 needle, u32 flags)
 static u64
 str8rindex(String8 s, u64 pos, String8 needle, u32 flags)
 {
-	u64 idx;
 	s64 i;
-	Rng1u64 r;
 	String8 hay;
 
-	idx = 0;
 	for (i = s.len - pos - needle.len; i >= 0; i--) {
-		r = rng1u64(i, i + needle.len);
-		hay = str8substr(s, r);
-		if (str8cmp(hay, needle, flags)) {
-			idx = i;
-			break;
-		}
+		hay = str8(s.str + i, needle.len);
+		if (str8cmp(hay, needle, flags))
+			return i;
 	}
-	return idx;
+	return 0;
 }
 
 static String8
@@ -451,7 +445,7 @@ str8split(Arena *a, String8 s, u8 *split, u64 splen, u32 flags)
 	memset(&list, 0, sizeof(list));
 	p = s.str;
 	end = s.str + s.len;
-	for (; p < end;) {
+	while (p < end) {
 		start = p;
 		for (; p < end; p++) {
 			c = *p;
@@ -535,18 +529,15 @@ str8arrayreserve(Arena *a, u64 cnt)
 static String8
 str8dirname(String8 s)
 {
-	u8 *p;
+	u64 p;
 
-	if (s.len > 0) {
-		for (p = s.str + s.len - 1; p >= s.str; p--)
-			if (*p == '/')
-				break;
-		if (p >= s.str)
-			s.len = p - s.str;
-		else
-			s.len = 0;
+	p = s.len;
+	while (p > 0) {
+		p--;
+		if (s.str[p] == '/')
+			return str8prefix(s, p);
 	}
-	return s;
+	return str8zero();
 }
 
 static String8
@@ -570,33 +561,27 @@ str8basename(String8 s)
 static String8
 str8prefixext(String8 s)
 {
-	String8 pre;
 	u64 p;
 
-	pre = s;
-	for (p = s.len; p > 0;) {
+	p = s.len;
+	while (p > 0) {
 		p--;
-		if (s.str[p] == '.') {
-			pre = str8prefix(s, p);
-			break;
-		}
+		if (s.str[p] == '.')
+			return str8prefix(s, p);
 	}
-	return pre;
+	return s;
 }
 
 static String8
 str8ext(String8 s)
 {
-	String8 ext;
 	u64 p;
 
-	ext = s;
-	for (p = s.len; p > 0;) {
+	p = s.len;
+	while (p > 0) {
 		p--;
-		if (s.str[p] == '.') {
-			ext = str8skip(s, p + 1);
-			break;
-		}
+		if (s.str[p] == '.')
+			return str8skip(s, p + 1);
 	}
-	return ext;
+	return s;
 }

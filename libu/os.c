@@ -237,7 +237,7 @@ readrng(u64 fd, Rng1u64 r, void *out)
 	size = dim1u64(r);
 	nread = 0;
 	nleft = size;
-	for (; nleft > 0;) {
+	while (nleft > 0) {
 		n = pread(fd, (u8 *)out + nread, nleft, r.min + nread);
 		if (n >= 0) {
 			nread += n;
@@ -259,7 +259,7 @@ writerng(u64 fd, Rng1u64 r, void *data)
 	size = dim1u64(r);
 	nwrite = 0;
 	nleft = size;
-	for (; nleft > 0;) {
+	while (nleft > 0) {
 		n = pwrite(fd, (u8 *)data + nwrite, nleft, r.min + nwrite);
 		if (n >= 0) {
 			nwrite += n;
