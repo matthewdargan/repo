@@ -19,15 +19,63 @@
 #include "libu/os.c"
 /* clang-format on */
 
+typedef struct U64array U64array;
+struct U64array {
+	u64 *v;
+	u64 cnt;
+};
+
+static int
+validstream(AVStream *st)
+{
+	switch (st->codecpar->codec_type) {
+		case AVMEDIA_TYPE_VIDEO:
+			switch (st->codecpar->codec_id) {
+				case AV_CODEC_ID_H264:
+				case AV_CODEC_ID_HEVC:
+				case AV_CODEC_ID_VP9:
+				case AV_CODEC_ID_AV1:
+					return 1;
+				default:
+					return 0;
+			}
+			break;
+		case AVMEDIA_TYPE_AUDIO:
+			switch (st->codecpar->codec_id) {
+				case AV_CODEC_ID_AAC:
+				case AV_CODEC_ID_MP3:
+				case AV_CODEC_ID_AC3:
+				case AV_CODEC_ID_EAC3:
+				case AV_CODEC_ID_OPUS:
+					return 1;
+				default:
+					return 0;
+			}
+			break;
+		case AVMEDIA_TYPE_SUBTITLE:
+			switch (st->codecpar->codec_id) {
+				case AV_CODEC_ID_WEBVTT:
+					return 1;
+				default:
+					return 0;
+			}
+			break;
+		default:
+			return 0;
+	}
+	return 0;
+}
+
 int
 mkmpd(Arena *a, String8 path, String8 dir)
 {
-	int ret;
-	u64 i;
 	AVFormatContext *ictx, *octx;
 	AVStream *istream, *ostream;
-	String8 mpdpath;
 	AVDictionary *opts;
+	String8 mpdpath;
+	int ret;
+	U64array streams;
+	u64 i, nostreams, oidx;
 	AVPacket *pkt;
 	s64 pts, dts, duration;
 
@@ -36,6 +84,7 @@ mkmpd(Arena *a, String8 path, String8 dir)
 	istream = NULL;
 	ostream = NULL;
 	opts = NULL;
+	pkt = av_packet_alloc();
 	mpdpath = pushstr8cat(a, dir, str8lit("/manifest.mpd"));
 	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
 	if (ret < 0) {
@@ -53,8 +102,14 @@ mkmpd(Arena *a, String8 path, String8 dir)
 		ret = -1;
 		goto end;
 	}
+	streams.cnt = ictx->nb_streams;
+	streams.v = pusharrnoz(a, u64, streams.cnt);
+	nostreams = 0;
 	for (i = 0; i < ictx->nb_streams; i++) {
+		streams.v[i] = U64MAX;
 		istream = ictx->streams[i];
+		if (!validstream(istream))
+			continue;
 		ostream = avformat_new_stream(octx, NULL);
 		if (ostream == NULL) {
 			ret = AVERROR(ENOMEM);
@@ -63,6 +118,8 @@ mkmpd(Arena *a, String8 path, String8 dir)
 		ret = avcodec_parameters_copy(ostream->codecpar, istream->codecpar);
 		if (ret < 0)
 			goto end;
+		streams.v[i] = nostreams;
+		nostreams++;
 	}
 	av_dict_set(&opts, "hwaccel", "auto", 0);
 	av_dict_set(&opts, "index_correction", "1", 0);
@@ -77,10 +134,14 @@ mkmpd(Arena *a, String8 path, String8 dir)
 		fprintf(stderr, "mkmpd: can't write header\n");
 		goto end;
 	}
-	pkt = av_packet_alloc();
 	while (av_read_frame(ictx, pkt) >= 0) {
+		oidx = streams.v[pkt->stream_index];
+		if (oidx == U64MAX) {
+			av_packet_unref(pkt);
+			continue;
+		}
 		istream = ictx->streams[pkt->stream_index];
-		ostream = octx->streams[pkt->stream_index];
+		ostream = octx->streams[oidx];
 		pts = pkt->pts;
 		dts = pkt->dts;
 		duration = pkt->duration;
@@ -88,6 +149,7 @@ mkmpd(Arena *a, String8 path, String8 dir)
 		pkt->dts = av_rescale_q_rnd(dts, istream->time_base, ostream->time_base, AV_ROUND_NEAR_INF);
 		pkt->duration = av_rescale_q(duration, istream->time_base, ostream->time_base);
 		pkt->pos = -1;
+		pkt->stream_index = oidx;
 		ret = av_interleaved_write_frame(octx, pkt);
 		if (ret < 0) {
 			fprintf(stderr, "Failed to write frame\n");
@@ -102,13 +164,15 @@ mkmpd(Arena *a, String8 path, String8 dir)
 	}
 	ret = 0;
 end:
-	if (opts)
+	if (pkt != NULL)
+		av_packet_free(&pkt);
+	if (opts != NULL)
 		av_dict_free(&opts);
-	if (octx && octx->pb)
+	if (octx != NULL) {
 		avio_closep(&octx->pb);
-	if (octx)
 		avformat_free_context(octx);
-	if (ictx)
+	}
+	if (ictx != NULL)
 		avformat_close_input(&ictx);
 	return ret;
 }
