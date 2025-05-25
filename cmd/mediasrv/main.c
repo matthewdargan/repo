@@ -177,6 +177,10 @@ mkmpd(Arena *a, String8 path, String8 dir)
 		pts = pkt->pts;
 		dts = pkt->dts;
 		duration = pkt->duration;
+		if (pts == AV_NOPTS_VALUE)
+			pts = 0;
+		if (dts == AV_NOPTS_VALUE)
+			dts = 0;
 		pkt->pts = av_rescale_q_rnd(pts, istream->time_base, ostream->time_base, AV_ROUND_NEAR_INF);
 		pkt->dts = av_rescale_q_rnd(dts, istream->time_base, ostream->time_base, AV_ROUND_NEAR_INF);
 		pkt->duration = av_rescale_q(duration, istream->time_base, ostream->time_base);
@@ -184,7 +188,7 @@ mkmpd(Arena *a, String8 path, String8 dir)
 		pkt->stream_index = oidx;
 		ret = av_interleaved_write_frame(octx, pkt);
 		if (ret < 0) {
-			fprintf(stderr, "Failed to write frame\n");
+			fprintf(stderr, "mkmpd: can't write frame\n");
 			break;
 		}
 		av_packet_unref(pkt);
