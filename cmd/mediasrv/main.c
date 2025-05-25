@@ -127,6 +127,29 @@ mkmpd(Arena *a, String8 path, String8 dir)
 				ostream->codecpar->bit_rate = str8tou64(bpsstr, 10);
 			}
 		}
+		if (ostream->codecpar->frame_size == 0) {
+			switch (istream->codecpar->codec_id) {
+				case AV_CODEC_ID_AAC:
+					ostream->codecpar->frame_size = 1024;
+					break;
+				case AV_CODEC_ID_AC3:
+				case AV_CODEC_ID_EAC3:
+					ostream->codecpar->frame_size = 1536;
+					break;
+				case AV_CODEC_ID_FLAC:
+					ostream->codecpar->frame_size = 4096;
+					break;
+				case AV_CODEC_ID_MP3:
+					ostream->codecpar->frame_size = 1152;
+					break;
+				case AV_CODEC_ID_OPUS:
+					ostream->codecpar->frame_size = 960;
+					break;
+				default:
+					ostream->codecpar->frame_size = 1024;
+					break;
+			}
+		}
 		streams.v[i] = nostreams;
 		nostreams++;
 	}
