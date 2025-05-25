@@ -71,8 +71,9 @@ mkmpd(Arena *a, String8 path, String8 dir)
 {
 	AVFormatContext *ictx, *octx;
 	AVStream *istream, *ostream;
+	AVDictionaryEntry *bps;
 	AVDictionary *opts;
-	String8 mpdpath;
+	String8 mpdpath, bpsstr;
 	int ret;
 	U64array streams;
 	u64 i, nostreams, oidx;
@@ -83,6 +84,7 @@ mkmpd(Arena *a, String8 path, String8 dir)
 	octx = NULL;
 	istream = NULL;
 	ostream = NULL;
+	bps = NULL;
 	opts = NULL;
 	pkt = av_packet_alloc();
 	mpdpath = pushstr8cat(a, dir, str8lit("/manifest.mpd"));
@@ -118,6 +120,13 @@ mkmpd(Arena *a, String8 path, String8 dir)
 		ret = avcodec_parameters_copy(ostream->codecpar, istream->codecpar);
 		if (ret < 0)
 			goto end;
+		if (ostream->codecpar->bit_rate == 0) {
+			bps = av_dict_get(istream->metadata, "BPS", NULL, 0);
+			if (bps != NULL) {
+				bpsstr = str8cstr(bps->value);
+				ostream->codecpar->bit_rate = str8tou64(bpsstr, 10);
+			}
+		}
 		streams.v[i] = nostreams;
 		nostreams++;
 	}
