@@ -217,73 +217,12 @@ validsub(AVStream *st)
 }
 
 static int
-extractsub(AVFormatContext *ictx, String8 path, u64 sidx)
-{
-	AVFormatContext *octx;
-	AVStream *istream, *ostream;
-	AVPacket *pkt;
-	int ret;
-
-	octx = NULL;
-	istream = ictx->streams[sidx];
-	ostream = NULL;
-	pkt = NULL;
-	ret = avformat_alloc_output_context2(&octx, NULL, "ass", (char *)path.str);
-	if (ret < 0) {
-		fprintf(stderr, "extractsub: can't create output context\n");
-		goto end;
-	}
-	ostream = avformat_new_stream(octx, NULL);
-	if (ostream == NULL) {
-		ret = AVERROR(ENOMEM);
-		goto end;
-	}
-	ret = avcodec_parameters_copy(ostream->codecpar, istream->codecpar);
-	if (ret < 0)
-		goto end;
-	ret = avio_open(&octx->pb, (char *)path.str, AVIO_FLAG_WRITE);
-	if (ret < 0) {
-		fprintf(stderr, "extractsub: can't open output file %s\n", path.str);
-		goto end;
-	}
-	ret = avformat_write_header(octx, NULL);
-	if (ret < 0) {
-		fprintf(stderr, "extractsub: can't write header\n");
-		goto end;
-	}
-	pkt = av_packet_alloc();
-	while (av_read_frame(ictx, pkt) >= 0) {
-		if (pkt->stream_index == (int)sidx) {
-			pkt->stream_index = 0;
-			av_packet_rescale_ts(pkt, istream->time_base, ostream->time_base);
-			ret = av_interleaved_write_frame(octx, pkt);
-			if (ret < 0) {
-				fprintf(stderr, "extractsub: can't write frame\n");
-				break;
-			}
-		}
-	}
-	ret = av_write_trailer(octx);
-	if (ret < 0) {
-		fprintf(stderr, "extractsub: can't write trailer\n");
-		goto end;
-	}
-end:
-	if (pkt != NULL)
-		av_packet_free(&pkt);
-	if (octx != NULL) {
-		avio_closep(&octx->pb);
-		avformat_free_context(octx);
-	}
-	return ret;
-}
-
-static int
 mksubs(Arena *a, String8 path, String8 dir)
 {
-	AVFormatContext *ictx;
-	AVStream *st;
+	AVFormatContext *ictx, **octxs;
+	AVStream *st, **ostreams;
 	AVDictionaryEntry *le;
+	AVPacket *pkt;
 	String8 opath, lang;
 	int ret;
 	u64 i, nsubs;
@@ -291,6 +230,7 @@ mksubs(Arena *a, String8 path, String8 dir)
 	ictx = NULL;
 	st = NULL;
 	le = NULL;
+	pkt = av_packet_alloc();
 	nsubs = 0;
 	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
 	if (ret < 0) {
@@ -302,6 +242,8 @@ mksubs(Arena *a, String8 path, String8 dir)
 		fprintf(stderr, "mksubs: can't find stream info\n");
 		goto end;
 	}
+	octxs = pusharr(a, AVFormatContext *, ictx->nb_streams);
+	ostreams = pusharr(a, AVStream *, ictx->nb_streams);
 	for (i = 0; i < ictx->nb_streams; i++) {
 		st = ictx->streams[i];
 		if (!validsub(st))
@@ -311,15 +253,57 @@ mksubs(Arena *a, String8 path, String8 dir)
 		if (le != NULL)
 			lang = str8cstr(le->value);
 		opath = pushstr8f(a, "%s/%s%lu.ass", dir.str, lang.str, nsubs);
-		av_seek_frame(ictx, -1, 0, AVSEEK_FLAG_BACKWARD);
-		ret = extractsub(ictx, opath, i);
+		ret = avformat_alloc_output_context2(&octxs[i], NULL, "ass", (char *)opath.str);
 		if (ret < 0) {
-			fprintf(stderr, "mksubs: failed to extract subtitle stream %lu\n", i);
+			fprintf(stderr, "mksubs: can't create output context\n");
 			continue;
+		}
+		ostreams[i] = avformat_new_stream(octxs[i], NULL);
+		if (ostreams[i] == NULL) {
+			ret = AVERROR(ENOMEM);
+			goto end;
+		}
+		ret = avcodec_parameters_copy(ostreams[i]->codecpar, st->codecpar);
+		if (ret < 0)
+			goto end;
+		ret = avio_open(&octxs[i]->pb, (char *)opath.str, AVIO_FLAG_WRITE);
+		if (ret < 0) {
+			fprintf(stderr, "mksubs: can't open output file %s\n", path.str);
+			goto end;
+		}
+		ret = avformat_write_header(octxs[i], NULL);
+		if (ret < 0) {
+			fprintf(stderr, "mksubs: can't write header\n");
+			goto end;
 		}
 		nsubs++;
 	}
+	av_seek_frame(ictx, -1, 0, AVSEEK_FLAG_BACKWARD);
+	while (av_read_frame(ictx, pkt) >= 0) {
+		i = pkt->stream_index;
+		if (octxs[i] == NULL || ostreams[i] == NULL) {
+			av_packet_unref(pkt);
+			continue;
+		}
+		st = ictx->streams[i];
+		pkt->stream_index = 0;
+		av_packet_rescale_ts(pkt, st->time_base, ostreams[i]->time_base);
+		ret = av_interleaved_write_frame(octxs[i], pkt);
+		if (ret < 0) {
+			fprintf(stderr, "mksubs: can't write frame\n");
+			break;
+		}
+	}
+	for (i = 0; i < ictx->nb_streams; i++) {
+		if (octxs[i] != NULL) {
+			av_write_trailer(octxs[i]);
+			avio_closep(&octxs[i]->pb);
+			avformat_free_context(octxs[i]);
+		}
+	}
 end:
+	if (pkt != NULL)
+		av_packet_free(&pkt);
 	avformat_close_input(&ictx);
 	return ret;
 }
