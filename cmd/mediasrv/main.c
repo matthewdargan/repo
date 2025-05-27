@@ -25,7 +25,7 @@ struct U64array {
 	u64 cnt;
 };
 
-static int
+static b32
 validstream(AVStream *st)
 {
 	switch (st->codecpar->codec_type) {
@@ -91,17 +91,16 @@ mkmpd(Arena *a, String8 path, String8 dir)
 	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "mkmpd: can't open %s\n", path.str);
-		goto end;
+		return ret;
 	}
 	ret = avformat_find_stream_info(ictx, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "mkmpd: can't find stream info\n");
 		goto end;
 	}
-	avformat_alloc_output_context2(&octx, NULL, "dash", (char *)mpdpath.str);
-	if (octx == NULL) {
+	ret = avformat_alloc_output_context2(&octx, NULL, "dash", (char *)mpdpath.str);
+	if (ret < 0) {
 		fprintf(stderr, "mkmpd: can't create output context\n");
-		ret = -1;
 		goto end;
 	}
 	streams.cnt = ictx->nb_streams;
@@ -191,14 +190,12 @@ mkmpd(Arena *a, String8 path, String8 dir)
 			fprintf(stderr, "mkmpd: can't write frame\n");
 			break;
 		}
-		av_packet_unref(pkt);
 	}
 	ret = av_write_trailer(octx);
 	if (ret < 0) {
 		fprintf(stderr, "mkmpd: can't write trailer\n");
 		goto end;
 	}
-	ret = 0;
 end:
 	if (pkt != NULL)
 		av_packet_free(&pkt);
@@ -208,8 +205,122 @@ end:
 		avio_closep(&octx->pb);
 		avformat_free_context(octx);
 	}
-	if (ictx != NULL)
-		avformat_close_input(&ictx);
+	avformat_close_input(&ictx);
+	return ret;
+}
+
+static b32
+validsub(AVStream *st)
+{
+	return st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE &&
+	       (st->codecpar->codec_id == AV_CODEC_ID_ASS || st->codecpar->codec_id == AV_CODEC_ID_SSA);
+}
+
+static int
+extractsub(AVFormatContext *ictx, String8 path, u64 sidx)
+{
+	AVFormatContext *octx;
+	AVStream *istream, *ostream;
+	AVPacket *pkt;
+	int ret;
+
+	octx = NULL;
+	istream = ictx->streams[sidx];
+	ostream = NULL;
+	pkt = NULL;
+	ret = avformat_alloc_output_context2(&octx, NULL, "ass", (char *)path.str);
+	if (ret < 0) {
+		fprintf(stderr, "extractsub: can't create output context\n");
+		goto end;
+	}
+	ostream = avformat_new_stream(octx, NULL);
+	if (ostream == NULL) {
+		ret = AVERROR(ENOMEM);
+		goto end;
+	}
+	ret = avcodec_parameters_copy(ostream->codecpar, istream->codecpar);
+	if (ret < 0)
+		goto end;
+	ret = avio_open(&octx->pb, (char *)path.str, AVIO_FLAG_WRITE);
+	if (ret < 0) {
+		fprintf(stderr, "extractsub: can't open output file %s\n", path.str);
+		goto end;
+	}
+	ret = avformat_write_header(octx, NULL);
+	if (ret < 0) {
+		fprintf(stderr, "extractsub: can't write header\n");
+		goto end;
+	}
+	pkt = av_packet_alloc();
+	while (av_read_frame(ictx, pkt) >= 0) {
+		if (pkt->stream_index == (int)sidx) {
+			pkt->stream_index = 0;
+			av_packet_rescale_ts(pkt, istream->time_base, ostream->time_base);
+			ret = av_interleaved_write_frame(octx, pkt);
+			if (ret < 0) {
+				fprintf(stderr, "extractsub: can't write frame\n");
+				break;
+			}
+		}
+	}
+	ret = av_write_trailer(octx);
+	if (ret < 0) {
+		fprintf(stderr, "extractsub: can't write trailer\n");
+		goto end;
+	}
+end:
+	if (pkt != NULL)
+		av_packet_free(&pkt);
+	if (octx != NULL) {
+		avio_closep(&octx->pb);
+		avformat_free_context(octx);
+	}
+	return ret;
+}
+
+static int
+mksubs(Arena *a, String8 path, String8 dir)
+{
+	AVFormatContext *ictx;
+	AVStream *st;
+	AVDictionaryEntry *le;
+	String8 opath, lang;
+	int ret;
+	u64 i, nsubs;
+
+	ictx = NULL;
+	st = NULL;
+	le = NULL;
+	nsubs = 0;
+	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
+	if (ret < 0) {
+		fprintf(stderr, "mksubs: can't open %s\n", path.str);
+		return ret;
+	}
+	ret = avformat_find_stream_info(ictx, NULL);
+	if (ret < 0) {
+		fprintf(stderr, "mksubs: can't find stream info\n");
+		goto end;
+	}
+	for (i = 0; i < ictx->nb_streams; i++) {
+		st = ictx->streams[i];
+		if (!validsub(st))
+			continue;
+		lang = str8lit("unknown");
+		le = av_dict_get(st->metadata, "language", NULL, 0);
+		if (le != NULL)
+			lang = str8cstr(le->value);
+		opath = pushstr8f(a, "%s/%s%lu.ass", dir.str, lang.str, nsubs);
+		av_seek_frame(ictx, -1, 0, AVSEEK_FLAG_BACKWARD);
+		ret = extractsub(ictx, opath, i);
+		if (ret < 0) {
+			fprintf(stderr, "mksubs: failed to extract subtitle stream %lu\n", i);
+			continue;
+		}
+		nsubs++;
+	}
+end:
+	avformat_close_input(&ictx);
 	return ret;
 }
 
@@ -245,6 +356,8 @@ main(int argc, char *argv[])
 		return 1;
 	}
 	if (mkmpd(scratch.a, path, dir) < 0)
+		return 1;
+	if (mksubs(scratch.a, path, dir) < 0)
 		return 1;
 	tempend(scratch);
 	return 0;
