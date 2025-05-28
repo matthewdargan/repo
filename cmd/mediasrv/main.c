@@ -66,148 +66,6 @@ validstream(AVStream *st)
 	return 0;
 }
 
-int
-mkmpd(Arena *a, String8 path, String8 dir)
-{
-	AVFormatContext *ictx, *octx;
-	AVStream *istream, *ostream;
-	AVDictionaryEntry *bps;
-	AVDictionary *opts;
-	String8 mpdpath, bpsstr;
-	int ret;
-	U64array streams;
-	u64 i, nostreams, oidx;
-	AVPacket *pkt;
-	s64 pts, dts, duration;
-
-	ictx = NULL;
-	octx = NULL;
-	istream = NULL;
-	ostream = NULL;
-	bps = NULL;
-	opts = NULL;
-	pkt = av_packet_alloc();
-	mpdpath = pushstr8cat(a, dir, str8lit("/manifest.mpd"));
-	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
-	if (ret < 0) {
-		fprintf(stderr, "mkmpd: can't open %s\n", path.str);
-		return ret;
-	}
-	ret = avformat_find_stream_info(ictx, NULL);
-	if (ret < 0) {
-		fprintf(stderr, "mkmpd: can't find stream info\n");
-		goto end;
-	}
-	ret = avformat_alloc_output_context2(&octx, NULL, "dash", (char *)mpdpath.str);
-	if (ret < 0) {
-		fprintf(stderr, "mkmpd: can't create output context\n");
-		goto end;
-	}
-	streams.cnt = ictx->nb_streams;
-	streams.v = pusharrnoz(a, u64, streams.cnt);
-	nostreams = 0;
-	for (i = 0; i < ictx->nb_streams; i++) {
-		streams.v[i] = U64MAX;
-		istream = ictx->streams[i];
-		if (!validstream(istream))
-			continue;
-		ostream = avformat_new_stream(octx, NULL);
-		if (ostream == NULL) {
-			ret = AVERROR(ENOMEM);
-			goto end;
-		}
-		ret = avcodec_parameters_copy(ostream->codecpar, istream->codecpar);
-		if (ret < 0)
-			goto end;
-		if (ostream->codecpar->bit_rate == 0) {
-			bps = av_dict_get(istream->metadata, "BPS", NULL, 0);
-			if (bps != NULL) {
-				bpsstr = str8cstr(bps->value);
-				ostream->codecpar->bit_rate = str8tou64(bpsstr, 10);
-			}
-		}
-		if (ostream->codecpar->frame_size == 0) {
-			switch (istream->codecpar->codec_id) {
-				case AV_CODEC_ID_AAC:
-					ostream->codecpar->frame_size = 1024;
-					break;
-				case AV_CODEC_ID_AC3:
-				case AV_CODEC_ID_EAC3:
-					ostream->codecpar->frame_size = 1536;
-					break;
-				case AV_CODEC_ID_FLAC:
-					ostream->codecpar->frame_size = 4096;
-					break;
-				case AV_CODEC_ID_MP3:
-					ostream->codecpar->frame_size = 1152;
-					break;
-				case AV_CODEC_ID_OPUS:
-					ostream->codecpar->frame_size = 960;
-					break;
-				default:
-					ostream->codecpar->frame_size = 1024;
-					break;
-			}
-		}
-		streams.v[i] = nostreams++;
-	}
-	av_dict_set(&opts, "hwaccel", "auto", 0);
-	av_dict_set(&opts, "index_correction", "1", 0);
-	av_dict_set(&opts, "streaming", "1", 0);
-	ret = avio_open(&octx->pb, (char *)mpdpath.str, AVIO_FLAG_WRITE);
-	if (ret < 0) {
-		fprintf(stderr, "mkmpd: can't open output file %s\n", mpdpath.str);
-		goto end;
-	}
-	ret = avformat_write_header(octx, &opts);
-	if (ret < 0) {
-		fprintf(stderr, "mkmpd: can't write header\n");
-		goto end;
-	}
-	while (av_read_frame(ictx, pkt) >= 0) {
-		oidx = streams.v[pkt->stream_index];
-		if (oidx == U64MAX) {
-			av_packet_unref(pkt);
-			continue;
-		}
-		istream = ictx->streams[pkt->stream_index];
-		ostream = octx->streams[oidx];
-		pts = pkt->pts;
-		dts = pkt->dts;
-		duration = pkt->duration;
-		if (pts == AV_NOPTS_VALUE)
-			pts = 0;
-		if (dts == AV_NOPTS_VALUE)
-			dts = 0;
-		pkt->pts = av_rescale_q_rnd(pts, istream->time_base, ostream->time_base, AV_ROUND_NEAR_INF);
-		pkt->dts = av_rescale_q_rnd(dts, istream->time_base, ostream->time_base, AV_ROUND_NEAR_INF);
-		pkt->duration = av_rescale_q(duration, istream->time_base, ostream->time_base);
-		pkt->pos = -1;
-		pkt->stream_index = oidx;
-		ret = av_interleaved_write_frame(octx, pkt);
-		if (ret < 0) {
-			fprintf(stderr, "mkmpd: can't write frame\n");
-			break;
-		}
-	}
-	ret = av_write_trailer(octx);
-	if (ret < 0) {
-		fprintf(stderr, "mkmpd: can't write trailer\n");
-		goto end;
-	}
-end:
-	if (pkt != NULL)
-		av_packet_free(&pkt);
-	if (opts != NULL)
-		av_dict_free(&opts);
-	if (octx != NULL) {
-		avio_closep(&octx->pb);
-		avformat_free_context(octx);
-	}
-	avformat_close_input(&ictx);
-	return ret;
-}
-
 static b32
 validsub(AVStream *st)
 {
@@ -216,93 +74,192 @@ validsub(AVStream *st)
 }
 
 static int
-mksubs(Arena *a, String8 path, String8 dir)
+mkmedia(Arena *a, String8 path, String8 dir)
 {
-	AVFormatContext *ictx, **octxs;
-	AVStream *st, **ostreams;
-	AVDictionaryEntry *le;
-	AVPacket *pkt;
-	String8 opath, lang;
+	AVFormatContext *ictx, *mpdctx, **subctxs;
+	AVStream *istream, *mpdstream, **substreams;
+	AVDictionaryEntry *bps, *le;
+	AVDictionary *opts;
+	String8 mpdpath, bpsstr, subpath, lang;
 	int ret;
-	u64 i, nsubs;
+	U64array mpdstreams;
+	u64 i, nmpds, mpdidx;
+	AVPacket *pkt;
+	s64 pts, dts, duration;
 
 	ictx = NULL;
-	st = NULL;
+	mpdctx = NULL;
+	istream = NULL;
+	mpdstream = NULL;
+	bps = NULL;
 	le = NULL;
+	opts = NULL;
 	pkt = av_packet_alloc();
-	nsubs = 0;
+	mpdpath = pushstr8cat(a, dir, str8lit("/manifest.mpd"));
 	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
 	if (ret < 0) {
-		fprintf(stderr, "mksubs: can't open %s\n", path.str);
+		fprintf(stderr, "mkmedia: can't open %s\n", path.str);
 		return ret;
 	}
 	ret = avformat_find_stream_info(ictx, NULL);
 	if (ret < 0) {
-		fprintf(stderr, "mksubs: can't find stream info\n");
+		fprintf(stderr, "mkmedia: can't find stream info\n");
 		goto end;
 	}
-	octxs = pusharr(a, AVFormatContext *, ictx->nb_streams);
-	ostreams = pusharr(a, AVStream *, ictx->nb_streams);
-	for (i = 0; i < ictx->nb_streams; i++) {
-		st = ictx->streams[i];
-		if (!validsub(st))
-			continue;
-		lang = str8lit("unknown");
-		le = av_dict_get(st->metadata, "language", NULL, 0);
-		if (le != NULL)
-			lang = str8cstr(le->value);
-		opath = pushstr8f(a, "%s/%s%lu.ass", dir.str, lang.str, nsubs);
-		ret = avformat_alloc_output_context2(&octxs[i], NULL, "ass", (char *)opath.str);
-		if (ret < 0) {
-			fprintf(stderr, "mksubs: can't create output context\n");
-			continue;
-		}
-		ostreams[i] = avformat_new_stream(octxs[i], NULL);
-		if (ostreams[i] == NULL) {
-			ret = AVERROR(ENOMEM);
-			goto end;
-		}
-		ret = avcodec_parameters_copy(ostreams[i]->codecpar, st->codecpar);
-		if (ret < 0)
-			goto end;
-		ret = avio_open(&octxs[i]->pb, (char *)opath.str, AVIO_FLAG_WRITE);
-		if (ret < 0) {
-			fprintf(stderr, "mksubs: can't open output file %s\n", path.str);
-			goto end;
-		}
-		ret = avformat_write_header(octxs[i], NULL);
-		if (ret < 0) {
-			fprintf(stderr, "mksubs: can't write header\n");
-			goto end;
-		}
-		nsubs++;
+	ret = avformat_alloc_output_context2(&mpdctx, NULL, "dash", (char *)mpdpath.str);
+	if (ret < 0) {
+		fprintf(stderr, "mkmedia: can't create MPD output context\n");
+		goto end;
 	}
-	av_seek_frame(ictx, -1, 0, AVSEEK_FLAG_BACKWARD);
+	subctxs = pusharr(a, AVFormatContext *, ictx->nb_streams);
+	substreams = pusharr(a, AVStream *, ictx->nb_streams);
+	mpdstreams.cnt = ictx->nb_streams;
+	mpdstreams.v = pusharrnoz(a, u64, mpdstreams.cnt);
+	nmpds = 0;
+	for (i = 0; i < ictx->nb_streams; i++) {
+		istream = ictx->streams[i];
+		mpdstreams.v[i] = U64MAX;
+		if (validstream(istream)) {
+			mpdstream = avformat_new_stream(mpdctx, NULL);
+			if (mpdstream == NULL) {
+				ret = AVERROR(ENOMEM);
+				goto end;
+			}
+			ret = avcodec_parameters_copy(mpdstream->codecpar, istream->codecpar);
+			if (ret < 0)
+				goto end;
+			if (mpdstream->codecpar->bit_rate == 0) {
+				bps = av_dict_get(istream->metadata, "BPS", NULL, 0);
+				if (bps != NULL) {
+					bpsstr = str8cstr(bps->value);
+					mpdstream->codecpar->bit_rate = str8tou64(bpsstr, 10);
+				}
+			}
+			if (mpdstream->codecpar->frame_size == 0) {
+				switch (istream->codecpar->codec_id) {
+					case AV_CODEC_ID_AAC:
+						mpdstream->codecpar->frame_size = 1024;
+						break;
+					case AV_CODEC_ID_AC3:
+					case AV_CODEC_ID_EAC3:
+						mpdstream->codecpar->frame_size = 1536;
+						break;
+					case AV_CODEC_ID_FLAC:
+						mpdstream->codecpar->frame_size = 4096;
+						break;
+					case AV_CODEC_ID_MP3:
+						mpdstream->codecpar->frame_size = 1152;
+						break;
+					case AV_CODEC_ID_OPUS:
+						mpdstream->codecpar->frame_size = 960;
+						break;
+					default:
+						mpdstream->codecpar->frame_size = 1024;
+						break;
+				}
+			}
+			mpdstreams.v[i] = nmpds++;
+		}
+		if (validsub(istream)) {
+			lang = str8lit("unknown");
+			le = av_dict_get(istream->metadata, "language", NULL, 0);
+			if (le != NULL)
+				lang = str8cstr(le->value);
+			subpath = pushstr8f(a, "%s/%s%lu.ass", dir.str, lang.str, nowus());
+			ret = avformat_alloc_output_context2(&subctxs[i], NULL, "ass", (char *)subpath.str);
+			if (ret < 0) {
+				fprintf(stderr, "mkmedia: can't create subtitle output context\n");
+				continue;
+			}
+			substreams[i] = avformat_new_stream(subctxs[i], NULL);
+			if (substreams[i] == NULL) {
+				ret = AVERROR(ENOMEM);
+				goto end;
+			}
+			ret = avcodec_parameters_copy(substreams[i]->codecpar, istream->codecpar);
+			if (ret < 0)
+				goto end;
+			ret = avio_open(&subctxs[i]->pb, (char *)subpath.str, AVIO_FLAG_WRITE);
+			if (ret < 0) {
+				fprintf(stderr, "mkmedia: can't open subtitle file %s\n", subpath.str);
+				goto end;
+			}
+			ret = avformat_write_header(subctxs[i], NULL);
+			if (ret < 0) {
+				fprintf(stderr, "mkmedia: can't write subtitle header\n");
+				goto end;
+			}
+		}
+	}
+	av_dict_set(&opts, "hwaccel", "auto", 0);
+	av_dict_set(&opts, "index_correction", "1", 0);
+	av_dict_set(&opts, "streaming", "1", 0);
+	ret = avio_open(&mpdctx->pb, (char *)mpdpath.str, AVIO_FLAG_WRITE);
+	if (ret < 0) {
+		fprintf(stderr, "mkmedia: can't open MPD output file %s\n", mpdpath.str);
+		goto end;
+	}
+	ret = avformat_write_header(mpdctx, &opts);
+	if (ret < 0) {
+		fprintf(stderr, "mkmedia: can't write MPD header\n");
+		goto end;
+	}
 	while (av_read_frame(ictx, pkt) >= 0) {
 		i = pkt->stream_index;
-		if (octxs[i] == NULL || ostreams[i] == NULL) {
-			av_packet_unref(pkt);
-			continue;
+		istream = ictx->streams[i];
+		mpdidx = mpdstreams.v[i];
+		if (mpdidx != U64MAX) {
+			mpdstream = mpdctx->streams[mpdidx];
+			pts = pkt->pts;
+			dts = pkt->dts;
+			duration = pkt->duration;
+			if (pts == AV_NOPTS_VALUE)
+				pts = 0;
+			if (dts == AV_NOPTS_VALUE)
+				dts = 0;
+			pkt->pts = av_rescale_q_rnd(pts, istream->time_base, mpdstream->time_base, AV_ROUND_NEAR_INF);
+			pkt->dts = av_rescale_q_rnd(dts, istream->time_base, mpdstream->time_base, AV_ROUND_NEAR_INF);
+			pkt->duration = av_rescale_q(duration, istream->time_base, mpdstream->time_base);
+			pkt->pos = -1;
+			pkt->stream_index = mpdidx;
+			ret = av_interleaved_write_frame(mpdctx, pkt);
+			if (ret < 0) {
+				fprintf(stderr, "mkmedia: can't write MPD frame\n");
+				break;
+			}
 		}
-		st = ictx->streams[i];
-		pkt->stream_index = 0;
-		av_packet_rescale_ts(pkt, st->time_base, ostreams[i]->time_base);
-		ret = av_interleaved_write_frame(octxs[i], pkt);
-		if (ret < 0) {
-			fprintf(stderr, "mksubs: can't write frame\n");
-			break;
+		if (subctxs[i] != NULL && substreams[i] != NULL) {
+			pkt->stream_index = 0;
+			av_packet_rescale_ts(pkt, istream->time_base, substreams[i]->time_base);
+			ret = av_interleaved_write_frame(subctxs[i], pkt);
+			if (ret < 0) {
+				fprintf(stderr, "mkmedia: can't write subtitle frame\n");
+				break;
+			}
 		}
+		av_packet_unref(pkt);
+	}
+	ret = av_write_trailer(mpdctx);
+	if (ret < 0) {
+		fprintf(stderr, "mkmedia: can't write MPD trailer\n");
+		goto end;
 	}
 	for (i = 0; i < ictx->nb_streams; i++) {
-		if (octxs[i] != NULL) {
-			av_write_trailer(octxs[i]);
-			avio_closep(&octxs[i]->pb);
-			avformat_free_context(octxs[i]);
+		if (subctxs[i] != NULL) {
+			av_write_trailer(subctxs[i]);
+			avio_closep(&subctxs[i]->pb);
+			avformat_free_context(subctxs[i]);
 		}
 	}
 end:
 	if (pkt != NULL)
 		av_packet_free(&pkt);
+	if (opts != NULL)
+		av_dict_free(&opts);
+	if (mpdctx != NULL) {
+		avio_closep(&mpdctx->pb);
+		avformat_free_context(mpdctx);
+	}
 	avformat_close_input(&ictx);
 	return ret;
 }
@@ -342,10 +299,7 @@ main(int argc, char *argv[])
 		ret = 1;
 		goto end;
 	}
-	ret = mkmpd(scratch.a, path, dir);
-	if (ret < 0)
-		goto end;
-	ret = mksubs(scratch.a, path, dir);
+	ret = mkmedia(scratch.a, path, dir);
 	if (ret < 0)
 		goto end;
 end:
