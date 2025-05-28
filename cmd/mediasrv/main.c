@@ -149,8 +149,7 @@ mkmpd(Arena *a, String8 path, String8 dir)
 					break;
 			}
 		}
-		streams.v[i] = nostreams;
-		nostreams++;
+		streams.v[i] = nostreams++;
 	}
 	av_dict_set(&opts, "hwaccel", "auto", 0);
 	av_dict_set(&opts, "index_correction", "1", 0);

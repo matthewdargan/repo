@@ -207,7 +207,7 @@ downloadtorrents(Arena *a, String8array torrents)
 	String8 cfgpath, historypath, historydata, tmppath, torrentstodl, torrentnl;
 	libtorrent::settings_pack pack;
 	CURL *curl;
-	u64 todl, i, j;
+	u64 i, j;
 	FILE *fp;
 	CURLcode res;
 	long httpcode;
@@ -242,7 +242,6 @@ downloadtorrents(Arena *a, String8array torrents)
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	tmppath = str8lit("/tmp/torrss.torrent");
 	torrentstodl = str8zero();
-	todl = 0;
 	for (i = 0; i < torrents.cnt; i++) {
 		if (historydata.len > 0)
 			if (str8index(historydata, 0, torrents.v[i], 0) != historydata.len) {
@@ -277,11 +276,10 @@ downloadtorrents(Arena *a, String8array torrents)
 		session.add_torrent(ps);
 		torrentnl = pushstr8cat(a, torrents.v[i], str8lit("\n"));
 		torrentstodl = pushstr8cat(a, torrentstodl, torrentnl);
-		todl++;
 	}
 	unlink((const char *)tmppath.str);
 	curl_easy_cleanup(curl);
-	if (todl == 0) {
+	if (i == 0) {
 		fprintf(stderr, "torrss: no torrents to download\n");
 		return;
 	}
@@ -320,7 +318,7 @@ downloadtorrents(Arena *a, String8array torrents)
 		}
 		sleepms(100);
 	}
-	printf("torrss: downloaded %lu torrents\n", todl);
+	printf("torrss: downloaded %lu torrents\n", i);
 }
 
 static void *

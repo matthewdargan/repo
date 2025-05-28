@@ -443,19 +443,17 @@ str8split(Arena *a, String8 s, u8 *split, u64 splen, u32 flags)
 	String8 ss;
 
 	memset(&list, 0, sizeof(list));
-	p = s.str;
 	end = s.str + s.len;
-	while (p < end) {
+	for (p = s.str; p < end;) {
 		start = p;
 		for (; p < end; p++) {
 			c = *p;
 			issplit = 0;
-			for (i = 0; i < splen; i++) {
+			for (i = 0; i < splen; i++)
 				if (split[i] == c) {
 					issplit = 1;
 					break;
 				}
-			}
 			if (issplit)
 				break;
 		}
