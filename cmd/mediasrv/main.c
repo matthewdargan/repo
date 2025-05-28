@@ -316,6 +316,7 @@ main(int argc, char *argv[])
 	Cmd parsed;
 	Temp scratch;
 	String8 path, dir;
+	int ret;
 
 	sysinfo.nprocs = sysconf(_SC_NPROCESSORS_ONLN);
 	sysinfo.pagesz = sysconf(_SC_PAGESIZE);
@@ -328,21 +329,28 @@ main(int argc, char *argv[])
 	parsed = cmdparse(arena, args);
 	scratch = tempbegin(arena);
 	path = str8zero();
+	ret = 0;
 	if (cmdhasarg(&parsed, str8lit("p")))
 		path = cmdstr(&parsed, str8lit("p"));
 	if (path.len == 0) {
 		fprintf(stderr, "usage: mediasrv -p path\n");
-		return 1;
+		ret = 1;
+		goto end;
 	}
 	dir = str8lit("output");
 	if (!direxists(dir) && !osmkdir(dir)) {
 		fprintf(stderr, "mediasrv: cannot create directory '%s'\n", dir.str);
-		return 1;
+		ret = 1;
+		goto end;
 	}
-	if (mkmpd(scratch.a, path, dir) < 0)
-		return 1;
-	if (mksubs(scratch.a, path, dir) < 0)
-		return 1;
+	ret = mkmpd(scratch.a, path, dir);
+	if (ret < 0)
+		goto end;
+	ret = mksubs(scratch.a, path, dir);
+	if (ret < 0)
+		goto end;
+end:
 	tempend(scratch);
-	return 0;
+	arenarelease(arena);
+	return ret;
 }
