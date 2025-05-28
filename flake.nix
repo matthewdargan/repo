@@ -10,7 +10,7 @@
       url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";
     };
     ghostty = {
-      inputs.nixpkgs-unstable.follows = "nixpkgs";
+      inputs.nixpkgs.follows = "nixpkgs";
       url = "github:ghostty-org/ghostty";
     };
     home-manager = {
