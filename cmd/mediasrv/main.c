@@ -74,13 +74,13 @@ validsub(AVStream *st)
 }
 
 static int
-mkmedia(Arena *a, String8 path, String8 dir)
+mkmedia(Arena *a, String8 path)
 {
 	AVFormatContext *ictx, *mpdctx, **subctxs;
 	AVStream *istream, *mpdstream, **substreams;
 	AVDictionaryEntry *bps, *le;
 	AVDictionary *opts;
-	String8 mpdpath, bpsstr, subpath, lang;
+	String8 dir, mpdpath, bpsstr, subpath, lang;
 	int ret;
 	U64array mpdstreams;
 	u64 i, nmpds, mpdidx;
@@ -89,17 +89,24 @@ mkmedia(Arena *a, String8 path, String8 dir)
 
 	ictx = NULL;
 	mpdctx = NULL;
+	subctxs = NULL;
 	istream = NULL;
 	mpdstream = NULL;
 	bps = NULL;
 	le = NULL;
 	opts = NULL;
 	pkt = av_packet_alloc();
+	dir = u64tostr8(a, nowus(), 10, 0, 0);
+	if (!osmkdir(dir)) {
+		fprintf(stderr, "mkmedia: can't create directory '%s'\n", dir.str);
+		ret = 1;
+		goto end;
+	}
 	mpdpath = pushstr8cat(a, dir, str8lit("/manifest.mpd"));
 	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
 	if (ret < 0) {
-		fprintf(stderr, "mkmedia: can't open %s\n", path.str);
-		return ret;
+		fprintf(stderr, "mkmedia: can't open '%s'\n", path.str);
+		goto end;
 	}
 	ret = avformat_find_stream_info(ictx, NULL);
 	if (ret < 0) {
@@ -181,7 +188,7 @@ mkmedia(Arena *a, String8 path, String8 dir)
 				goto end;
 			ret = avio_open(&subctxs[i]->pb, (char *)subpath.str, AVIO_FLAG_WRITE);
 			if (ret < 0) {
-				fprintf(stderr, "mkmedia: can't open subtitle file %s\n", subpath.str);
+				fprintf(stderr, "mkmedia: can't open subtitle file '%s'\n", subpath.str);
 				goto end;
 			}
 			ret = avformat_write_header(subctxs[i], NULL);
@@ -196,7 +203,7 @@ mkmedia(Arena *a, String8 path, String8 dir)
 	av_dict_set(&opts, "streaming", "1", 0);
 	ret = avio_open(&mpdctx->pb, (char *)mpdpath.str, AVIO_FLAG_WRITE);
 	if (ret < 0) {
-		fprintf(stderr, "mkmedia: can't open MPD output file %s\n", mpdpath.str);
+		fprintf(stderr, "mkmedia: can't open MPD output file '%s'\n", mpdpath.str);
 		goto end;
 	}
 	ret = avformat_write_header(mpdctx, &opts);
@@ -244,16 +251,17 @@ mkmedia(Arena *a, String8 path, String8 dir)
 		fprintf(stderr, "mkmedia: can't write MPD trailer\n");
 		goto end;
 	}
-	for (i = 0; i < ictx->nb_streams; i++) {
-		if (subctxs[i] != NULL) {
-			av_write_trailer(subctxs[i]);
-			avio_closep(&subctxs[i]->pb);
-			avformat_free_context(subctxs[i]);
-		}
-	}
 end:
 	if (pkt != NULL)
 		av_packet_free(&pkt);
+	if (subctxs != NULL)
+		for (i = 0; i < ictx->nb_streams; i++) {
+			if (subctxs[i] != NULL) {
+				av_write_trailer(subctxs[i]);
+				avio_closep(&subctxs[i]->pb);
+				avformat_free_context(subctxs[i]);
+			}
+		}
 	if (opts != NULL)
 		av_dict_free(&opts);
 	if (mpdctx != NULL) {
@@ -271,7 +279,7 @@ main(int argc, char *argv[])
 	String8list args;
 	Cmd parsed;
 	Temp scratch;
-	String8 path, dir;
+	String8 path;
 	int ret;
 
 	sysinfo.nprocs = sysconf(_SC_NPROCESSORS_ONLN);
@@ -293,13 +301,7 @@ main(int argc, char *argv[])
 		ret = 1;
 		goto end;
 	}
-	dir = str8lit("output");
-	if (!direxists(dir) && !osmkdir(dir)) {
-		fprintf(stderr, "mediasrv: cannot create directory '%s'\n", dir.str);
-		ret = 1;
-		goto end;
-	}
-	ret = mkmedia(scratch.a, path, dir);
+	ret = mkmedia(scratch.a, path);
 	if (ret < 0)
 		goto end;
 end:
