@@ -21,6 +21,7 @@
             pkgs.boost
             pkgs.curl
             pkgs.ffmpeg-full
+            pkgs.libmicrohttpd
             pkgs.libtorrent-rasterbar
             pkgs.libxml2
             pkgs.pkg-config
@@ -35,7 +36,7 @@
         };
         packages = {
           mediasrv = pkgs.clangStdenv.mkDerivation {
-            buildInputs = [pkgs.ffmpeg];
+            buildInputs = [pkgs.ffmpeg pkgs.libmicrohttpd];
             buildPhase = "./build release mediasrv";
             installPhase = ''
               mkdir -p "$out/bin"
@@ -49,7 +50,7 @@
             };
             pname = "mediasrv";
             src = ./.;
-            version = "0.3.0";
+            version = "0.4.0";
           };
           tor = pkgs.clangStdenv.mkDerivation {
             buildInputs = [
