@@ -33,6 +33,12 @@ typedef double f64;
 #define S32MIN (-S32MAX - 1)
 #define S64MIN (-S64MAX - 1)
 
+typedef struct U64array U64array;
+struct U64array {
+	u64 *v;
+	u64 cnt;
+};
+
 typedef struct Datetime Datetime;
 struct Datetime {
 	u16 msec; /* [0,999] */

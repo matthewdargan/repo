@@ -21,12 +21,6 @@
 #include "libu/os.c"
 /* clang-format on */
 
-typedef struct U64array U64array;
-struct U64array {
-	u64 *v;
-	u64 cnt;
-};
-
 readonly static String8 mediadir = str8litc("/tmp/mediasrv");
 readonly static b32 run = 1;
 
@@ -78,7 +72,22 @@ validsub(AVStream *st)
 	       (st->codecpar->codec_id == AV_CODEC_ID_ASS || st->codecpar->codec_id == AV_CODEC_ID_SSA);
 }
 
-static int
+static void
+freesubs(AVFormatContext **subctxs, u64 n)
+{
+	u64 i;
+
+	if (subctxs != NULL)
+		for (i = 0; i < n; i++) {
+			if (subctxs[i] != NULL) {
+				av_write_trailer(subctxs[i]);
+				avio_closep(&subctxs[i]->pb);
+				avformat_free_context(subctxs[i]);
+			}
+		}
+}
+
+static b32
 mkmedia(Arena *a, String8 path)
 {
 	AVFormatContext *ictx, *mpdctx, **subctxs;
@@ -91,6 +100,7 @@ mkmedia(Arena *a, String8 path)
 	u64 i, nmpds, mpdidx;
 	AVPacket *pkt;
 	s64 pts, dts, duration;
+	b32 ok;
 
 	ictx = NULL;
 	mpdctx = NULL;
@@ -101,27 +111,29 @@ mkmedia(Arena *a, String8 path)
 	le = NULL;
 	opts = NULL;
 	pkt = av_packet_alloc();
+	ok = 1;
 	dir = u64tostr8(a, nowus(), 10, 0, 0);
 	if (!osmkdir(dir)) {
 		fprintf(stderr, "mkmedia: can't create directory '%s'\n", dir.str);
-		ret = 1;
-		goto end;
+		return 1;
 	}
 	mpdpath = pushstr8cat(a, dir, str8lit("/manifest.mpd"));
 	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't open '%s'\n", path.str);
-		goto end;
+		return 1;
 	}
 	ret = avformat_find_stream_info(ictx, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't find stream info\n");
-		goto end;
+		avformat_close_input(&ictx);
+		return 1;
 	}
 	ret = avformat_alloc_output_context2(&mpdctx, NULL, "dash", (char *)mpdpath.str);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't create MPD output context\n");
-		goto end;
+		avformat_close_input(&ictx);
+		return 1;
 	}
 	subctxs = pusharr(a, AVFormatContext *, ictx->nb_streams);
 	substreams = pusharr(a, AVStream *, ictx->nb_streams);
@@ -134,12 +146,18 @@ mkmedia(Arena *a, String8 path)
 		if (validstream(istream)) {
 			mpdstream = avformat_new_stream(mpdctx, NULL);
 			if (mpdstream == NULL) {
-				ret = AVERROR(ENOMEM);
-				goto end;
+				freesubs(subctxs, ictx->nb_streams);
+				avformat_free_context(mpdctx);
+				avformat_close_input(&ictx);
+				return 1;
 			}
 			ret = avcodec_parameters_copy(mpdstream->codecpar, istream->codecpar);
-			if (ret < 0)
-				goto end;
+			if (ret < 0) {
+				freesubs(subctxs, ictx->nb_streams);
+				avformat_free_context(mpdctx);
+				avformat_close_input(&ictx);
+				return 1;
+			}
 			if (mpdstream->codecpar->bit_rate == 0) {
 				bps = av_dict_get(istream->metadata, "BPS", NULL, 0);
 				if (bps != NULL) {
@@ -185,21 +203,20 @@ mkmedia(Arena *a, String8 path)
 			}
 			substreams[i] = avformat_new_stream(subctxs[i], NULL);
 			if (substreams[i] == NULL) {
-				ret = AVERROR(ENOMEM);
-				goto end;
+				continue;
 			}
 			ret = avcodec_parameters_copy(substreams[i]->codecpar, istream->codecpar);
 			if (ret < 0)
-				goto end;
+				continue;
 			ret = avio_open(&subctxs[i]->pb, (char *)subpath.str, AVIO_FLAG_WRITE);
 			if (ret < 0) {
 				fprintf(stderr, "mkmedia: can't open subtitle file '%s'\n", subpath.str);
-				goto end;
+				continue;
 			}
 			ret = avformat_write_header(subctxs[i], NULL);
 			if (ret < 0) {
 				fprintf(stderr, "mkmedia: can't write subtitle header\n");
-				goto end;
+				continue;
 			}
 		}
 	}
@@ -209,12 +226,21 @@ mkmedia(Arena *a, String8 path)
 	ret = avio_open(&mpdctx->pb, (char *)mpdpath.str, AVIO_FLAG_WRITE);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't open MPD output file '%s'\n", mpdpath.str);
-		goto end;
+		av_dict_free(&opts);
+		freesubs(subctxs, ictx->nb_streams);
+		avformat_free_context(mpdctx);
+		avformat_close_input(&ictx);
+		return 1;
 	}
 	ret = avformat_write_header(mpdctx, &opts);
+	av_dict_free(&opts);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't write MPD header\n");
-		goto end;
+		freesubs(subctxs, ictx->nb_streams);
+		avio_closep(&mpdctx->pb);
+		avformat_free_context(mpdctx);
+		avformat_close_input(&ictx);
+		return 1;
 	}
 	while (av_read_frame(ictx, pkt) >= 0) {
 		i = pkt->stream_index;
@@ -254,27 +280,14 @@ mkmedia(Arena *a, String8 path)
 	ret = av_write_trailer(mpdctx);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't write MPD trailer\n");
-		goto end;
+		ok = 0;
 	}
-end:
-	if (pkt != NULL)
-		av_packet_free(&pkt);
-	if (subctxs != NULL)
-		for (i = 0; i < ictx->nb_streams; i++) {
-			if (subctxs[i] != NULL) {
-				av_write_trailer(subctxs[i]);
-				avio_closep(&subctxs[i]->pb);
-				avformat_free_context(subctxs[i]);
-			}
-		}
-	if (opts != NULL)
-		av_dict_free(&opts);
-	if (mpdctx != NULL) {
-		avio_closep(&mpdctx->pb);
-		avformat_free_context(mpdctx);
-	}
+	av_packet_free(&pkt);
+	freesubs(subctxs, ictx->nb_streams);
+	avio_closep(&mpdctx->pb);
+	avformat_free_context(mpdctx);
 	avformat_close_input(&ictx);
-	return ret;
+	return ok;
 }
 
 static int
@@ -344,8 +357,7 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *met
 			return ret;
 		}
 		scratch = tempbegin(arena);
-		ret = mkmedia(scratch.a, mediapath);
-		if (ret == 0) {
+		if (mkmedia(scratch.a, mediapath)) {
 			dir = u64tostr8(scratch.a, nowus(), 10, 0, 0);
 			resptxt = pushstr8f(scratch.a, "/media/%s/manifest.mpd", dir.str);
 			resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
@@ -362,9 +374,8 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *met
 	}
 	if (str8cmp(urlstr, media, RSIDETOL)) {
 		mediapath = str8skip(urlstr, media.len);
-		if (mediapath.len < 1 || str8index(mediapath, 0, str8lit(".."), 0) < mediapath.len) {
+		if (mediapath.len < 1 || str8index(mediapath, 0, str8lit(".."), 0) < mediapath.len)
 			return MHD_NO;
-		}
 		fullpath = pushstr8cat(scratch.a, mediadir, mediapath);
 		mime = mimetype(mediapath);
 		return sendfile(conn, fullpath, mime);
@@ -395,7 +406,6 @@ main(int argc, char *argv[])
 	Temp scratch;
 	String8 portstr;
 	u64 port;
-	int ret;
 	struct MHD_Daemon *daemon;
 
 	sysinfo.nprocs = sysconf(_SC_NPROCESSORS_ONLN);
@@ -410,29 +420,27 @@ main(int argc, char *argv[])
 	scratch = tempbegin(arena);
 	portstr = str8zero();
 	port = 8080;
-	ret = 0;
 	if (cmdhasarg(&parsed, str8lit("p"))) {
 		portstr = cmdstr(&parsed, str8lit("p"));
 		port = str8tou64(portstr, 10);
 	}
 	if (!direxists(mediadir) && !osmkdir(mediadir)) {
 		fprintf(stderr, "mediasrv: can't create directory '%s'\n", mediadir.str);
-		ret = 1;
-		goto end;
+		tempend(scratch);
+		arenarelease(arena);
+		return 1;
 	}
 	daemon = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION, port, NULL, NULL, &reqhandler, arena, MHD_OPTION_END);
 	if (daemon == NULL) {
 		fprintf(stderr, "mediasrv: can't start HTTP server\n");
-		ret = 1;
-		goto end;
+		tempend(scratch);
+		arenarelease(arena);
+		return 1;
 	}
 	signal(SIGINT, sighandler);
 	signal(SIGTERM, sighandler);
 	while (run)
 		sleepms(1000);
 	MHD_stop_daemon(daemon);
-end:
-	tempend(scratch);
-	arenarelease(arena);
-	return ret;
+	return 0;
 }
