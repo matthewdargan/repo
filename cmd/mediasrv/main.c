@@ -21,7 +21,9 @@
 #include "libu/os.c"
 /* clang-format on */
 
-readonly static String8 mediadir = str8litc("/tmp/mediasrv");
+readonly static String8 mediadir = str8litc("/tmp/mediasrv/");
+readonly static String8 gen = str8litc("/generate/");
+readonly static String8 media = str8litc("/media/");
 readonly static b32 run = 1;
 
 static b32
@@ -87,20 +89,19 @@ freesubs(AVFormatContext **subctxs, u64 n)
 		}
 }
 
-static b32
+static String8
 mkmedia(Arena *a, String8 path)
 {
 	AVFormatContext *ictx, *mpdctx, **subctxs;
 	AVStream *istream, *mpdstream, **substreams;
 	AVDictionaryEntry *bps, *le;
 	AVDictionary *opts;
-	String8 dir, mpdpath, bpsstr, subpath, lang;
+	String8 timestamp, dir, mpdpath, bpsstr, subpath, lang;
 	int ret;
 	U64array mpdstreams;
 	u64 i, nmpds, mpdidx;
 	AVPacket *pkt;
 	s64 pts, dts, duration;
-	b32 ok;
 
 	ictx = NULL;
 	mpdctx = NULL;
@@ -111,29 +112,30 @@ mkmedia(Arena *a, String8 path)
 	le = NULL;
 	opts = NULL;
 	pkt = av_packet_alloc();
-	ok = 1;
-	dir = u64tostr8(a, nowus(), 10, 0, 0);
+	timestamp = u64tostr8(a, nowus(), 10, 0, 0);
+	dir = pushstr8cat(a, mediadir, str8lit("/"));
+	dir = pushstr8cat(a, dir, timestamp);
 	if (!osmkdir(dir)) {
 		fprintf(stderr, "mkmedia: can't create directory '%s'\n", dir.str);
-		return 1;
+		return str8zero();
 	}
 	mpdpath = pushstr8cat(a, dir, str8lit("/manifest.mpd"));
 	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't open '%s'\n", path.str);
-		return 1;
+		return str8zero();
 	}
 	ret = avformat_find_stream_info(ictx, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't find stream info\n");
 		avformat_close_input(&ictx);
-		return 1;
+		return str8zero();
 	}
 	ret = avformat_alloc_output_context2(&mpdctx, NULL, "dash", (char *)mpdpath.str);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't create MPD output context\n");
 		avformat_close_input(&ictx);
-		return 1;
+		return str8zero();
 	}
 	subctxs = pusharr(a, AVFormatContext *, ictx->nb_streams);
 	substreams = pusharr(a, AVStream *, ictx->nb_streams);
@@ -149,14 +151,14 @@ mkmedia(Arena *a, String8 path)
 				freesubs(subctxs, ictx->nb_streams);
 				avformat_free_context(mpdctx);
 				avformat_close_input(&ictx);
-				return 1;
+				return str8zero();
 			}
 			ret = avcodec_parameters_copy(mpdstream->codecpar, istream->codecpar);
 			if (ret < 0) {
 				freesubs(subctxs, ictx->nb_streams);
 				avformat_free_context(mpdctx);
 				avformat_close_input(&ictx);
-				return 1;
+				return str8zero();
 			}
 			if (mpdstream->codecpar->bit_rate == 0) {
 				bps = av_dict_get(istream->metadata, "BPS", NULL, 0);
@@ -230,7 +232,7 @@ mkmedia(Arena *a, String8 path)
 		freesubs(subctxs, ictx->nb_streams);
 		avformat_free_context(mpdctx);
 		avformat_close_input(&ictx);
-		return 1;
+		return str8zero();
 	}
 	ret = avformat_write_header(mpdctx, &opts);
 	av_dict_free(&opts);
@@ -240,7 +242,7 @@ mkmedia(Arena *a, String8 path)
 		avio_closep(&mpdctx->pb);
 		avformat_free_context(mpdctx);
 		avformat_close_input(&ictx);
-		return 1;
+		return str8zero();
 	}
 	while (av_read_frame(ictx, pkt) >= 0) {
 		i = pkt->stream_index;
@@ -280,14 +282,14 @@ mkmedia(Arena *a, String8 path)
 	ret = av_write_trailer(mpdctx);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't write MPD trailer\n");
-		ok = 0;
+		timestamp = str8zero();
 	}
 	av_packet_free(&pkt);
 	freesubs(subctxs, ictx->nb_streams);
 	avio_closep(&mpdctx->pb);
 	avformat_free_context(mpdctx);
 	avformat_close_input(&ictx);
-	return ok;
+	return timestamp;
 }
 
 static int
@@ -337,15 +339,13 @@ static enum MHD_Result
 reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *method, const char *, const char *,
            size_t *, void **)
 {
-	String8 gen, media, urlstr, mediapath, dir, err, resptxt, fullpath, mime;
+	String8 urlstr, mediapath, dir, err, resptxt, fullpath, mime;
 	struct MHD_Response *resp;
 	int ret;
 	Temp scratch;
 
 	if (strcmp(method, "GET") != 0)
 		return MHD_NO;
-	gen = str8lit("/generate/");
-	media = str8lit("/media/");
 	urlstr = str8cstr((char *)url);
 	if (str8cmp(urlstr, gen, RSIDETOL)) {
 		mediapath = str8skip(urlstr, gen.len);
@@ -357,9 +357,9 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *met
 			return ret;
 		}
 		scratch = tempbegin(arena);
-		if (mkmedia(scratch.a, mediapath)) {
-			dir = u64tostr8(scratch.a, nowus(), 10, 0, 0);
-			resptxt = pushstr8f(scratch.a, "/media/%s/manifest.mpd", dir.str);
+		dir = mkmedia(scratch.a, mediapath);
+		if (dir.len > 0) {
+			resptxt = pushstr8f(scratch.a, "%s/manifest.mpd", dir.str);
 			resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
 			MHD_add_response_header(resp, "Content-Type", "text/plain");
 			ret = MHD_queue_response(conn, MHD_HTTP_OK, resp);
@@ -373,11 +373,13 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *met
 		return ret;
 	}
 	if (str8cmp(urlstr, media, RSIDETOL)) {
+		scratch = tempbegin(arena);
 		mediapath = str8skip(urlstr, media.len);
 		if (mediapath.len < 1 || str8index(mediapath, 0, str8lit(".."), 0) < mediapath.len)
 			return MHD_NO;
 		fullpath = pushstr8cat(scratch.a, mediadir, mediapath);
 		mime = mimetype(mediapath);
+		tempend(scratch);
 		return sendfile(conn, fullpath, mime);
 	}
 	resptxt = str8lit(
@@ -403,7 +405,6 @@ main(int argc, char *argv[])
 	Arenaparams ap;
 	String8list args;
 	Cmd parsed;
-	Temp scratch;
 	String8 portstr;
 	u64 port;
 	struct MHD_Daemon *daemon;
@@ -417,7 +418,6 @@ main(int argc, char *argv[])
 	arena = arenaalloc(ap);
 	args = osargs(arena, argc, argv);
 	parsed = cmdparse(arena, args);
-	scratch = tempbegin(arena);
 	portstr = str8zero();
 	port = 8080;
 	if (cmdhasarg(&parsed, str8lit("p"))) {
@@ -426,14 +426,12 @@ main(int argc, char *argv[])
 	}
 	if (!direxists(mediadir) && !osmkdir(mediadir)) {
 		fprintf(stderr, "mediasrv: can't create directory '%s'\n", mediadir.str);
-		tempend(scratch);
 		arenarelease(arena);
 		return 1;
 	}
 	daemon = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION, port, NULL, NULL, &reqhandler, arena, MHD_OPTION_END);
 	if (daemon == NULL) {
 		fprintf(stderr, "mediasrv: can't start HTTP server\n");
-		tempend(scratch);
 		arenarelease(arena);
 		return 1;
 	}
