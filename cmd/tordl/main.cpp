@@ -150,7 +150,7 @@ main(int argc, char *argv[])
 		}
 	} else {
 		for (;;) {
-			n = read(STDIN_FILENO, buf, sizeof(buf));
+			n = read(STDIN_FILENO, buf, sizeof buf);
 			if (n <= 0)
 				break;
 			chunk = str8(buf, (u64)n);

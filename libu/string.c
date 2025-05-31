@@ -442,7 +442,7 @@ str8split(Arena *a, String8 s, u8 *split, u64 splen, u32 flags)
 	u64 i;
 	String8 ss;
 
-	memset(&list, 0, sizeof(list));
+	memset(&list, 0, sizeof list);
 	end = s.str + s.len;
 	for (p = s.str; p < end;) {
 		start = p;
@@ -474,9 +474,9 @@ str8listjoin(Arena *a, String8list *list, Stringjoin *opts)
 	u8 *p;
 	String8node *node;
 
-	memset(&join, 0, sizeof(join));
+	memset(&join, 0, sizeof join);
 	if (opts != NULL)
-		memcpy(&join, opts, sizeof(join));
+		memcpy(&join, opts, sizeof join);
 	nsep = 0;
 	if (list->nnode > 0)
 		nsep = list->nnode - 1;

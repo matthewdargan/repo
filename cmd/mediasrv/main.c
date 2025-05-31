@@ -113,8 +113,7 @@ mkmedia(Arena *a, String8 path)
 	opts = NULL;
 	pkt = av_packet_alloc();
 	timestamp = u64tostr8(a, nowus(), 10, 0, 0);
-	dir = pushstr8cat(a, mediadir, str8lit("/"));
-	dir = pushstr8cat(a, dir, timestamp);
+	dir = pushstr8cat(a, mediadir, timestamp);
 	if (!osmkdir(dir)) {
 		fprintf(stderr, "mkmedia: can't create directory '%s'\n", dir.str);
 		return str8zero();

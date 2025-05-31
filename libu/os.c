@@ -5,7 +5,7 @@ osargs(Arena *a, int argc, char **argv)
 	int i;
 	String8 s;
 
-	memset(&list, 0, sizeof(list));
+	memset(&list, 0, sizeof list);
 	for (i = 0; i < argc; i++) {
 		s = str8cstr(argv[i]);
 		str8listpush(a, &list, s);
@@ -99,7 +99,7 @@ datetimetotm(Datetime dt)
 {
 	tm t;
 
-	memset(&t, 0, sizeof(t));
+	memset(&t, 0, sizeof t);
 	t.tm_sec = dt.sec;
 	t.tm_min = dt.min;
 	t.tm_hour = dt.hour;
@@ -118,7 +118,7 @@ datetimetotimespec(Datetime dt)
 
 	t = datetimetotm(dt);
 	sec = timegm(&t);
-	memset(&ts, 0, sizeof(ts));
+	memset(&ts, 0, sizeof ts);
 	ts.tv_sec = sec;
 	return ts;
 }
@@ -139,7 +139,7 @@ stattoprops(struct stat *st)
 {
 	Fprops props;
 
-	memset(&props, 0, sizeof(props));
+	memset(&props, 0, sizeof props);
 	props.size = st->st_size;
 	props.modified = timespectodense(st->st_mtim);
 	props.created = timespectodense(st->st_ctim);
@@ -289,7 +289,7 @@ osfstat(u64 fd)
 	struct stat st;
 	Fprops props;
 
-	memset(&props, 0, sizeof(props));
+	memset(&props, 0, sizeof props);
 	if (fd == 0)
 		return props;
 	if (fstat(fd, &st) != -1)
@@ -377,7 +377,7 @@ osstat(String8 path)
 
 	scratch = tempbegin(arena);
 	p = pushstr8cpy(scratch.a, path);
-	memset(&props, 0, sizeof(props));
+	memset(&props, 0, sizeof props);
 	if (stat((char *)p.str, &st) != -1)
 		props = stattoprops(&st);
 	tempend(scratch);

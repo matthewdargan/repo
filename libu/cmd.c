@@ -89,7 +89,7 @@ cmdparse(Arena *a, String8list args)
 	String8list optvals;
 	u64 eqpos, i;
 
-	memset(&parsed, 0, sizeof(parsed));
+	memset(&parsed, 0, sizeof parsed);
 	parsed.exe = args.start->str;
 	parsed.optabsz = 4096;
 	parsed.optab = pusharr(a, Cmdopt *, parsed.optabsz);
@@ -112,7 +112,7 @@ cmdparse(Arena *a, String8list args)
 		} else
 			isopt = 0;
 		if (isopt) {
-			memset(&optvals, 0, sizeof(optvals));
+			memset(&optvals, 0, sizeof optvals);
 			eqpos = str8index(optname, 0, str8lit("="), 0);
 			if (eqpos < optname.len) {
 				str8listpush(a, &optvals, str8skip(optname, eqpos + 1));
