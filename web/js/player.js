@@ -1,4 +1,5 @@
-import ASS from "/static/js/ass.min.js";
+import ASS from "/js/ass.min.js";
+import * as dashjs from "/js/dash.all.js";
 
 export class Player {
     constructor(video_container, stream_url, subtitles) {

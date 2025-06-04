@@ -328,6 +328,12 @@ mimetype(String8 path)
 		return str8lit("video/mp4");
 	else if (str8cmp(ext, str8lit("ass"), 0))
 		return str8lit("text/plain");
+	else if (str8cmp(ext, str8lit("html"), 0))
+		return str8lit("text/html");
+	else if (str8cmp(ext, str8lit("js"), 0))
+		return str8lit("application/javascript");
+	else if (str8cmp(ext, str8lit("css"), 0))
+		return str8lit("text/css");
 	else
 		return str8lit("application/octet-stream");
 }
@@ -364,17 +370,24 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *met
            size_t *, void **)
 {
 	Temp scratch;
-	String8 urlstr, mime, mediadir, resptxt;
+	String8 urlstr, mime, indexpath, mediadir, resptxt;
 	struct MHD_Response *resp;
 	int ret;
 
 	if (strcmp(method, "GET") != 0)
 		return MHD_NO;
 	urlstr = str8cstr((char *)url);
+	if (urlstr.len == 0 || str8cmp(urlstr, str8lit("/"), 0)) {
+		indexpath = str8lit("web/index.html");
+		if (fileexists(indexpath)) {
+			mime = str8lit("text/html");
+			ret = sendfile(conn, indexpath, mime);
+			return ret;
+		}
+	}
 	if (str8index(urlstr, 0, str8lit(".."), 0) < urlstr.len)
 		return MHD_NO;
-	if (urlstr.len > 0 && urlstr.str[0] == '/')
-		urlstr = str8skip(urlstr, 1);
+	urlstr = str8skip(urlstr, 1);
 	scratch = tempbegin(arena);
 	if (str8cmp(str8suffix(urlstr, subs.len), subs, 0)) {
 		if (direxists(urlstr))
