@@ -9,7 +9,7 @@ usage() {
 debug=1
 targets=''
 opt='-O3'
-common='-I../ -g -fdiagnostics-absolute-paths -W -Wall -Wextra -Xclang -flto-visibility-public-std'
+common='-I../ -g -fdiagnostics-absolute-paths -Wall -Wextra'
 medialibs='-lavcodec -lavformat -lavutil -lmicrohttpd -lswscale'
 
 for i
@@ -31,7 +31,7 @@ do
 done
 
 [ -z "$targets" ] && usage
-[ "$debug" -eq 1 ] && opt='-O0'
+[ "$debug" -eq 1 ] && opt='-O0 -fsanitize=address -fno-omit-frame-pointer'
 cc="clang $opt $common"
 cpp="clang++ $opt $common"
 
