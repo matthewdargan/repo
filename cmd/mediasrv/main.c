@@ -370,7 +370,7 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *met
            size_t *, void **)
 {
 	Temp scratch;
-	String8 urlstr, mime, indexpath, mediadir, resptxt;
+	String8 urlstr, mime, path, mediadir, resptxt;
 	struct MHD_Response *resp;
 	int ret;
 
@@ -378,10 +378,10 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *met
 		return MHD_NO;
 	urlstr = str8cstr((char *)url);
 	if (urlstr.len == 0 || str8cmp(urlstr, str8lit("/"), 0)) {
-		indexpath = str8lit("web/index.html");
-		if (fileexists(indexpath)) {
+		path = str8lit("web/index.html");
+		if (fileexists(path)) {
 			mime = str8lit("text/html");
-			ret = sendfile(conn, indexpath, mime);
+			ret = sendfile(conn, path, mime);
 			return ret;
 		}
 	}
@@ -389,6 +389,15 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *met
 		return MHD_NO;
 	urlstr = str8skip(urlstr, 1);
 	scratch = tempbegin(arena);
+	if (str8index(urlstr, 0, str8lit("css/"), 0) == 0 || str8index(urlstr, 0, str8lit("js/"), 0) == 0) {
+		path = pushstr8cat(scratch.a, str8lit("web/"), urlstr);
+		if (fileexists(path)) {
+			mime = mimetype(path);
+			ret = sendfile(conn, path, mime);
+			tempend(scratch);
+			return ret;
+		}
+	}
 	if (str8cmp(str8suffix(urlstr, subs.len), subs, 0)) {
 		if (direxists(urlstr))
 			return sendsub(scratch, conn, urlstr);
