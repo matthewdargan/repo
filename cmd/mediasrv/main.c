@@ -6,7 +6,6 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <time.h>
-#include <unistd.h>
 
 /* clang-format off */
 #include "libu/u.h"
@@ -21,7 +20,6 @@
 #include "libu/os.c"
 /* clang-format on */
 
-readonly static String8 subs = str8litc("/subtitles");
 readonly static b32 run = 1;
 
 static b32
@@ -31,8 +29,8 @@ validstream(AVStream *st)
 		case AVMEDIA_TYPE_VIDEO:
 			switch (st->codecpar->codec_id) {
 				case AV_CODEC_ID_H264:
-				case AV_CODEC_ID_HEVC:
 				case AV_CODEC_ID_VP9:
+				case AV_CODEC_ID_HEVC:
 				case AV_CODEC_ID_AV1:
 					return 1;
 				default:
@@ -41,8 +39,8 @@ validstream(AVStream *st)
 			break;
 		case AVMEDIA_TYPE_AUDIO:
 			switch (st->codecpar->codec_id) {
-				case AV_CODEC_ID_AAC:
 				case AV_CODEC_ID_MP3:
+				case AV_CODEC_ID_AAC:
 				case AV_CODEC_ID_AC3:
 				case AV_CODEC_ID_EAC3:
 				case AV_CODEC_ID_OPUS:
@@ -52,13 +50,7 @@ validstream(AVStream *st)
 			}
 			break;
 		case AVMEDIA_TYPE_SUBTITLE:
-			switch (st->codecpar->codec_id) {
-				case AV_CODEC_ID_WEBVTT:
-					return 1;
-				default:
-					return 0;
-			}
-			break;
+			return st->codecpar->codec_id == AV_CODEC_ID_WEBVTT;
 		default:
 			return 0;
 	}
@@ -87,14 +79,16 @@ freesubs(AVFormatContext **subctxs, u64 n)
 		}
 }
 
-static int
-mkmedia(Arena *a, String8 dir)
+static String8
+mkmedia(Arena *a, String8 path)
 {
 	AVFormatContext *ictx, *mpdctx, **subctxs;
 	AVStream *istream, *mpdstream, **substreams;
 	AVDictionaryEntry *bps, *le;
 	AVDictionary *opts;
-	String8 path, mpdpath, bpsstr, subdir, subpath, lang;
+	String8list generated;
+	Stringjoin join;
+	String8 dir, mpdpath, bpsstr, subpath, lang;
 	int ret;
 	U64array mpdstreams;
 	u64 i, nmpds, mpdidx;
@@ -109,25 +103,26 @@ mkmedia(Arena *a, String8 dir)
 	bps = NULL;
 	le = NULL;
 	opts = NULL;
+	memset(&generated, 0, sizeof generated);
 	pkt = av_packet_alloc();
-	path = pushstr8cat(a, dir, str8lit("/video.mkv"));
-	mpdpath = pushstr8cat(a, dir, str8lit("/manifest.mpd"));
+	dir = str8dirname(path);
+	mpdpath = pushstr8cat(a, dir, pushstr8f(a, "/manifest%lu.mpd", nowus()));
 	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't open '%s'\n", path.str);
-		return ret;
+		return str8zero();
 	}
 	ret = avformat_find_stream_info(ictx, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't find stream info\n");
 		avformat_close_input(&ictx);
-		return ret;
+		return str8zero();
 	}
 	ret = avformat_alloc_output_context2(&mpdctx, NULL, "dash", (char *)mpdpath.str);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't create MPD output context\n");
 		avformat_close_input(&ictx);
-		return ret;
+		return str8zero();
 	}
 	subctxs = pusharr(a, AVFormatContext *, ictx->nb_streams);
 	substreams = pusharr(a, AVStream *, ictx->nb_streams);
@@ -143,14 +138,14 @@ mkmedia(Arena *a, String8 dir)
 				freesubs(subctxs, ictx->nb_streams);
 				avformat_free_context(mpdctx);
 				avformat_close_input(&ictx);
-				return ret;
+				return str8zero();
 			}
 			ret = avcodec_parameters_copy(mpdstream->codecpar, istream->codecpar);
 			if (ret < 0) {
 				freesubs(subctxs, ictx->nb_streams);
 				avformat_free_context(mpdctx);
 				avformat_close_input(&ictx);
-				return ret;
+				return str8zero();
 			}
 			if (mpdstream->codecpar->bit_rate == 0) {
 				bps = av_dict_get(istream->metadata, "BPS", NULL, 0);
@@ -159,10 +154,10 @@ mkmedia(Arena *a, String8 dir)
 					mpdstream->codecpar->bit_rate = str8tou64(bpsstr, 10);
 				}
 			}
-			if (mpdstream->codecpar->frame_size == 0) {
+			if (mpdstream->codecpar->frame_size == 0)
 				switch (istream->codecpar->codec_id) {
-					case AV_CODEC_ID_AAC:
-						mpdstream->codecpar->frame_size = 1024;
+					case AV_CODEC_ID_MP3:
+						mpdstream->codecpar->frame_size = 1152;
 						break;
 					case AV_CODEC_ID_AC3:
 					case AV_CODEC_ID_EAC3:
@@ -171,9 +166,6 @@ mkmedia(Arena *a, String8 dir)
 					case AV_CODEC_ID_FLAC:
 						mpdstream->codecpar->frame_size = 4096;
 						break;
-					case AV_CODEC_ID_MP3:
-						mpdstream->codecpar->frame_size = 1152;
-						break;
 					case AV_CODEC_ID_OPUS:
 						mpdstream->codecpar->frame_size = 960;
 						break;
@@ -181,7 +173,6 @@ mkmedia(Arena *a, String8 dir)
 						mpdstream->codecpar->frame_size = 1024;
 						break;
 				}
-			}
 			mpdstreams.v[i] = nmpds++;
 		}
 		if (validsub(istream)) {
@@ -189,19 +180,15 @@ mkmedia(Arena *a, String8 dir)
 			le = av_dict_get(istream->metadata, "language", NULL, 0);
 			if (le != NULL)
 				lang = str8cstr(le->value);
-			subdir = pushstr8cat(a, dir, str8lit("/subtitles"));
-			if (!direxists(subdir))
-				osmkdir(subdir);
-			subpath = pushstr8f(a, "%s/%s%lu.ass", subdir.str, lang.str, nowus());
+			subpath = pushstr8cat(a, dir, pushstr8f(a, "/%s%lu.ass", lang.str, nowus()));
 			ret = avformat_alloc_output_context2(&subctxs[i], NULL, "ass", (char *)subpath.str);
 			if (ret < 0) {
 				fprintf(stderr, "mkmedia: can't create subtitle output context\n");
 				continue;
 			}
 			substreams[i] = avformat_new_stream(subctxs[i], NULL);
-			if (substreams[i] == NULL) {
+			if (substreams[i] == NULL)
 				continue;
-			}
 			ret = avcodec_parameters_copy(substreams[i]->codecpar, istream->codecpar);
 			if (ret < 0)
 				continue;
@@ -215,6 +202,7 @@ mkmedia(Arena *a, String8 dir)
 				fprintf(stderr, "mkmedia: can't write subtitle header\n");
 				continue;
 			}
+			str8listpush(a, &generated, subpath);
 		}
 	}
 	av_dict_set(&opts, "hwaccel", "auto", 0);
@@ -227,7 +215,7 @@ mkmedia(Arena *a, String8 dir)
 		freesubs(subctxs, ictx->nb_streams);
 		avformat_free_context(mpdctx);
 		avformat_close_input(&ictx);
-		return ret;
+		return str8zero();
 	}
 	ret = avformat_write_header(mpdctx, &opts);
 	av_dict_free(&opts);
@@ -237,8 +225,9 @@ mkmedia(Arena *a, String8 dir)
 		avio_closep(&mpdctx->pb);
 		avformat_free_context(mpdctx);
 		avformat_close_input(&ictx);
-		return ret;
+		return str8zero();
 	}
+	str8listpush(a, &generated, mpdpath);
 	while (av_read_frame(ictx, pkt) >= 0) {
 		i = pkt->stream_index;
 		istream = ictx->streams[i];
@@ -277,43 +266,15 @@ mkmedia(Arena *a, String8 dir)
 	ret = av_write_trailer(mpdctx);
 	if (ret < 0)
 		fprintf(stderr, "mkmedia: can't write MPD trailer\n");
+	join.pre = str8lit("");
+	join.sep = str8lit("\n");
+	join.post = str8lit("");
 	av_packet_free(&pkt);
 	freesubs(subctxs, ictx->nb_streams);
 	avio_closep(&mpdctx->pb);
 	avformat_free_context(mpdctx);
 	avformat_close_input(&ictx);
-	return ret;
-}
-
-static int
-sendsub(Temp scratch, struct MHD_Connection *conn, String8 path)
-{
-	String8 subtitles;
-	DIR *dir;
-	struct dirent *entry;
-	struct MHD_Response *resp;
-	int ret;
-
-	subtitles = str8zero();
-	dir = opendir((char *)path.str);
-	if (dir == NULL) {
-		tempend(scratch);
-		return MHD_NO;
-	}
-	entry = readdir(dir);
-	while (entry != NULL) {
-		if (entry->d_type == DT_REG) {
-			subtitles = pushstr8cat(scratch.a, subtitles, str8cstr((char *)entry->d_name));
-			subtitles = pushstr8cat(scratch.a, subtitles, str8lit("\n"));
-		}
-		entry = readdir(dir);
-	}
-	closedir(dir);
-	resp = MHD_create_response_from_buffer(subtitles.len, (void *)subtitles.str, MHD_RESPMEM_MUST_COPY);
-	MHD_add_response_header(resp, "Content-Type", "text/plain");
-	ret = MHD_queue_response(conn, MHD_HTTP_OK, resp);
-	MHD_destroy_response(resp);
-	return ret;
+	return str8listjoin(a, &generated, &join);
 }
 
 static String8
@@ -366,16 +327,14 @@ sendfile(struct MHD_Connection *conn, String8 path, String8 mime)
 }
 
 static enum MHD_Result
-reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *method, const char *, const char *,
-           size_t *, void **)
+reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *, const char *, const char *, size_t *,
+           void **)
 {
 	Temp scratch;
-	String8 urlstr, mime, path, mediadir, resptxt;
+	String8 urlstr, mime, path, resptxt;
 	struct MHD_Response *resp;
 	int ret;
 
-	if (strcmp(method, "GET") != 0)
-		return MHD_NO;
 	urlstr = str8cstr((char *)url);
 	if (urlstr.len == 0 || str8cmp(urlstr, str8lit("/"), 0)) {
 		path = str8lit("web/index.html");
@@ -397,14 +356,26 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *met
 			tempend(scratch);
 			return ret;
 		}
+		resptxt = str8lit("mediasrv: can't find static file");
+		resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
+		ret = MHD_queue_response(conn, MHD_HTTP_NOT_FOUND, resp);
+		MHD_destroy_response(resp);
+		tempend(scratch);
+		return ret;
 	}
-	if (str8cmp(str8suffix(urlstr, subs.len), subs, 0)) {
-		if (direxists(urlstr))
-			return sendsub(scratch, conn, urlstr);
-		mediadir = str8dirname(urlstr);
-		if (mkmedia(scratch.a, mediadir) >= 0 && direxists(urlstr))
-			return sendsub(scratch, conn, urlstr);
-		resptxt = str8lit("mediasrv: can't generate subtitles");
+	if (str8cmp(str8ext(urlstr), str8lit("mkv"), 0)) {
+		if (fileexists(urlstr)) {
+			resptxt = mkmedia(scratch.a, urlstr);
+			if (resptxt.len > 0) {
+				resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
+				MHD_add_response_header(resp, "Content-Type", "text/plain");
+				ret = MHD_queue_response(conn, MHD_HTTP_OK, resp);
+				MHD_destroy_response(resp);
+				tempend(scratch);
+				return ret;
+			}
+		}
+		resptxt = str8lit("mediasrv: can't generate media");
 		resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
 		ret = MHD_queue_response(conn, MHD_HTTP_NOT_FOUND, resp);
 		MHD_destroy_response(resp);
@@ -412,21 +383,6 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *met
 		return ret;
 	}
 	if (fileexists(urlstr)) {
-		mime = mimetype(urlstr);
-		ret = sendfile(conn, urlstr, mime);
-		tempend(scratch);
-		return ret;
-	}
-	if (str8index(urlstr, 0, str8lit("/subtitles/"), 0)) {
-		resptxt = str8lit("mediasrv: can't find subtitle file");
-		resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
-		ret = MHD_queue_response(conn, MHD_HTTP_NOT_FOUND, resp);
-		MHD_destroy_response(resp);
-		tempend(scratch);
-		return ret;
-	}
-	mediadir = str8dirname(urlstr);
-	if (mkmedia(scratch.a, mediadir) >= 0 && fileexists(urlstr)) {
 		mime = mimetype(urlstr);
 		ret = sendfile(conn, urlstr, mime);
 		tempend(scratch);

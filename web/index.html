@@ -1,23 +1,39 @@
 <!doctype html>
 <html>
-
 <head>
+    <title>Video Player</title>
     <link rel="stylesheet" href="/css/player.css" />
-    <script defer type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
+    <script src="/js/dash.all.js"></script>
+    <script src="/js/ass.min.js"></script>
     <script defer type="module">
-        import {Player} from "/js/player.js";
-        const video_container = document.querySelector("#video-container");
-        const url = "/media/episode0/generated.mpd";
-        const subtitles = await fetch("/media/episode0/subtitles.ass")
-            .then((res) => res.text());
-        const p = new Player(video_container, url, subtitles);
+        import { Player } from "/js/player.js";
+
+        const initPlayer = async () => {
+            const videoContainer = document.querySelector("#video-container");
+            try {
+                const response = await fetch('/testdata/video.mkv');
+                const fileList = await response.text();
+                const files = fileList.trim().split('\n');
+                const url = files.find(file => file.includes('.mpd'));
+                const subtitlePath = files.find(file => file.includes('eng'));
+                if (url == null)
+                    throw new Error("can't find manifest.mpd");
+                let subtitles = null;
+                if (subtitlePath != null) {
+                    const subtitleResponse = await fetch(subtitlePath);
+                    subtitles = await subtitleResponse.text();
+                }
+                new Player(videoContainer, url, subtitles);
+            } catch (err) {
+                console.error(`can't initialize player: ${err.message}`);
+            }
+        };
+        initPlayer();
     </script>
 </head>
-
 <body>
     <div>
         <div id="video-container" class="video-container"></div>
     </div>
 </body>
-
 </html>

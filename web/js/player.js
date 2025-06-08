@@ -11,19 +11,13 @@ function create_player(base_node, stream_url, subtitles) {
     const video = elem_class("video", "video");
     const ass = document.createElement("div");
     ass.setAttribute("style", "position: absolute; top: 0; left: 0;");
-
     const player_state = create_player_state();
     const controls = create_controls();
-
     base_node.append(video, ass, player_state, controls);
-
     const player = dashjs.MediaPlayer().create();
     player.initialize(video, stream_url, true);
-
-    new ASS(subtitles, video, {
-        container: ass,
-    });
-
+    if (subtitles != null)
+        new ASS(subtitles, video, { container: ass, });
     init_player(base_node, video);
 }
 
@@ -32,7 +26,6 @@ function create_player_state() {
     const inner = elem_class("span", "main-state state-btn");
     const icon = document.createElement("ion-icon");
     icon.setAttribute("name", "play-outline");
-
     inner.appendChild(icon);
     base.appendChild(inner);
     return base;
@@ -40,7 +33,6 @@ function create_player_state() {
 
 function create_controls() {
     const base = elem_class("div", "controls");
-
     const duration = elem_class("div", "duration");
     const current_time = elem_class("div", "current-time");
     const hover_time = elem_class("div", "hover-time");
@@ -49,24 +41,19 @@ function create_controls() {
     hover_time.appendChild(hover_duration);
     duration.append(current_time, hover_time, buffer);
     base.appendChild(duration);
-
     const left_controls = elem_class("div", "btn-con");
     const play_control = elem_class("span", "play-pause control-btn");
     play_control.append(make_icon("play-outline"));
     const volume_control = create_volume_control();
     const time = create_time();
     left_controls.append(play_control, volume_control, time);
-
     const right_controls = elem_class("div", "right-controls");
     const speed_control = create_speed_control();
     const fullscreen_control = create_fullscreen_control();
     right_controls.append(speed_control, fullscreen_control);
-
     const buttons = elem_class("div", "btn-controls");
     buttons.append(left_controls, right_controls);
-
     base.append(duration, buttons);
-
     return base;
 }
 
@@ -78,9 +65,7 @@ function create_volume_control() {
     const max_vol = elem_class("div", "max-vol");
     const current_vol = elem_class("div", "current-vol");
     max_vol.append(current_vol);
-
     base.append(mute, max_vol);
-
     return base;
 }
 
@@ -90,12 +75,9 @@ function create_time() {
     current_duration.append(document.createTextNode("00:00"));
     const total_duration = elem_class("span", "total-duration");
     total_duration.append(document.createTextNode("00:00"));
-
     const divider = document.createElement("span");
     divider.append(document.createTextNode(" / "));
-
     base.append(current_duration, divider, total_duration);
-
     return base;
 }
 
@@ -110,15 +92,12 @@ function create_speed_control() {
             const elem = document.createElement("li");
             elem.setAttribute("data-value", val);
             elem.append(document.createTextNode(`${val}x`));
-            if (val == 1) {
+            if (val == 1)
                 elem.setAttribute("class", "speed-active");
-            }
             return elem;
         })
         .forEach((opt) => menu.append(opt));
-
     base.append(button, menu);
-
     return base;
 }
 
@@ -129,12 +108,10 @@ function create_fullscreen_control() {
     const full_icon = make_icon("scan-outline");
     const contract = elem_class("span", "contract");
     const contract_icon = make_icon("contract-outline");
-
     full.appendChild(full_icon);
     contract.appendChild(contract_icon);
     fullscreen.appendChild(full);
     fullscreen.appendChild(contract);
-
     return fullscreen;
 }
 
@@ -169,9 +146,7 @@ export function init_player(video_container, video) {
     const settings_btn = document.querySelector(".setting-btn");
     const setting_menu = document.querySelector(".setting-menu");
     const speed_buttons = document.querySelectorAll(".setting-menu li");
-
     video.disablePictureInPicture = true;
-
     let is_cursor_on_controls = false,
         is_playing = false,
         mousedown_progress = false,
@@ -183,46 +158,36 @@ export function init_player(video_container, video) {
         touch_past_duration_width = 0,
         touch_start_time = 0,
         volume_val = 1;
-
     current_vol.style.width = volume_val * 100 + "%";
-
     video.addEventListener("loadmetadata", can_play_init);
     video.addEventListener("play", play);
     video.addEventListener("pause", pause);
     video.addEventListener("progress", handle_progress);
     video_container.addEventListener("click", toggle_main_state);
-
     fullscreen.addEventListener("click", toggle_fullscreen);
     video_container.addEventListener("fullscreenchange", () =>
         video_container.classList.toggle("fullscreen", document.fullscreenElement),
     );
-
     play_pause.addEventListener("click", (e) => {
-        if (is_playing) {
+        if (is_playing)
             pause();
-        } else {
+        else
             play();
-        }
     });
-
     duration.addEventListener("click", navigate);
     duration.addEventListener("mousedown", (e) => {
         mousedown_progress = true;
         navigate(e);
     });
-
     total_vol.addEventListener("mousedown", (e) => {
         mousedown_vol = true;
         handle_volume(e);
     });
-
     document.addEventListener("mouseup", (_) => {
         mousedown_progress = false;
         mousedown_vol = false;
     });
-
     document.addEventListener("mousemove", handle_mousemove);
-
     duration.addEventListener("mouseenter", (_) => {
         mouseover_duration = true;
     });
@@ -231,13 +196,11 @@ export function init_player(video_container, video) {
         hover_time.style.width = 0;
         hover_duration.innerHTML = "";
     });
-
     video_container.addEventListener("mouseleave", hide_controls);
     video_container.addEventListener("mousemove", (_) => {
         controls.classList.add("show-controls");
         hide_controls();
     });
-
     video_container.addEventListener("touchstart", (e) => {
         controls.classList.add("show-controls");
         touch_client_x = e.changedTouches[0].clientX;
@@ -278,10 +241,8 @@ export function init_player(video_container, video) {
     controls.addEventListener("mouseleave", (_) => {
         is_cursor_on_controls = false;
     });
-
     main_state.addEventListener("click", toggle_main_state);
     main_state.addEventListener("animationend", handle_main_state_animation_end);
-
     mute_unmute.addEventListener("click", toggle_mute_unmute);
     mute_unmute.addEventListener("mouseenter", (_) => {
         if (muted) {
@@ -295,12 +256,10 @@ export function init_player(video_container, video) {
             total_vol.classList.remove("show");
         }
     });
-
     settings_btn.addEventListener("click", handle_setting_menu);
     speed_buttons.forEach((btn) => {
         btn.addEventListener("click", handle_playback_rate);
     });
-
     document.addEventListener("keydown", (e) => {
         const tagName = document.activeElement.tagName.toLowerCase();
         if (tagName === "input") return;
@@ -311,11 +270,10 @@ export function init_player(video_container, video) {
         switch (e.key.toLowerCase()) {
             case " ":
                 if (tagName === "button") return;
-                if (is_playing) {
+                if (is_playing)
                     video.pause();
-                } else {
+                else
                     video.play();
-                }
                 break;
             case "f":
                 toggle_fullscreen();
@@ -329,7 +287,6 @@ export function init_player(video_container, video) {
             case "-":
                 handle_playback_rate_key();
                 break;
-
             default:
                 break;
         }
@@ -422,9 +379,8 @@ export function init_player(video_container, video) {
     }
 
     function hide_controls() {
-        if (timeout) {
+        if (timeout)
             clearTimeout(timeout);
-        }
         timeout = setTimeout(() => {
             if (is_playing && !is_cursor_on_controls) {
                 controls.classList.remove("show-controls");
@@ -436,11 +392,10 @@ export function init_player(video_container, video) {
     function toggle_main_state(e) {
         e.stopPropagation();
         if (!e.composedPath().includes(controls)) {
-            if (!is_playing) {
+            if (!is_playing)
                 play();
-            } else {
+            else
                 pause();
-            }
         }
     }
 
@@ -481,9 +436,8 @@ export function init_player(video_container, video) {
             e.preventDefault();
             navigate(e);
         }
-        if (mousedown_vol) {
+        if (mousedown_vol)
             handle_volume(e);
-        }
         if (mouseover_duration) {
             const rect = duration.getBoundingClientRect();
             const width = Math.min(Math.max(0, e.clientX - rect.x), rect.width);
@@ -502,12 +456,10 @@ export function init_player(video_container, video) {
 
     function handle_main_state_animation_end() {
         main_state.classList.remove("animate-state");
-        if (!is_playing) {
+        if (!is_playing)
             main_state.innerHTML = `<ion-icon name="play-outline"></ion-icon>`;
-        }
-        if (document.pictureInPictureElement) {
+        if (document.pictureInPictureElement)
             main_state.innerHTML = ` <ion-icon name="tv-outline"></ion-icon>`;
-        }
     }
 
     function handle_setting_menu() {
