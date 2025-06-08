@@ -21,10 +21,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:matthewdargan/media-server";
     };
-    nix-go = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/nix-go";
-    };
     nixpkgs.url = "nixpkgs/nixos-unstable";
     nixvim = {
       inputs.nixpkgs.follows = "nixpkgs";

@@ -3,9 +3,7 @@
     inputs',
     pkgs,
     ...
-  }: let
-    inherit (inputs'.nix-go.packages) gopls;
-  in {
+  }: {
     packages.neovim = inputs'.nixvim.legacyPackages.makeNixvimWithModule {
       module = {helpers, ...}: {
         autoCmd = [
@@ -80,12 +78,6 @@
             servers = {
               bashls.enable = true;
               clangd.enable = true;
-              golangci_lint_ls.enable = true;
-              gopls = {
-                enable = true;
-                package = gopls;
-                settings.gofumpt.enable = true;
-              };
               nil_ls.enable = true;
             };
           };
