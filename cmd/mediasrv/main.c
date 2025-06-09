@@ -20,6 +20,7 @@
 #include "libu/os.c"
 /* clang-format on */
 
+static String8 imtpt, omtpt;
 readonly static b32 run = 1;
 
 static b32
@@ -80,7 +81,7 @@ freesubs(AVFormatContext **subctxs, u64 n)
 }
 
 static String8
-mkmedia(Arena *a, String8 path)
+mkmedia(Arena *a, String8 path, String8 mtpt)
 {
 	AVFormatContext *ictx, *mpdctx, **subctxs;
 	AVStream *istream, *mpdstream, **substreams;
@@ -88,7 +89,7 @@ mkmedia(Arena *a, String8 path)
 	AVDictionary *opts;
 	String8list generated;
 	Stringjoin join;
-	String8 dir, mpdpath, bpsstr, subpath, lang;
+	String8 mpdpath, bpsstr, subpath, lang;
 	int ret;
 	U64array mpdstreams;
 	u64 i, nmpds, mpdidx;
@@ -105,8 +106,7 @@ mkmedia(Arena *a, String8 path)
 	opts = NULL;
 	memset(&generated, 0, sizeof generated);
 	pkt = av_packet_alloc();
-	dir = str8dirname(path);
-	mpdpath = pushstr8cat(a, dir, pushstr8f(a, "/manifest%lu.mpd", nowus()));
+	mpdpath = pushstr8cat(a, mtpt, pushstr8f(a, "/manifest%lu.mpd", nowus()));
 	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't open '%s'\n", path.str);
@@ -180,7 +180,7 @@ mkmedia(Arena *a, String8 path)
 			le = av_dict_get(istream->metadata, "language", NULL, 0);
 			if (le != NULL)
 				lang = str8cstr(le->value);
-			subpath = pushstr8cat(a, dir, pushstr8f(a, "/%s%lu.ass", lang.str, nowus()));
+			subpath = pushstr8cat(a, mtpt, pushstr8f(a, "/%s%lu.ass", lang.str, nowus()));
 			ret = avformat_alloc_output_context2(&subctxs[i], NULL, "ass", (char *)subpath.str);
 			if (ret < 0) {
 				fprintf(stderr, "mkmedia: can't create subtitle output context\n");
@@ -346,10 +346,12 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *, c
 	}
 	if (str8index(urlstr, 0, str8lit(".."), 0) < urlstr.len)
 		return MHD_NO;
-	urlstr = str8skip(urlstr, 1);
 	scratch = tempbegin(arena);
-	if (str8index(urlstr, 0, str8lit("css/"), 0) == 0 || str8index(urlstr, 0, str8lit("js/"), 0) == 0) {
-		path = pushstr8cat(scratch.a, str8lit("web/"), urlstr);
+	if (str8index(urlstr, 0, str8lit("/css/"), 0) == 0 || str8index(urlstr, 0, str8lit("/js/"), 0) == 0) {
+		if (imtpt.len == 0)
+			path = pushstr8cat(scratch.a, str8lit("web"), urlstr);
+		else
+			path = pushstr8f(scratch.a, "%s/web%s", imtpt.str, urlstr.str);
 		if (fileexists(path)) {
 			mime = mimetype(path);
 			ret = sendfile(conn, path, mime);
@@ -364,8 +366,14 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *, c
 		return ret;
 	}
 	if (str8cmp(str8ext(urlstr), str8lit("mkv"), 0)) {
-		if (fileexists(urlstr)) {
-			resptxt = mkmedia(scratch.a, urlstr);
+		if (imtpt.len == 0)
+			path = str8skip(urlstr, 1);
+		else
+			path = pushstr8cat(scratch.a, imtpt, urlstr);
+		if (fileexists(path)) {
+			if (omtpt.len == 0)
+				omtpt = str8dirname(path);
+			resptxt = mkmedia(scratch.a, path, omtpt);
 			if (resptxt.len > 0) {
 				resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
 				MHD_add_response_header(resp, "Content-Type", "text/plain");
@@ -382,9 +390,10 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *, c
 		tempend(scratch);
 		return ret;
 	}
-	if (fileexists(urlstr)) {
-		mime = mimetype(urlstr);
-		ret = sendfile(conn, urlstr, mime);
+	path = str8skip(urlstr, 1);
+	if (fileexists(path)) {
+		mime = mimetype(path);
+		ret = sendfile(conn, path, mime);
 		tempend(scratch);
 		return ret;
 	}
@@ -421,12 +430,20 @@ main(int argc, char *argv[])
 	arena = arenaalloc(ap);
 	args = osargs(arena, argc, argv);
 	parsed = cmdparse(arena, args);
+	imtpt = str8zero();
+	omtpt = str8zero();
 	portstr = str8zero();
 	port = 8080;
+	if (cmdhasarg(&parsed, str8lit("i")))
+		imtpt = cmdstr(&parsed, str8lit("i"));
+	if (cmdhasarg(&parsed, str8lit("o")))
+		omtpt = cmdstr(&parsed, str8lit("o"));
 	if (cmdhasarg(&parsed, str8lit("p"))) {
 		portstr = cmdstr(&parsed, str8lit("p"));
 		port = str8tou64(portstr, 10);
 	}
+	if (!direxists(omtpt))
+		osmkdir(omtpt);
 	daemon = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION, port, NULL, NULL, &reqhandler, arena, MHD_OPTION_END);
 	if (daemon == NULL) {
 		fprintf(stderr, "mediasrv: can't start HTTP server\n");
