@@ -335,6 +335,7 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *, c
 	struct MHD_Response *resp;
 	int ret;
 
+	printf("connection received\n");
 	urlstr = str8cstr((char *)url);
 	if (urlstr.len == 0 || str8cmp(urlstr, str8lit("/"), 0)) {
 		path = str8lit("web/index.html");
