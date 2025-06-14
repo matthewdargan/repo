@@ -106,7 +106,7 @@ mkmedia(Arena *a, String8 path, String8 mtpt)
 	opts = NULL;
 	memset(&generated, 0, sizeof generated);
 	pkt = av_packet_alloc();
-	mpdpath = pushstr8cat(a, mtpt, pushstr8f(a, "/manifest%lu.mpd", nowus()));
+	mpdpath = pushstr8f(a, "%.*s/manifest%lu.mpd", mtpt.len, mtpt.str, nowus());
 	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't open '%s'\n", path.str);
@@ -180,7 +180,7 @@ mkmedia(Arena *a, String8 path, String8 mtpt)
 			le = av_dict_get(istream->metadata, "language", NULL, 0);
 			if (le != NULL)
 				lang = str8cstr(le->value);
-			subpath = pushstr8cat(a, mtpt, pushstr8f(a, "/%s%lu.ass", lang.str, nowus()));
+			subpath = pushstr8cat(a, mtpt, pushstr8f(a, "/%.*s%lu.ass", lang.len, lang.str, nowus()));
 			ret = avformat_alloc_output_context2(&subctxs[i], NULL, "ass", (char *)subpath.str);
 			if (ret < 0) {
 				fprintf(stderr, "mkmedia: can't create subtitle output context\n");
@@ -331,7 +331,7 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *, c
            void **)
 {
 	Temp scratch;
-	String8 urlstr, mime, path, resptxt;
+	String8 urlstr, mime, path, resptxt, name, indexpath;
 	struct MHD_Response *resp;
 	int ret;
 
@@ -352,7 +352,7 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *, c
 		if (imtpt.len == 0)
 			path = pushstr8cat(scratch.a, str8lit("web"), urlstr);
 		else
-			path = pushstr8f(scratch.a, "%s/web%s", imtpt.str, urlstr.str);
+			path = pushstr8f(scratch.a, "%.*s/web%.*s", imtpt.len, imtpt.str, urlstr.len, urlstr.str);
 		if (fileexists(path)) {
 			mime = mimetype(path);
 			ret = sendfile(conn, path, mime);
@@ -371,18 +371,32 @@ reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *, c
 			path = str8skip(urlstr, 1);
 		else
 			path = pushstr8cat(scratch.a, imtpt, urlstr);
-		if (fileexists(path)) {
-			if (omtpt.len == 0)
-				omtpt = str8dirname(path);
+		if (!fileexists(path)) {
+			resptxt = str8lit("mediasrv: can't generate media");
+			resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
+			ret = MHD_queue_response(conn, MHD_HTTP_NOT_FOUND, resp);
+			MHD_destroy_response(resp);
+			tempend(scratch);
+			return ret;
+		}
+		if (omtpt.len == 0)
+			omtpt = str8dirname(path);
+		name = str8prefixext(str8basename(urlstr));
+		indexpath = pushstr8f(scratch.a, "%.*s/%.*s-index", omtpt.len, omtpt.str, name.len, name.str);
+		if (fileexists(indexpath))
+			resptxt = readfile(scratch.a, indexpath);
+		else {
 			resptxt = mkmedia(scratch.a, path, omtpt);
-			if (resptxt.len > 0) {
-				resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
-				MHD_add_response_header(resp, "Content-Type", "text/plain");
-				ret = MHD_queue_response(conn, MHD_HTTP_OK, resp);
-				MHD_destroy_response(resp);
-				tempend(scratch);
-				return ret;
-			}
+			if (resptxt.len > 0)
+				appendfile(indexpath, resptxt);
+		}
+		if (resptxt.len > 0) {
+			resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
+			MHD_add_response_header(resp, "Content-Type", "text/plain");
+			ret = MHD_queue_response(conn, MHD_HTTP_OK, resp);
+			MHD_destroy_response(resp);
+			tempend(scratch);
+			return ret;
 		}
 		resptxt = str8lit("mediasrv: can't generate media");
 		resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
