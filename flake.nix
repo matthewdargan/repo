@@ -19,7 +19,7 @@
     };
     media-server = {
       inputs.nixpkgs.follows = "nixpkgs";
-      url = "path:/home/mpd/repos/media-server";
+      url = "github:matthewdargan/media-server";
     };
     nixpkgs.url = "nixpkgs/nixos-unstable";
     nixvim = {
