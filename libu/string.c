@@ -217,8 +217,8 @@ pushstr8cat(Arena *a, String8 s1, String8 s2)
 
 	str.len = s1.len + s2.len;
 	str.str = pusharrnoz(a, u8, str.len + 1);
-	memcpy(str.str, s1.str, s1.len);
-	memcpy(str.str + s1.len, s2.str, s2.len);
+	memmove(str.str, s1.str, s1.len);
+	memmove(str.str + s1.len, s2.str, s2.len);
 	str.str[str.len] = 0;
 	return str;
 }

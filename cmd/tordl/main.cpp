@@ -120,7 +120,6 @@ main(int argc, char *argv[])
 	Arenaparams ap;
 	String8list args;
 	Cmd parsed;
-	Temp scratch;
 	String8 path, data, chunk;
 	u8 buf[4096];
 	ssize_t n;
@@ -135,7 +134,6 @@ main(int argc, char *argv[])
 	arena = arenaalloc(ap);
 	args = osargs(arena, argc, argv);
 	parsed = cmdparse(arena, args);
-	scratch = tempbegin(arena);
 	path = str8zero();
 	if (cmdhasarg(&parsed, str8lit("f")))
 		path = cmdstr(&parsed, str8lit("f"));
@@ -144,7 +142,6 @@ main(int argc, char *argv[])
 		data = readfile(arena, path);
 		if (data.len == 0) {
 			fprintf(stderr, "tordl: failed to read file: %s\n", path.str);
-			tempend(scratch);
 			arenarelease(arena);
 			return 1;
 		}
@@ -154,24 +151,21 @@ main(int argc, char *argv[])
 			if (n <= 0)
 				break;
 			chunk = str8(buf, (u64)n);
-			data = pushstr8cat(scratch.a, data, chunk);
+			data = pushstr8cat(arena, data, chunk);
 		}
 	}
 	if (data.len == 0) {
 		fprintf(stderr, "tordl: no data read\n");
-		tempend(scratch);
 		arenarelease(arena);
 		return 1;
 	}
-	torrents = parsetorrents(scratch.a, data);
+	torrents = parsetorrents(arena, data);
 	if (torrents.cnt == 0) {
 		fprintf(stderr, "tordl: no torrents found\n");
-		tempend(scratch);
 		arenarelease(arena);
 		return 1;
 	}
 	downloadtorrents(torrents);
-	tempend(scratch);
 	arenarelease(arena);
 	return 0;
 }

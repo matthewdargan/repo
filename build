@@ -10,7 +10,7 @@ debug=1
 targets=''
 opt='-O3'
 common='-I../ -g -fdiagnostics-absolute-paths -Wall -Wextra'
-medialibs='-lavcodec -lavformat -lavutil -lmicrohttpd -lswscale'
+medialibs='-lavcodec -lavformat -lavutil -lswscale'
 
 for i
 do

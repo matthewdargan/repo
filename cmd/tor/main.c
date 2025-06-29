@@ -330,7 +330,6 @@ main(int argc, char *argv[])
 	Arenaparams ap;
 	String8list args;
 	Cmd parsed;
-	Temp scratch;
 	Torrentarray torrents;
 	String8 filter, category, user, sort, order, query, data, line;
 	Params ps;
@@ -345,7 +344,6 @@ main(int argc, char *argv[])
 	arena = arenaalloc(ap);
 	args = osargs(arena, argc, argv);
 	parsed = cmdparse(arena, args);
-	scratch = tempbegin(arena);
 	filter = str8lit("0");
 	category = str8lit("0_0");
 	user = str8zero();
@@ -371,31 +369,28 @@ main(int argc, char *argv[])
 	ps.order = order;
 	ps.query = query;
 	if (!validparams(ps)) {
-		tempend(scratch);
 		arenarelease(arena);
 		return 1;
 	}
 	curl_global_init_mem(CURL_GLOBAL_DEFAULT, arenamalloccb, arenafreecb, arenarealloccb, arenastrdupcb, arenacalloccb);
 	xmlMemSetup(arenafreecb, arenamalloccb, arenarealloccb, arenastrdupcb);
 	xmlInitParser();
-	torrents = gettorrents(scratch.a, ps);
+	torrents = gettorrents(arena, ps);
 	if (torrents.cnt == 0) {
 		fprintf(stderr, "tor: no torrents found\n");
 		xmlCleanupParser();
 		curl_global_cleanup();
-		tempend(scratch);
 		arenarelease(arena);
 		return 1;
 	}
 	data = str8zero();
 	for (i = 0; i < torrents.cnt; i++) {
-		line = pushstr8f(scratch.a, (char *)"%s\t%s\n", torrents.v[i].title.str, torrents.v[i].magnet.str);
-		data = pushstr8cat(scratch.a, data, line);
+		line = pushstr8f(arena, (char *)"%s\t%s\n", torrents.v[i].title.str, torrents.v[i].magnet.str);
+		data = pushstr8cat(arena, data, line);
 	}
 	fwrite(data.str, 1, data.len, stdout);
 	xmlCleanupParser();
 	curl_global_cleanup();
-	tempend(scratch);
 	arenarelease(arena);
 	return 0;
 }

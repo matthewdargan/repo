@@ -11,7 +11,7 @@
         const initPlayer = async () => {
             const videoContainer = document.querySelector("#video-container");
             try {
-                const response = await fetch('/video.mkv');
+                const response = await fetch('/testdata/video.mkv');
                 const fileList = await response.text();
                 const files = fileList.trim().split('\n');
                 const url = files.find(file => file.includes('.mpd'));

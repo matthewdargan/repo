@@ -21,7 +21,6 @@
             pkgs.boost
             pkgs.curl
             pkgs.ffmpeg-full
-            pkgs.libmicrohttpd
             pkgs.libtorrent-rasterbar
             pkgs.libxml2
             pkgs.pkg-config
@@ -30,13 +29,14 @@
             pkgs.bear
             pkgs.clang
             pkgs.gdb
+            pkgs.libllvm
             pkgs.valgrind
           ];
           shellHook = "${config.pre-commit.installationScript}";
         };
         packages = {
           mediasrv = pkgs.clangStdenv.mkDerivation {
-            buildInputs = [pkgs.ffmpeg pkgs.libmicrohttpd];
+            buildInputs = [pkgs.ffmpeg];
             buildPhase = "./build release mediasrv";
             installPhase = ''
               mkdir -p "$out/bin"
@@ -128,7 +128,10 @@
               alejandra.enable = true;
               clang-format = {
                 enable = false;
-                types_or = lib.mkForce ["c" "c++"];
+                types_or = lib.mkForce [
+                  "c"
+                  "c++"
+                ];
               };
               deadnix.enable = true;
               statix.enable = true;
@@ -137,6 +140,9 @@
           };
         };
       };
-      systems = ["aarch64-linux" "x86_64-linux"];
+      systems = [
+        "aarch64-linux"
+        "x86_64-linux"
+      ];
     };
 }

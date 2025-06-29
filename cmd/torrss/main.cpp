@@ -376,7 +376,6 @@ main(int argc, char *argv[])
 	Arenaparams ap;
 	String8list args;
 	Cmd parsed;
-	Temp scratch;
 	u64 topresults;
 	String8 filter, category, user, sort, order, query, topresultsstr;
 	Params ps;
@@ -398,7 +397,6 @@ main(int argc, char *argv[])
 	query = str8zero();
 	args = osargs(arena, argc, argv);
 	parsed = cmdparse(arena, args);
-	scratch = tempbegin(arena);
 	if (cmdhasarg(&parsed, str8lit("t"))) {
 		topresultsstr = cmdstr(&parsed, str8lit("t"));
 		str8tou64ok(topresultsstr, &topresults);
@@ -423,26 +421,23 @@ main(int argc, char *argv[])
 	ps.order = order;
 	ps.query = query;
 	if (!validparams(ps)) {
-		tempend(scratch);
 		arenarelease(arena);
 		return 1;
 	}
 	curl_global_init_mem(CURL_GLOBAL_DEFAULT, arenamalloccb, arenafreecb, arenarealloccb, arenastrdupcb, arenacalloccb);
 	xmlMemSetup(arenafreecb, arenamalloccb, arenarealloccb, arenastrdupcb);
 	xmlInitParser();
-	torrents = gettorrents(scratch.a, ps);
+	torrents = gettorrents(arena, ps);
 	if (torrents.cnt == 0) {
 		fprintf(stderr, "torrss: no torrents found\n");
 		xmlCleanupParser();
 		curl_global_cleanup();
-		tempend(scratch);
 		arenarelease(arena);
 		return 1;
 	}
-	downloadtorrents(scratch.a, torrents);
+	downloadtorrents(arena, torrents);
 	xmlCleanupParser();
 	curl_global_cleanup();
-	tempend(scratch);
 	arenarelease(arena);
 	return 0;
 }

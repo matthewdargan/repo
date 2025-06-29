@@ -1,11 +1,15 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <libavformat/avformat.h>
-#include <microhttpd.h>
-#include <signal.h>
+#include <netdb.h>
+#include <netinet/tcp.h>
+#include <pthread.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
 /* clang-format off */
 #include "libu/u.h"
@@ -13,15 +17,16 @@
 #include "libu/string.h"
 #include "libu/cmd.h"
 #include "libu/os.h"
+#include "libu/socket.h"
 #include "libu/u.c"
 #include "libu/arena.c"
 #include "libu/string.c"
 #include "libu/cmd.c"
 #include "libu/os.c"
+#include "libu/socket.c"
 /* clang-format on */
 
 static String8 imtpt, omtpt;
-readonly static b32 run = 1;
 
 static b32
 validstream(AVStream *st)
@@ -81,7 +86,7 @@ freesubs(AVFormatContext **subctxs, u64 n)
 }
 
 static String8
-mkmedia(Arena *a, String8 path, String8 mtpt)
+mkmedia(Arena *a, String8 ipath, String8 opath)
 {
 	AVFormatContext *ictx, *mpdctx, **subctxs;
 	AVStream *istream, *mpdstream, **substreams;
@@ -106,10 +111,10 @@ mkmedia(Arena *a, String8 path, String8 mtpt)
 	opts = NULL;
 	memset(&generated, 0, sizeof generated);
 	pkt = av_packet_alloc();
-	mpdpath = pushstr8f(a, "%.*s/manifest%lu.mpd", mtpt.len, mtpt.str, nowus());
-	ret = avformat_open_input(&ictx, (char *)path.str, NULL, NULL);
+	mpdpath = pushstr8f(a, "%.*s/manifest%lu.mpd", opath.len, opath.str, nowus());
+	ret = avformat_open_input(&ictx, (char *)ipath.str, NULL, NULL);
 	if (ret < 0) {
-		fprintf(stderr, "mkmedia: can't open '%s'\n", path.str);
+		fprintf(stderr, "mkmedia: can't open '%s'\n", ipath.str);
 		return str8zero();
 	}
 	ret = avformat_find_stream_info(ictx, NULL);
@@ -180,7 +185,7 @@ mkmedia(Arena *a, String8 path, String8 mtpt)
 			le = av_dict_get(istream->metadata, "language", NULL, 0);
 			if (le != NULL)
 				lang = str8cstr(le->value);
-			subpath = pushstr8cat(a, mtpt, pushstr8f(a, "/%.*s%lu.ass", lang.len, lang.str, nowus()));
+			subpath = pushstr8f(a, "%.*s/%.*s%lu.ass", opath.len, opath.str, lang.len, lang.str, nowus());
 			ret = avformat_alloc_output_context2(&subctxs[i], NULL, "ass", (char *)subpath.str);
 			if (ret < 0) {
 				fprintf(stderr, "mkmedia: can't create subtitle output context\n");
@@ -299,131 +304,154 @@ mimetype(String8 path)
 		return str8lit("application/octet-stream");
 }
 
-static int
-sendfile(struct MHD_Connection *conn, String8 path, String8 mime)
+static void
+sendresp(Arena *a, u64 fd, String8 status, String8 mime, String8 body)
 {
-	int fd;
-	Fprops props;
-	struct MHD_Response *resp;
-	int ret;
+	String8 resp;
 
-	fd = openfd(path, O_RDONLY);
-	if (fd == 0)
-		return MHD_NO;
-	props = osfstat(fd);
-	if (props.size == 0) {
-		closefd(fd);
-		return MHD_NO;
-	}
-	resp = MHD_create_response_from_fd(props.size, fd);
-	if (resp == NULL) {
-		close(fd);
-		return MHD_NO;
-	}
-	MHD_add_response_header(resp, "Content-Type", (char *)mime.str);
-	ret = MHD_queue_response(conn, MHD_HTTP_OK, resp);
-	MHD_destroy_response(resp);
-	return ret;
-}
-
-static enum MHD_Result
-reqhandler(void *, struct MHD_Connection *conn, const char *url, const char *, const char *, const char *, size_t *,
-           void **)
-{
-	Temp scratch;
-	String8 urlstr, mime, path, resptxt, name, indexpath;
-	struct MHD_Response *resp;
-	int ret;
-
-	printf("connection received\n");
-	urlstr = str8cstr((char *)url);
-	if (urlstr.len == 0 || str8cmp(urlstr, str8lit("/"), 0)) {
-		path = str8lit("web/index.html");
-		if (fileexists(path)) {
-			mime = str8lit("text/html");
-			ret = sendfile(conn, path, mime);
-			return ret;
-		}
-	}
-	if (str8index(urlstr, 0, str8lit(".."), 0) < urlstr.len)
-		return MHD_NO;
-	scratch = tempbegin(arena);
-	if (str8index(urlstr, 0, str8lit("/css/"), 0) == 0 || str8index(urlstr, 0, str8lit("/js/"), 0) == 0) {
-		if (imtpt.len == 0)
-			path = pushstr8cat(scratch.a, str8lit("web"), urlstr);
-		else
-			path = pushstr8f(scratch.a, "%.*s/web%.*s", imtpt.len, imtpt.str, urlstr.len, urlstr.str);
-		if (fileexists(path)) {
-			mime = mimetype(path);
-			ret = sendfile(conn, path, mime);
-			tempend(scratch);
-			return ret;
-		}
-		resptxt = str8lit("mediasrv: can't find static file");
-		resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
-		ret = MHD_queue_response(conn, MHD_HTTP_NOT_FOUND, resp);
-		MHD_destroy_response(resp);
-		tempend(scratch);
-		return ret;
-	}
-	if (str8cmp(str8ext(urlstr), str8lit("mkv"), 0)) {
-		if (imtpt.len == 0)
-			path = str8skip(urlstr, 1);
-		else
-			path = pushstr8cat(scratch.a, imtpt, urlstr);
-		if (!fileexists(path)) {
-			resptxt = str8lit("mediasrv: can't generate media");
-			resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
-			ret = MHD_queue_response(conn, MHD_HTTP_NOT_FOUND, resp);
-			MHD_destroy_response(resp);
-			tempend(scratch);
-			return ret;
-		}
-		if (omtpt.len == 0)
-			omtpt = str8dirname(path);
-		name = str8prefixext(str8basename(urlstr));
-		indexpath = pushstr8f(scratch.a, "%.*s/%.*s-index", omtpt.len, omtpt.str, name.len, name.str);
-		if (fileexists(indexpath))
-			resptxt = readfile(scratch.a, indexpath);
-		else {
-			resptxt = mkmedia(scratch.a, path, omtpt);
-			if (resptxt.len > 0)
-				appendfile(indexpath, resptxt);
-		}
-		if (resptxt.len > 0) {
-			resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
-			MHD_add_response_header(resp, "Content-Type", "text/plain");
-			ret = MHD_queue_response(conn, MHD_HTTP_OK, resp);
-			MHD_destroy_response(resp);
-			tempend(scratch);
-			return ret;
-		}
-		resptxt = str8lit("mediasrv: can't generate media");
-		resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
-		ret = MHD_queue_response(conn, MHD_HTTP_NOT_FOUND, resp);
-		MHD_destroy_response(resp);
-		tempend(scratch);
-		return ret;
-	}
-	path = str8skip(urlstr, 1);
-	if (fileexists(path)) {
-		mime = mimetype(path);
-		ret = sendfile(conn, path, mime);
-		tempend(scratch);
-		return ret;
-	}
-	resptxt = str8lit("mediasrv: can't generate media");
-	resp = MHD_create_response_from_buffer(resptxt.len, (void *)resptxt.str, MHD_RESPMEM_MUST_COPY);
-	ret = MHD_queue_response(conn, MHD_HTTP_NOT_FOUND, resp);
-	MHD_destroy_response(resp);
-	tempend(scratch);
-	return ret;
+	resp = pushstr8f(a, "HTTP/1.1 %.*s\r\nContent-Type: %.*s\r\nContent-Length: %lu\r\n\r\n%.*s", status.len,
+	                 status.str, mime.len, mime.str, body.len, body.len, body.str);
+	socketwrite(fd, resp);
 }
 
 static void
-sighandler(int)
+sendfile(Arena *a, u64 clientfd, String8 path, String8 mime)
 {
-	run = 0;
+	u64 fd;
+	Fprops props;
+	String8 hdr, data, resp;
+
+	fd = openfd(path, O_RDONLY);
+	if (fd == 0) {
+		sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), str8lit("not found"));
+		return;
+	}
+	props = osfstat(fd);
+	hdr = pushstr8f(a, "HTTP/1.1 200 OK\r\nContent-Type: %.*s\r\nContent-Length: %lu\r\n\r\n", mime.len, mime.str,
+	                props.size);
+	data = readfilerng(a, fd, rng1u64(0, props.size));
+	resp = pushstr8cat(a, hdr, data);
+	socketwrite(clientfd, resp);
+	closefd(fd);
+}
+
+static void *
+handleconn(void *arg)
+{
+	u64 clientfd, lineend, methodend, urlend;
+	Arenaparams ap;
+	Arena *a;
+	String8 req, line, url, path, mime, resptxt, mtpt, name, opath, indexpath;
+
+	clientfd = (u64)arg;
+	ap.flags = arenaflags;
+	ap.ressz = arenaressz;
+	ap.cmtsz = arenacmtsz;
+	a = arenaalloc(ap);
+	req = socketreadhttp(a, clientfd);
+	if (req.len == 0) {
+		arenarelease(a);
+		closefd(clientfd);
+		return NULL;
+	}
+	lineend = str8index(req, 0, str8lit("\r\n"), 0);
+	if (lineend == req.len) {
+		arenarelease(a);
+		closefd(clientfd);
+		return NULL;
+	}
+	line = str8prefix(req, lineend);
+	methodend = str8index(line, 0, str8lit(" "), 0);
+	if (methodend == line.len) {
+		arenarelease(a);
+		closefd(clientfd);
+		return NULL;
+	}
+	urlend = str8index(line, methodend + 1, str8lit(" "), 0);
+	if (urlend == line.len)
+		url = str8skip(line, methodend + 1);
+	else
+		url = str8substr(line, rng1u64(methodend + 1, urlend));
+	if (url.len == 0 || str8cmp(url, str8lit("/"), 0)) {
+		path = str8lit("web/index.html");
+		if (fileexists(path))
+			sendfile(a, clientfd, path, str8lit("text/html"));
+		else
+			sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), str8lit("not found"));
+		arenarelease(a);
+		closefd(clientfd);
+		return NULL;
+	}
+	if (str8index(url, 0, str8lit(".."), 0) < url.len) {
+		sendresp(a, clientfd, str8lit("400 Bad Request"), str8lit("text/plain"), str8lit("bad request"));
+		arenarelease(a);
+		closefd(clientfd);
+		return NULL;
+	}
+	if (str8index(url, 0, str8lit("/css/"), 0) == 0 || str8index(url, 0, str8lit("/js/"), 0) == 0) {
+		if (imtpt.len == 0)
+			path = pushstr8cat(a, str8lit("web"), url);
+		else
+			path = pushstr8f(a, "%.*s/web%.*s", imtpt.len, imtpt.str, url.len, url.str);
+		if (fileexists(path)) {
+			mime = mimetype(path);
+			sendfile(a, clientfd, path, mime);
+		} else {
+			resptxt = str8lit("mediasrv: can't find static file");
+			sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
+		}
+		arenarelease(a);
+		closefd(clientfd);
+		return NULL;
+	}
+	if (str8cmp(str8ext(url), str8lit("mkv"), 0)) {
+		if (imtpt.len == 0)
+			path = pushstr8cpy(a, str8skip(url, 1));
+		else
+			path = pushstr8cat(a, imtpt, url);
+		if (!fileexists(path)) {
+			resptxt = str8lit("mediasrv: can't generate media");
+			sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
+			arenarelease(a);
+			closefd(clientfd);
+			return NULL;
+		}
+		if (omtpt.len == 0)
+			mtpt = str8dirname(path);
+		else
+			mtpt = pushstr8cpy(a, omtpt);
+		name = str8prefixext(str8basename(url));
+		opath = pushstr8f(a, "%.*s/%.*s", mtpt.len, mtpt.str, name.len, name.str);
+		indexpath = pushstr8cat(a, opath, str8lit("-index"));
+		if (fileexists(indexpath))
+			resptxt = readfile(a, indexpath);
+		else {
+			if (!direxists(opath))
+				osmkdir(opath);
+			resptxt = mkmedia(a, path, opath);
+			if (resptxt.len > 0)
+				appendfile(indexpath, resptxt);
+		}
+		if (resptxt.len > 0)
+			sendresp(a, clientfd, str8lit("200 OK"), str8lit("text/plain"), resptxt);
+		else {
+			resptxt = str8lit("mediasrv: can't generate media");
+			sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
+		}
+		arenarelease(a);
+		closefd(clientfd);
+		return NULL;
+	}
+	if (fileexists(url)) {
+		mime = mimetype(url);
+		sendfile(a, clientfd, url, mime);
+	} else {
+		resptxt = str8lit("mediasrv: can't find media");
+		sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
+	}
+	arenarelease(a);
+	closefd(clientfd);
+	return NULL;
 }
 
 int
@@ -433,8 +461,8 @@ main(int argc, char *argv[])
 	String8list args;
 	Cmd parsed;
 	String8 portstr;
-	u64 port;
-	struct MHD_Daemon *daemon;
+	u64 srvfd, clientfd;
+	pthread_t thread;
 
 	sysinfo.nprocs = sysconf(_SC_NPROCESSORS_ONLN);
 	sysinfo.pagesz = sysconf(_SC_PAGESIZE);
@@ -447,28 +475,31 @@ main(int argc, char *argv[])
 	parsed = cmdparse(arena, args);
 	imtpt = str8zero();
 	omtpt = str8zero();
-	portstr = str8zero();
-	port = 8080;
 	if (cmdhasarg(&parsed, str8lit("i")))
 		imtpt = cmdstr(&parsed, str8lit("i"));
 	if (cmdhasarg(&parsed, str8lit("o")))
 		omtpt = cmdstr(&parsed, str8lit("o"));
-	if (cmdhasarg(&parsed, str8lit("p"))) {
+	if (cmdhasarg(&parsed, str8lit("p")))
 		portstr = cmdstr(&parsed, str8lit("p"));
-		port = str8tou64(portstr, 10);
-	}
+	else
+		portstr = str8lit("8080");
 	if (!direxists(omtpt))
 		osmkdir(omtpt);
-	daemon = MHD_start_daemon(MHD_USE_THREAD_PER_CONNECTION, port, NULL, NULL, &reqhandler, arena, MHD_OPTION_END);
-	if (daemon == NULL) {
+	srvfd = socketlisten(portstr);
+	if (srvfd == 0) {
 		fprintf(stderr, "mediasrv: can't start HTTP server\n");
 		arenarelease(arena);
 		return 1;
 	}
-	signal(SIGINT, sighandler);
-	signal(SIGTERM, sighandler);
-	while (run)
-		sleepms(1000);
-	MHD_stop_daemon(daemon);
+	for (;;) {
+		clientfd = socketaccept(srvfd);
+		if (clientfd == 0)
+			continue;
+		if (pthread_create(&thread, NULL, handleconn, (void *)clientfd) != 0)
+			closefd(clientfd);
+		pthread_detach(thread);
+	}
+	closefd(srvfd);
+	arenarelease(arena);
 	return 0;
 }
