@@ -335,6 +335,35 @@ sendfile(Arena *a, u64 clientfd, String8 path, String8 mime)
 	closefd(fd);
 }
 
+static String8
+listdir(Arena *a, String8 path)
+{
+	String8 p;
+	DIR *d;
+	String8list files;
+	Stringjoin join;
+	struct dirent *de;
+	String8 dirname;
+
+	p = pushstr8cpy(a, path);
+	d = opendir((char *)p.str);
+	if (d == NULL)
+		return str8zero();
+	memset(&files, 0, sizeof files);
+	join.pre = str8lit("");
+	join.sep = str8lit("\n");
+	join.post = str8lit("");
+	for (;;) {
+		de = readdir(d);
+		if (de == NULL)
+			break;
+		dirname = pushstr8cpy(a, str8cstr(de->d_name));
+		str8listpush(a, &files, dirname);
+	}
+	closedir(d);
+	return str8listjoin(a, &files, &join);
+}
+
 static void *
 handleconn(void *arg)
 {
@@ -442,9 +471,18 @@ handleconn(void *arg)
 		closefd(clientfd);
 		return NULL;
 	}
-	if (fileexists(url)) {
-		mime = mimetype(url);
-		sendfile(a, clientfd, url, mime);
+	path = str8skip(url, 1);
+	if (direxists(path)) {
+		resptxt = listdir(a, path);
+		if (resptxt.len > 0)
+			sendresp(a, clientfd, str8lit("200 OK"), str8lit("text/plain"), resptxt);
+		else {
+			resptxt = str8lit("mediasrv: can't list directory");
+			sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
+		}
+	} else if (fileexists(path)) {
+		mime = mimetype(path);
+		sendfile(a, clientfd, path, mime);
 	} else {
 		resptxt = str8lit("mediasrv: can't find media");
 		sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);

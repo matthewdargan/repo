@@ -50,7 +50,7 @@
             };
             pname = "mediasrv";
             src = ./.;
-            version = "0.5.0";
+            version = "0.6.0";
           };
           tor = pkgs.clangStdenv.mkDerivation {
             buildInputs = [
@@ -72,7 +72,7 @@
             nativeBuildInputs = [pkgs.pkg-config];
             pname = "tor";
             src = ./.;
-            version = "0.1.0";
+            version = "0.1.1";
           };
           tordl = pkgs.clangStdenv.mkDerivation {
             buildInputs = [
@@ -94,7 +94,7 @@
             nativeBuildInputs = [pkgs.pkg-config];
             pname = "tordl";
             src = ./.;
-            version = "0.1.0";
+            version = "0.1.1";
           };
           torrss = pkgs.clangStdenv.mkDerivation {
             buildInputs = [
@@ -118,7 +118,7 @@
             nativeBuildInputs = [pkgs.pkg-config];
             pname = "torrss";
             src = ./.;
-            version = "0.1.0";
+            version = "0.1.1";
           };
         };
         pre-commit = {
