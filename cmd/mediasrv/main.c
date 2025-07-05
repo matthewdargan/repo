@@ -370,7 +370,7 @@ handleconn(void *arg)
 	u64 clientfd, lineend, methodend, urlend;
 	Arenaparams ap;
 	Arena *a;
-	String8 req, line, url, path, mime, resptxt, mtpt, name, opath, indexpath;
+	String8 req, line, url, path, mime, resptxt, ext, mtpt, name, opath, indexpath;
 
 	clientfd = (u64)arg;
 	ap.flags = arenaflags;
@@ -433,7 +433,8 @@ handleconn(void *arg)
 		closefd(clientfd);
 		return NULL;
 	}
-	if (str8cmp(str8ext(url), str8lit("mkv"), 0)) {
+	ext = str8ext(url);
+	if (str8cmp(ext, str8lit("mkv"), 0) || str8cmp(ext, str8lit("mp4"), 0)) {
 		if (imtpt.len == 0)
 			path = pushstr8cpy(a, str8skip(url, 1));
 		else
