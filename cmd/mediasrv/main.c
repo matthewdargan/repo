@@ -500,6 +500,7 @@ main(int argc, char *argv[])
 	String8list args;
 	Cmd parsed;
 	String8 portstr;
+	struct addrinfo hints;
 	u64 srvfd, clientfd;
 	pthread_t thread;
 
@@ -524,7 +525,11 @@ main(int argc, char *argv[])
 		portstr = str8lit("8080");
 	if (!direxists(omtpt))
 		osmkdir(omtpt);
-	srvfd = socketlisten(portstr);
+	memset(&hints, 0, sizeof hints);
+	hints.ai_flags = AI_PASSIVE;
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	srvfd = socketlisten(portstr, &hints);
 	if (srvfd == 0) {
 		fprintf(stderr, "mediasrv: can't start HTTP server\n");
 		arenarelease(arena);

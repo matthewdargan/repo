@@ -1,19 +1,15 @@
 static u64
-socketlisten(String8 port)
+socketlisten(String8 port, struct addrinfo *hints)
 {
 	char portbuf[6];
-	struct addrinfo hints, *res;
+	struct addrinfo *res;
 	int fd, opt;
 
 	if (port.len == 0 || port.len >= sizeof portbuf)
 		return 0;
 	memcpy(portbuf, port.str, port.len);
 	portbuf[port.len] = 0;
-	memset(&hints, 0, sizeof hints);
-	hints.ai_flags = AI_PASSIVE;
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	if (getaddrinfo(NULL, portbuf, &hints, &res) < 0)
+	if (getaddrinfo(NULL, portbuf, hints, &res) < 0)
 		return 0;
 	fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 	if (fd < 0) {
@@ -56,10 +52,10 @@ socketaccept(u64 fd)
 }
 
 static u64
-socketconnect(String8 host, String8 port)
+socketconnect(String8 host, String8 port, struct addrinfo *hints)
 {
 	char portbuf[6], hostbuf[1024];
-	struct addrinfo hints, *res;
+	struct addrinfo *res;
 	int fd, opt;
 
 	if (port.len == 0 || port.len >= sizeof portbuf)
@@ -72,11 +68,7 @@ socketconnect(String8 host, String8 port)
 		return 0;
 	memcpy(hostbuf, host.str, host.len);
 	hostbuf[host.len] = 0;
-	memset(&hints, 0, sizeof hints);
-	hints.ai_flags = AI_PASSIVE;
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	if (getaddrinfo(hostbuf, portbuf, &hints, &res) < 0)
+	if (getaddrinfo(hostbuf, portbuf, hints, &res) < 0)
 		return 0;
 	fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 	if (fd < 0) {
