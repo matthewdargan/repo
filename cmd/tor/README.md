@@ -24,6 +24,6 @@ The -o flag sets the sorting order. The order can be set to ascending
 
 The -q flag sets the query. This is a required argument.
 
-Example:
+## Example
 
     tor -f '1' -c '1_2' -u 'user 1' -s 'downloads' -o 'desc' -q 'One Piece'
