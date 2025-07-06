@@ -94,7 +94,7 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 	AVDictionary *opts;
 	String8list generated;
 	Stringjoin join;
-	String8 mpdpath, bpsstr, subpath, lang;
+	String8 path, basepath, relmpdpath, mpdpath, bpsstr, relsubpath, subpath, lang;
 	int ret;
 	U64array mpdstreams;
 	u64 i, nmpds, mpdidx;
@@ -111,7 +111,10 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 	opts = NULL;
 	memset(&generated, 0, sizeof generated);
 	pkt = av_packet_alloc();
-	mpdpath = pushstr8f(a, "%.*s/manifest%lu.mpd", opath.len, opath.str, nowus());
+	path = pushstr8f(a, "manifest%lu.mpd", nowus());
+	basepath = str8basename(opath);
+	relmpdpath = pushstr8f(a, "%.*s/%.*s", basepath.len, basepath.str, path.len, path.str);
+	mpdpath = pushstr8f(a, "%.*s/%.*s", opath.len, opath.str, path.len, path.str);
 	ret = avformat_open_input(&ictx, (char *)ipath.str, NULL, NULL);
 	if (ret < 0) {
 		fprintf(stderr, "mkmedia: can't open '%s'\n", ipath.str);
@@ -185,7 +188,9 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 			le = av_dict_get(istream->metadata, "language", NULL, 0);
 			if (le != NULL)
 				lang = str8cstr(le->value);
-			subpath = pushstr8f(a, "%.*s/%.*s%lu.ass", opath.len, opath.str, lang.len, lang.str, nowus());
+			path = pushstr8f(a, "%.*s%lu.ass", lang.len, lang.str, nowus());
+			relsubpath = pushstr8f(a, "%.*s/%.*s", basepath.len, basepath.str, path.len, path.str);
+			subpath = pushstr8f(a, "%.*s/%.*s", opath.len, opath.str, path.len, path.str);
 			ret = avformat_alloc_output_context2(&subctxs[i], NULL, "ass", (char *)subpath.str);
 			if (ret < 0) {
 				fprintf(stderr, "mkmedia: can't create subtitle output context\n");
@@ -207,7 +212,7 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 				fprintf(stderr, "mkmedia: can't write subtitle header\n");
 				continue;
 			}
-			str8listpush(a, &generated, subpath);
+			str8listpush(a, &generated, relsubpath);
 		}
 	}
 	av_dict_set(&opts, "hwaccel", "auto", 0);
@@ -232,7 +237,7 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 		avformat_close_input(&ictx);
 		return str8zero();
 	}
-	str8listpush(a, &generated, mpdpath);
+	str8listpush(a, &generated, relmpdpath);
 	while (av_read_frame(ictx, pkt) >= 0) {
 		i = pkt->stream_index;
 		istream = ictx->streams[i];
@@ -472,7 +477,32 @@ handleconn(void *arg)
 		closefd(clientfd);
 		return NULL;
 	}
-	path = str8skip(url, 1);
+	if (omtpt.len > 0) {
+		path = pushstr8cat(a, omtpt, url);
+		if (direxists(path)) {
+			resptxt = listdir(a, path);
+			if (resptxt.len > 0)
+				sendresp(a, clientfd, str8lit("200 OK"), str8lit("text/plain"), resptxt);
+			else {
+				resptxt = str8lit("mediasrv: can't list directory");
+				sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
+			}
+			arenarelease(a);
+			closefd(clientfd);
+			return NULL;
+		}
+		if (fileexists(path)) {
+			mime = mimetype(path);
+			sendfile(a, clientfd, path, mime);
+			arenarelease(a);
+			closefd(clientfd);
+			return NULL;
+		}
+	}
+	if (imtpt.len == 0)
+		path = pushstr8cpy(a, str8skip(url, 1));
+	else
+		path = pushstr8cat(a, imtpt, url);
 	if (direxists(path)) {
 		resptxt = listdir(a, path);
 		if (resptxt.len > 0)
@@ -481,13 +511,19 @@ handleconn(void *arg)
 			resptxt = str8lit("mediasrv: can't list directory");
 			sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
 		}
-	} else if (fileexists(path)) {
+		arenarelease(a);
+		closefd(clientfd);
+		return NULL;
+	}
+	if (fileexists(path)) {
 		mime = mimetype(path);
 		sendfile(a, clientfd, path, mime);
-	} else {
-		resptxt = str8lit("mediasrv: can't find media");
-		sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
+		arenarelease(a);
+		closefd(clientfd);
+		return NULL;
 	}
+	resptxt = str8lit("mediasrv: can't find media");
+	sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
 	arenarelease(a);
 	closefd(clientfd);
 	return NULL;
@@ -504,6 +540,7 @@ main(int argc, char *argv[])
 	u64 srvfd, clientfd;
 	pthread_t thread;
 
+	/* TODO: implement thread pool with nprocs */
 	sysinfo.nprocs = sysconf(_SC_NPROCESSORS_ONLN);
 	sysinfo.pagesz = sysconf(_SC_PAGESIZE);
 	sysinfo.lpagesz = 0x200000;
