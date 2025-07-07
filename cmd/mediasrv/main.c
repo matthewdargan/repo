@@ -67,8 +67,6 @@ validstream(AVStream *st)
 					return 0;
 			}
 			break;
-		case AVMEDIA_TYPE_SUBTITLE:
-			return st->codecpar->codec_id == AV_CODEC_ID_WEBVTT;
 		default:
 			return 0;
 	}
@@ -79,7 +77,8 @@ static b32
 validsub(AVStream *st)
 {
 	return st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE &&
-	       (st->codecpar->codec_id == AV_CODEC_ID_ASS || st->codecpar->codec_id == AV_CODEC_ID_SSA);
+	       (st->codecpar->codec_id == AV_CODEC_ID_SSA || st->codecpar->codec_id == AV_CODEC_ID_ASS ||
+	        st->codecpar->codec_id == AV_CODEC_ID_SRT || st->codecpar->codec_id == AV_CODEC_ID_SUBRIP);
 }
 
 static void
@@ -106,7 +105,7 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 	AVDictionary *opts;
 	String8list generated;
 	Stringjoin join;
-	String8 path, basepath, relmpdpath, mpdpath, bpsstr, relsubpath, subpath, lang;
+	String8 path, basepath, relmpdpath, mpdpath, bpsstr, relsubpath, subpath, lang, subext;
 	int ret;
 	U64array mpdstreams;
 	u64 i, nmpds, mpdidx;
@@ -123,7 +122,7 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 	opts = NULL;
 	memset(&generated, 0, sizeof generated);
 	pkt = av_packet_alloc();
-	path = pushstr8f(a, "manifest%lu.mpd", nowus());
+	path = str8lit("manifest.mpd");
 	basepath = str8basename(opath);
 	relmpdpath = pushstr8f(a, "%.*s/%.*s", basepath.len, basepath.str, path.len, path.str);
 	mpdpath = pushstr8f(a, "%.*s/%.*s", opath.len, opath.str, path.len, path.str);
@@ -200,10 +199,24 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 			le = av_dict_get(istream->metadata, "language", NULL, 0);
 			if (le != NULL)
 				lang = str8cstr(le->value);
-			path = pushstr8f(a, "%.*s%lu.ass", lang.len, lang.str, nowus());
+			switch (istream->codecpar->codec_id) {
+				case AV_CODEC_ID_SSA:
+					subext = str8lit("ssa");
+					break;
+				case AV_CODEC_ID_ASS:
+					subext = str8lit("ass");
+					break;
+				case AV_CODEC_ID_SRT:
+				case AV_CODEC_ID_SUBRIP:
+					subext = str8lit("srt");
+					break;
+				default:
+					continue;
+			}
+			path = pushstr8f(a, "%.*s%lu.%.*s", lang.len, lang.str, i, subext.len, subext.str);
 			relsubpath = pushstr8f(a, "%.*s/%.*s", basepath.len, basepath.str, path.len, path.str);
 			subpath = pushstr8f(a, "%.*s/%.*s", opath.len, opath.str, path.len, path.str);
-			ret = avformat_alloc_output_context2(&subctxs[i], NULL, "ass", (char *)subpath.str);
+			ret = avformat_alloc_output_context2(&subctxs[i], NULL, (char *)subext.str, (char *)subpath.str);
 			if (ret < 0) {
 				fprintf(stderr, "mkmedia: can't create subtitle output context\n");
 				continue;
@@ -309,7 +322,7 @@ mimetype(String8 path)
 		return str8lit("application/dash+xml");
 	else if (str8cmp(ext, str8lit("m4s"), 0))
 		return str8lit("video/mp4");
-	else if (str8cmp(ext, str8lit("ass"), 0))
+	else if (str8cmp(ext, str8lit("ssa"), 0) || str8cmp(ext, str8lit("ass"), 0) || str8cmp(ext, str8lit("srt"), 0))
 		return str8lit("text/plain");
 	else if (str8cmp(ext, str8lit("html"), 0))
 		return str8lit("text/html");
