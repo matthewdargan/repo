@@ -50,7 +50,7 @@
             };
             pname = "mediasrv";
             src = ./.;
-            version = "0.8.0";
+            version = "0.9.0";
           };
           tor = pkgs.clangStdenv.mkDerivation {
             buildInputs = [

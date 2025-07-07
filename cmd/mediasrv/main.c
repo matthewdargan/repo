@@ -26,6 +26,18 @@
 #include "libu/socket.c"
 /* clang-format on */
 
+typedef struct ThreadPool ThreadPool;
+struct ThreadPool {
+	pthread_t *threads;
+	u64 nthreads;
+	u64 *queue;
+	u64 head;
+	u64 tail;
+	u64 size;
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
+};
+
 static String8 imtpt, omtpt;
 
 static b32
@@ -369,7 +381,7 @@ listdir(Arena *a, String8 path)
 	return str8listjoin(a, &files, &join);
 }
 
-static void *
+static void
 handleconn(void *arg)
 {
 	u64 clientfd, lineend, methodend, urlend;
@@ -386,20 +398,20 @@ handleconn(void *arg)
 	if (req.len == 0) {
 		arenarelease(a);
 		closefd(clientfd);
-		return NULL;
+		return;
 	}
 	lineend = str8index(req, 0, str8lit("\r\n"), 0);
 	if (lineend == req.len) {
 		arenarelease(a);
 		closefd(clientfd);
-		return NULL;
+		return;
 	}
 	line = str8prefix(req, lineend);
 	methodend = str8index(line, 0, str8lit(" "), 0);
 	if (methodend == line.len) {
 		arenarelease(a);
 		closefd(clientfd);
-		return NULL;
+		return;
 	}
 	urlend = str8index(line, methodend + 1, str8lit(" "), 0);
 	if (urlend == line.len)
@@ -414,13 +426,13 @@ handleconn(void *arg)
 			sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), str8lit("not found"));
 		arenarelease(a);
 		closefd(clientfd);
-		return NULL;
+		return;
 	}
 	if (str8index(url, 0, str8lit(".."), 0) < url.len) {
 		sendresp(a, clientfd, str8lit("400 Bad Request"), str8lit("text/plain"), str8lit("bad request"));
 		arenarelease(a);
 		closefd(clientfd);
-		return NULL;
+		return;
 	}
 	if (str8index(url, 0, str8lit("/css/"), 0) == 0 || str8index(url, 0, str8lit("/js/"), 0) == 0) {
 		if (imtpt.len == 0)
@@ -436,7 +448,7 @@ handleconn(void *arg)
 		}
 		arenarelease(a);
 		closefd(clientfd);
-		return NULL;
+		return;
 	}
 	ext = str8ext(url);
 	if (str8cmp(ext, str8lit("mkv"), 0) || str8cmp(ext, str8lit("mp4"), 0)) {
@@ -449,7 +461,7 @@ handleconn(void *arg)
 			sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
 			arenarelease(a);
 			closefd(clientfd);
-			return NULL;
+			return;
 		}
 		if (omtpt.len == 0)
 			mtpt = str8dirname(path);
@@ -475,7 +487,7 @@ handleconn(void *arg)
 		}
 		arenarelease(a);
 		closefd(clientfd);
-		return NULL;
+		return;
 	}
 	if (omtpt.len > 0) {
 		path = pushstr8cat(a, omtpt, url);
@@ -489,14 +501,14 @@ handleconn(void *arg)
 			}
 			arenarelease(a);
 			closefd(clientfd);
-			return NULL;
+			return;
 		}
 		if (fileexists(path)) {
 			mime = mimetype(path);
 			sendfile(a, clientfd, path, mime);
 			arenarelease(a);
 			closefd(clientfd);
-			return NULL;
+			return;
 		}
 	}
 	if (imtpt.len == 0)
@@ -513,19 +525,38 @@ handleconn(void *arg)
 		}
 		arenarelease(a);
 		closefd(clientfd);
-		return NULL;
+		return;
 	}
 	if (fileexists(path)) {
 		mime = mimetype(path);
 		sendfile(a, clientfd, path, mime);
 		arenarelease(a);
 		closefd(clientfd);
-		return NULL;
+		return;
 	}
 	resptxt = str8lit("mediasrv: can't find media");
 	sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
 	arenarelease(a);
 	closefd(clientfd);
+	return;
+}
+
+static void *
+worker(void *arg)
+{
+	ThreadPool *pool;
+	u64 clientfd;
+
+	pool = (ThreadPool *)arg;
+	for (;;) {
+		pthread_mutex_lock(&pool->mutex);
+		while (pool->head == pool->tail)
+			pthread_cond_wait(&pool->cond, &pool->mutex);
+		clientfd = pool->queue[pool->head % pool->size];
+		pool->head++;
+		pthread_mutex_unlock(&pool->mutex);
+		handleconn((void *)clientfd);
+	}
 	return NULL;
 }
 
@@ -536,11 +567,10 @@ main(int argc, char *argv[])
 	String8list args;
 	Cmd parsed;
 	String8 portstr;
+	ThreadPool pool;
 	struct addrinfo hints;
-	u64 srvfd, clientfd;
-	pthread_t thread;
+	u64 i, srvfd, clientfd;
 
-	/* TODO: implement thread pool with nprocs */
 	sysinfo.nprocs = sysconf(_SC_NPROCESSORS_ONLN);
 	sysinfo.pagesz = sysconf(_SC_PAGESIZE);
 	sysinfo.lpagesz = 0x200000;
@@ -562,6 +592,17 @@ main(int argc, char *argv[])
 		portstr = str8lit("8080");
 	if (!direxists(omtpt))
 		osmkdir(omtpt);
+	memset(&pool, 0, sizeof pool);
+	pool.nthreads = sysinfo.nprocs;
+	pool.threads = pusharr(arena, pthread_t, pool.nthreads);
+	pool.size = 1024;
+	pool.queue = pusharr(arena, u64, pool.size);
+	pthread_mutex_init(&pool.mutex, NULL);
+	pthread_cond_init(&pool.cond, NULL);
+	for (i = 0; i < pool.nthreads; i++) {
+		pthread_create(&pool.threads[i], NULL, worker, &pool);
+		pthread_detach(pool.threads[i]);
+	}
 	memset(&hints, 0, sizeof hints);
 	hints.ai_flags = AI_PASSIVE;
 	hints.ai_family = AF_INET;
@@ -576,9 +617,14 @@ main(int argc, char *argv[])
 		clientfd = socketaccept(srvfd);
 		if (clientfd == 0)
 			continue;
-		if (pthread_create(&thread, NULL, handleconn, (void *)clientfd) != 0)
+		pthread_mutex_lock(&pool.mutex);
+		if (pool.tail - pool.head < pool.size) {
+			pool.queue[pool.tail % pool.size] = clientfd;
+			pool.tail++;
+			pthread_cond_signal(&pool.cond);
+		} else
 			closefd(clientfd);
-		pthread_detach(thread);
+		pthread_mutex_unlock(&pool.mutex);
 	}
 	closefd(srvfd);
 	arenarelease(arena);
