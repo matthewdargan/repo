@@ -1,5 +1,6 @@
 {
   media-server,
+  u9fs,
   nixpkgs,
   ...
 }: {
@@ -13,7 +14,11 @@
       efi.canTouchEfiVariables = true;
       systemd-boot.enable = true;
     };
-    supportedFilesystems = ["btrfs" "ext4" "vfat"];
+    supportedFilesystems = [
+      "btrfs"
+      "ext4"
+      "vfat"
+    ];
   };
   i18n = {
     defaultLocale = "en_US.UTF-8";
@@ -33,7 +38,10 @@
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "nas";
     firewall = {
-      allowedTCPPorts = [22 4500];
+      allowedTCPPorts = [
+        22
+        4500
+      ];
       checkReversePath = "loose";
       interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
         7246
@@ -72,7 +80,7 @@
   };
   system.stateVersion = "25.05";
   systemd = let
-    mountDir = "/home/mpd/9drive";
+    mountDir = "/media";
     port = "4500";
     user = "mpd";
   in {
@@ -83,7 +91,9 @@
         description = "media server";
         wantedBy = ["multi-user.target"];
         serviceConfig = {
-          ExecStart = "${media-server.packages.${pkgs.system}.mediasrv}/bin/mediasrv -i /media/shows -o /var/lib/mediasrv -p 8080";
+          ExecStart = "${
+            media-server.packages.${pkgs.system}.mediasrv
+          }/bin/mediasrv -i /media/shows -o /var/lib/mediasrv -p 8080";
           Restart = "on-failure";
           StateDirectory = "mediasrv";
           Type = "simple";
@@ -92,9 +102,9 @@
       };
       "u9fs@" = {
         after = ["network.target"];
-        description = "serves directory as a 9p root filesystem";
+        description = "9P filesystem server";
         serviceConfig = {
-          ExecStart = "${pkgs.u9fs}/bin/u9fs -D -a none -u ${user} -d ${mountDir}";
+          ExecStart = "${u9fs.packages.${pkgs.system}.u9fs}/bin/u9fs -D -a none -u ${user} -d ${mountDir}";
           StandardInput = "socket";
           StandardError = "journal";
           User = "${user}";
@@ -113,7 +123,13 @@
   time.timeZone = "America/Chicago";
   users.users.mpd = {
     description = "Matthew Dargan";
-    extraGroups = ["input" "jellyfin" "networkmanager" "systemd-journal" "wheel"];
+    extraGroups = [
+      "input"
+      "jellyfin"
+      "networkmanager"
+      "systemd-journal"
+      "wheel"
+    ];
     isNormalUser = true;
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILe/v2phdFJcaINc1bphWEM6vXDSlXY/e0B2zyb3ik1M matthewdargan57@gmail.com"

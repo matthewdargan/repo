@@ -31,6 +31,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:cachix/pre-commit-hooks.nix";
     };
+    u9fs = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:justinrubek/u9fs";
+    };
   };
   outputs = {parts, ...} @ inputs:
     parts.lib.mkFlake {inherit inputs;} {
