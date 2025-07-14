@@ -21,7 +21,7 @@ do
 	release)
 		debug=0
 		;;
-	mediasrv|tor|tordl|torrss)
+	9mount|mediasrv|tor|tordl|torrss)
 		targets="$targets $i"
 		;;
 	*)
@@ -40,6 +40,9 @@ cd bin || exit 1
 for t in $targets
 do
 	case "$t" in
+	9mount)
+		$cc ../cmd/9mount/main.c -o 9mount
+		;;
 	mediasrv)
 		$cc ../cmd/mediasrv/main.c $medialibs -o mediasrv
 		;;
