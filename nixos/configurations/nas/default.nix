@@ -1,6 +1,5 @@
 {
   nixpkgs,
-  src,
   u9fs,
   ...
 }: {
@@ -45,7 +44,6 @@
       checkReversePath = "loose";
       interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
         7246
-        8080
         8096
       ];
     };
@@ -84,31 +82,14 @@
     port = "4500";
     user = "mpd";
   in {
-    services = {
-      mediasrv = {
-        enable = true;
-        after = ["network.target"];
-        description = "media server";
-        wantedBy = ["multi-user.target"];
-        serviceConfig = {
-          ExecStart = "${
-            src.packages.${pkgs.system}.mediasrv
-          }/bin/mediasrv -i /media/shows -o /var/lib/mediasrv -p 8080";
-          Restart = "on-failure";
-          StateDirectory = "mediasrv";
-          Type = "simple";
-          User = "${user}";
-        };
-      };
-      "u9fs@" = {
-        after = ["network.target"];
-        description = "9P filesystem server";
-        serviceConfig = {
-          ExecStart = "${u9fs.packages.${pkgs.system}.u9fs}/bin/u9fs -D -a none -u ${user} -d ${mountDir}";
-          StandardInput = "socket";
-          StandardError = "journal";
-          User = "${user}";
-        };
+    services."u9fs@" = {
+      after = ["network.target"];
+      description = "9P filesystem server";
+      serviceConfig = {
+        ExecStart = "${u9fs.packages.${pkgs.system}.u9fs}/bin/u9fs -D -a none -u ${user} -d ${mountDir}";
+        StandardInput = "socket";
+        StandardError = "journal";
+        User = "${user}";
       };
     };
     sockets.u9fs = {
