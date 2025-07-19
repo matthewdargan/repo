@@ -1,7 +1,7 @@
 {
-  media-server,
-  u9fs,
   nixpkgs,
+  src,
+  u9fs,
   ...
 }: {
   config,
@@ -92,7 +92,7 @@
         wantedBy = ["multi-user.target"];
         serviceConfig = {
           ExecStart = "${
-            media-server.packages.${pkgs.system}.mediasrv
+            src.packages.${pkgs.system}.mediasrv
           }/bin/mediasrv -i /media/shows -o /var/lib/mediasrv -p 8080";
           Restart = "on-failure";
           StateDirectory = "mediasrv";

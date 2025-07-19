@@ -1,9 +1,9 @@
 {inputs, ...}: {pkgs, ...}: {
   home.packages = [
     inputs.epify.packages.${pkgs.system}.epify
-    inputs.media-server.packages.${pkgs.system}.tor
-    inputs.media-server.packages.${pkgs.system}.tordl
-    inputs.media-server.packages.${pkgs.system}.torrss
+    inputs.src.packages.${pkgs.system}.tor
+    inputs.src.packages.${pkgs.system}.tordl
+    inputs.src.packages.${pkgs.system}.torrss
     pkgs.rain-bittorrent
   ];
 }

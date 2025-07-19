@@ -17,10 +17,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/home-manager";
     };
-    media-server = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/media-server";
-    };
     nixpkgs.url = "nixpkgs/nixos-unstable";
     nixvim = {
       inputs.nixpkgs.follows = "nixpkgs";
@@ -30,6 +26,10 @@
     pre-commit-hooks = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:cachix/pre-commit-hooks.nix";
+    };
+    src = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:matthewdargan/src";
     };
     u9fs = {
       inputs.nixpkgs.follows = "nixpkgs";
