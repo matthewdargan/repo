@@ -9,7 +9,7 @@ socketlisten(String8 port, struct addrinfo *hints)
 		return 0;
 	memcpy(portbuf, port.str, port.len);
 	portbuf[port.len] = 0;
-	if (getaddrinfo(NULL, portbuf, hints, &res) < 0)
+	if (getaddrinfo(NULL, portbuf, hints, &res) != 0)
 		return 0;
 	fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 	if (fd < 0) {
@@ -68,7 +68,7 @@ socketconnect(String8 host, String8 port, struct addrinfo *hints)
 		return 0;
 	memcpy(hostbuf, host.str, host.len);
 	hostbuf[host.len] = 0;
-	if (getaddrinfo(hostbuf, portbuf, hints, &res) < 0)
+	if (getaddrinfo(hostbuf, portbuf, hints, &res) != 0)
 		return 0;
 	fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 	if (fd < 0) {

@@ -35,6 +35,22 @@
           shellHook = "${config.pre-commit.installationScript}";
         };
         packages = {
+          "9mount" = pkgs.clangStdenv.mkDerivation {
+            buildPhase = "./build release 9mount";
+            installPhase = ''
+              mkdir -p "$out/bin"
+              cp ./bin/9mount "$out/bin"
+            '';
+            meta = with lib; {
+              description = "Mounts a 9p filesystem";
+              homepage = "https://github.com/matthewdargan/src";
+              license = licenses.bsd3;
+              maintainers = with maintainers; [matthewdargan];
+            };
+            pname = "9mount";
+            src = ./.;
+            version = "0.1.0";
+          };
           mediasrv = pkgs.clangStdenv.mkDerivation {
             buildInputs = [pkgs.ffmpeg];
             buildPhase = "./build release mediasrv";
@@ -44,7 +60,7 @@
             '';
             meta = with lib; {
               description = "Media server";
-              homepage = "https://github.com/matthewdargan/media-server";
+              homepage = "https://github.com/matthewdargan/src";
               license = licenses.bsd3;
               maintainers = with maintainers; [matthewdargan];
             };
@@ -65,7 +81,7 @@
             '';
             meta = with lib; {
               description = "Queries for torrents";
-              homepage = "https://github.com/matthewdargan/media-server";
+              homepage = "https://github.com/matthewdargan/src";
               license = licenses.bsd3;
               maintainers = with maintainers; [matthewdargan];
             };
@@ -87,7 +103,7 @@
             '';
             meta = with lib; {
               description = "Downloads provided torrents";
-              homepage = "https://github.com/matthewdargan/media-server";
+              homepage = "https://github.com/matthewdargan/src";
               license = licenses.bsd3;
               maintainers = with maintainers; [matthewdargan];
             };
@@ -111,7 +127,7 @@
             '';
             meta = with lib; {
               description = "Queries RSS feeds and downloads torrents automatically";
-              homepage = "https://github.com/matthewdargan/media-server";
+              homepage = "https://github.com/matthewdargan/src";
               license = licenses.bsd3;
               maintainers = with maintainers; [matthewdargan];
             };

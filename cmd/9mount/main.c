@@ -1,7 +1,5 @@
-#include <arpa/inet.h>
 #include <dirent.h>
 #include <errno.h>
-#include <limits.h>
 #include <netdb.h>
 #include <pwd.h>
 #include <stdarg.h>
@@ -10,9 +8,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -29,102 +25,71 @@
 #include "libu/os.c"
 /* clang-format on */
 
-static char *
-str8tocstr(Arena *a, String8 s)
-{
-	char *cstr;
-
-	cstr = pusharr(a, char, s.len + 1);
-	memcpy(cstr, s.str, s.len);
-	cstr[s.len] = 0;
-	return cstr;
-}
-
-static b32
-str8startswith(String8 s, String8 prefix)
-{
-	return s.len >= prefix.len && memcmp(s.str, prefix.str, prefix.len) == 0;
-}
-
-static b32
-isvalidarg(String8 s)
-{
-	u64 i;
-	u8 c;
-
-	for (i = 0; i < s.len; i++) {
-		c = s.str[i];
-		if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))
-			return 0;
-	}
-	return 1;
-}
-
 static String8
-resolve_host(Arena *a, String8 host)
+resolvehost(Arena *a, String8 host)
 {
-	char *host_cstr;
+	char hostbuf[1024], ipbuf[INET6_ADDRSTRLEN];
 	struct addrinfo *ai;
-	int r;
-	char ipstr[INET6_ADDRSTRLEN];
+	int ret;
+	String8 s;
 
-	host_cstr = str8tocstr(a, host);
-	if ((r = getaddrinfo(host_cstr, 0, 0, &ai))) {
-		fprintf(stderr, "9mount: getaddrinfo: %s\n", gai_strerror(r));
-		exit(1);
+	if (host.len >= sizeof hostbuf)
+		return str8zero();
+	memcpy(hostbuf, host.str, host.len);
+	hostbuf[host.len] = 0;
+	ret = getaddrinfo(hostbuf, NULL, NULL, &ai);
+	if (ret != 0) {
+		fprintf(stderr, "9mount: getaddrinfo %.*s: %s\n", (int)host.len, host.str, gai_strerror(ret));
+		return str8zero();
 	}
-	r = getnameinfo(ai->ai_addr, ai->ai_addrlen, ipstr, sizeof(ipstr), 0, 0, NI_NUMERICHOST);
-	if (r) {
-		fprintf(stderr, "9mount: getnameinfo: %s\n", gai_strerror(r));
-		exit(1);
+	ret = getnameinfo(ai->ai_addr, ai->ai_addrlen, ipbuf, sizeof ipbuf, NULL, 0, NI_NUMERICHOST);
+	if (ret != 0) {
+		fprintf(stderr, "9mount: getnameinfo: %s\n", gai_strerror(ret));
+		freeaddrinfo(ai);
+		return str8zero();
 	}
+	s = pushstr8cpy(a, str8cstr(ipbuf));
 	freeaddrinfo(ai);
-	return pushstr8f(a, "%s", ipstr);
+	return s;
 }
 
-static b32
-str8alldigits(String8 s)
+static u64
+resolveport(String8 port)
 {
-	u64 i;
-	for (i = 0; i < s.len; i++) {
-		if (s.str[i] < '0' || s.str[i] > '9')
-			return 0;
-	}
-	return 1;
-}
-
-static u16
-resolve_port(String8 port)
-{
-	char *port_cstr;
+	char portbuf[1024];
 	struct servent *sv;
 
-	if (str8alldigits(port)) {
-		return (u16)str8tou64(port, 10);
+	if (str8isint(port, 10))
+		return str8tou64(port, 10);
+	if (port.len >= sizeof portbuf) {
+		fprintf(stderr, "9mount: service name too long\n");
+		return 0;
 	}
-	port_cstr = str8tocstr(arena, port);
-	if ((sv = getservbyname(port_cstr, "tcp"))) {
+	memcpy(portbuf, port.str, port.len);
+	portbuf[port.len] = 0;
+	sv = getservbyname(portbuf, "tcp");
+	if (sv != NULL) {
 		endservent();
 		return ntohs((uint16_t)sv->s_port);
 	}
 	fprintf(stderr, "9mount: unknown service %.*s\n", (int)port.len, port.str);
-	exit(1);
+	return 0;
 }
 
 int
 main(int argc, char *argv[])
 {
 	Arenaparams ap;
-	String8list args, optlist;
+	String8list args, opts;
 	Cmd parsed;
-	String8 dial, mountpt, addr, aname, msize, user, opts, uidstr, gidstr;
-	b32 dryrun, extend, dev, singleattach, exclusive;
+	b32 dryrun, singleattach, exclusive;
+	String8 aname, msizestr, uidstr, gidstr, dial, mtpt, host, portstr, addr, user, optstr;
+	uid_t uid;
+	gid_t gid;
 	struct passwd *pw;
 	struct stat st;
 	Stringjoin join;
-	char *addr_cstr, *mountpt_cstr, *opts_cstr;
-	uid_t uid;
-	gid_t gid;
+	u64 bang, port, msize;
 
 	sysinfo.nprocs = sysconf(_SC_NPROCESSORS_ONLN);
 	sysinfo.pagesz = sysconf(_SC_PAGESIZE);
@@ -135,122 +100,103 @@ main(int argc, char *argv[])
 	arena = arenaalloc(ap);
 	args = osargs(arena, argc, argv);
 	parsed = cmdparse(arena, args);
-	aname = cmdstr(&parsed, str8lit("a"));
-	msize = cmdstr(&parsed, str8lit("m"));
-	extend = cmdhasflag(&parsed, str8lit("e"));
-	uidstr = cmdstr(&parsed, str8lit("u"));
-	gidstr = cmdstr(&parsed, str8lit("g"));
-	dev = cmdhasflag(&parsed, str8lit("v"));
+	dryrun = cmdhasflag(&parsed, str8lit("n"));
 	singleattach = cmdhasflag(&parsed, str8lit("s"));
 	exclusive = cmdhasflag(&parsed, str8lit("x"));
-	dryrun = cmdhasflag(&parsed, str8lit("n"));
+	aname = cmdstr(&parsed, str8lit("a"));
+	msizestr = cmdstr(&parsed, str8lit("m"));
+	uidstr = cmdstr(&parsed, str8lit("u"));
+	gidstr = cmdstr(&parsed, str8lit("g"));
 	if (parsed.inputs.nnode != 2) {
-		fprintf(stderr, "usage: 9mount [-evsxn] [-a spec] [-m msize] [-u uid] [-g gid] dial mountpt");
+		fprintf(stderr, "usage: 9mount [-nsx] [-a spec] [-m msize] [-u uid] [-g gid] dial mtpt\n");
 		return 1;
 	}
 	dial = parsed.inputs.start->str;
-	mountpt = parsed.inputs.start->next->str;
-	printf("dryrun=%d\n", dryrun);
-	printf("extend=%d\n", extend);
-	printf("dev=%d\n", dev);
-	printf("singleattach=%d\n", singleattach);
-	printf("exclusive=%d\n", exclusive);
-	printf("aname=%.*s\n", (int)aname.len, aname.str);
-	printf("msize=%.*s\n", (int)msize.len, msize.str);
-	printf("dial=%.*s\n", (int)dial.len, dial.str);
-	printf("mountpt=%.*s\n", (int)mountpt.len, mountpt.str);
-	gid = getgid();
-	uid = getuid();
-	if (uidstr.len)
+	mtpt = parsed.inputs.start->next->str;
+	if (uidstr.len > 0)
 		uid = (uid_t)str8tou64(uidstr, 10);
-	if (gidstr.len)
+	else
+		uid = getuid();
+	if (gidstr.len > 0)
 		gid = (gid_t)str8tou64(gidstr, 10);
+	else
+		gid = getgid();
 	pw = getpwuid(uid);
 	if (pw == NULL) {
-		perror("9mount: getpwuid failed");
+		fprintf(stderr, "9mount: unknown uid %d\n", uid);
 		return 1;
 	}
-	mountpt_cstr = str8tocstr(arena, mountpt);
-	if (stat(mountpt_cstr, &st) || access(mountpt_cstr, W_OK)) {
-		perror(mountpt_cstr);
+	if (stat((char *)mtpt.str, &st) || access((char *)mtpt.str, W_OK)) {
+		fprintf(stderr, "9mount: %s: %s\n", (char *)mtpt.str, strerror(errno));
 		return 1;
 	}
 	if (st.st_mode & S_ISVTX) {
-		fprintf(stderr, "9mount: refusing to mount over sticky directory %s\n", mountpt_cstr);
+		fprintf(stderr, "9mount: refusing to mount over sticky directory %s\n", (char *)mtpt.str);
 		return 1;
 	}
-	memset(&optlist, 0, sizeof optlist);
+	memset(&opts, 0, sizeof opts);
 	if (str8cmp(dial, str8lit("-"), 0)) {
 		addr = str8lit("nodev");
-		str8listpush(arena, &optlist, str8lit("trans=fd,rfdno=0,wrfdno=1"));
-	} else if (str8startswith(dial, str8lit("virtio:"))) {
+		str8listpush(arena, &opts, str8lit("trans=fd,rfdno=0,wrfdno=1"));
+	} else if (str8index(dial, 0, str8lit("unix!"), 0) == 0) {
+		addr = str8skip(dial, 5);
+		str8listpush(arena, &opts, str8lit("trans=unix"));
+	} else if (str8index(dial, 0, str8lit("virtio!"), 0) == 0) {
 		addr = str8skip(dial, 7);
-		str8listpush(arena, &optlist, str8lit("trans=virtio"));
-	} else if (str8index(dial, 0, str8lit("/"), 0) < dial.len ||
-	           (stat(str8tocstr(arena, dial), &st) == 0 && S_ISSOCK(st.st_mode))) {
-		addr = dial;
-		str8listpush(arena, &optlist, str8lit("trans=unix"));
+		str8listpush(arena, &opts, str8lit("trans=virtio"));
+	} else if (str8index(dial, 0, str8lit("tcp!"), 0) == 0) {
+		dial = str8skip(dial, 4);
+		bang = str8index(dial, 0, str8lit("!"), 0);
+		if (bang < dial.len) {
+			host = str8prefix(dial, bang);
+			portstr = str8skip(dial, bang + 1);
+			if (portstr.len == 0) {
+				fprintf(stderr, "9mount: invalid dial string tcp!%.*s\n", (int)dial.len, dial.str);
+				return 1;
+			}
+		} else {
+			host = dial;
+			portstr = str8lit("564");
+		}
+		addr = resolvehost(arena, host);
+		if (addr.len == 0)
+			return 1;
+		port = resolveport(portstr);
+		if (port == 0)
+			return 1;
+		str8listpush(arena, &opts, pushstr8f(arena, "trans=tcp,port=%lu", port));
 	} else {
-		u64 colon;
-		String8 host, portstr;
-		u16 port;
-
-		colon = str8index(dial, 0, str8lit(":"), 0);
-		if (colon == dial.len) {
-			fprintf(stderr, "9mount: invalid dial string %.*s\n", (int)dial.len, dial.str);
-			return 1;
-		}
-		host = str8prefix(dial, colon);
-		portstr = str8skip(dial, colon + 1);
-		addr = resolve_host(arena, host);
-		port = resolve_port(portstr);
-		str8listpush(arena, &optlist, pushstr8f(arena, "trans=tcp,port=%u", port));
-		if (aname.len) {
-			if (!isvalidarg(aname)) {
-				fprintf(stderr, "9mount: aname argument contains invalid characters: %.*s\n", (int)aname.len,
-				        aname.str);
-				return 1;
-			}
-			str8listpush(arena, &optlist, pushstr8f(arena, "aname=%.*s", (int)aname.len, aname.str));
-		}
-		if (msize.len) {
-			u64 maxdata = str8tou64(msize, 10);
-			if (maxdata <= 0) {
-				fprintf(stderr, "9mount: invalid maxdata %.*s\n", (int)msize.len, msize.str);
-				return 1;
-			}
-			str8listpush(arena, &optlist, pushstr8f(arena, "maxdata=%lu", maxdata));
-		}
-		user = str8cstr(getenv("USER"));
-		if (user.len == 0)
-			user = str8cstr(pw->pw_name);
-		if (!isvalidarg(user)) {
-			fprintf(stderr, "9mount: username contains invalid characters: %.*s\n", (int)user.len, user.str);
-			return 1;
-		}
-		str8listpush(arena, &optlist, pushstr8f(arena, "uname=%.*s", (int)user.len, user.str));
-		if (singleattach)
-			str8listpush(arena, &optlist, str8lit("access=any"));
-		else if (exclusive)
-			str8listpush(arena, &optlist, pushstr8f(arena, "access=%d", uid));
-		if (!extend)
-			str8listpush(arena, &optlist, str8lit("noextend"));
-		if (!dev)
-			str8listpush(arena, &optlist, str8lit("nodevmap"));
-		str8listpush(arena, &optlist, pushstr8f(arena, "dfltuid=%d,dfltgid=%d", uid, gid));
-		join.pre = str8zero();
-		join.sep = str8lit(",");
-		join.post = str8zero();
-		opts = str8listjoin(arena, &optlist, &join);
-		addr_cstr = str8tocstr(arena, addr);
-		opts_cstr = str8tocstr(arena, opts);
-		if (dryrun) {
-			fprintf(stderr, "mount -t 9p -o %s %s %s\n", opts_cstr, addr_cstr, mountpt_cstr);
-		} else if (mount(addr_cstr, mountpt_cstr, "9p", 0, opts_cstr)) {
-			perror("mount");
-			return 1;
-		}
-		arenarelease(arena);
-		return 0;
+		fprintf(stderr, "9mount: invalid dial string %.*s\n", (int)dial.len, dial.str);
+		return 1;
 	}
+	user = str8cstr(pw->pw_name);
+	str8listpush(arena, &opts, pushstr8f(arena, "uname=%.*s", (int)user.len, user.str));
+	if (aname.len > 0)
+		str8listpush(arena, &opts, pushstr8f(arena, "aname=%.*s", (int)aname.len, aname.str));
+	if (msizestr.len > 0) {
+		msize = str8tou64(msizestr, 10);
+		if (msize == 0) {
+			fprintf(stderr, "9mount: invalid msize %lu\n", msize);
+			return 1;
+		}
+		str8listpush(arena, &opts, pushstr8f(arena, "msize=%lu", msize));
+	}
+	str8listpush(arena, &opts, str8lit("noextend"));
+	str8listpush(arena, &opts, pushstr8f(arena, "dfltuid=%d,dfltgid=%d", uid, gid));
+	if (singleattach)
+		str8listpush(arena, &opts, str8lit("access=any"));
+	else if (exclusive)
+		str8listpush(arena, &opts, pushstr8f(arena, "access=%d", uid));
+	join.pre = str8zero();
+	join.sep = str8lit(",");
+	join.post = str8zero();
+	optstr = str8listjoin(arena, &opts, &join);
+	if (dryrun)
+		fprintf(stderr, "mount -t 9p -o %s %s %s\n", (char *)optstr.str, (char *)addr.str, (char *)mtpt.str);
+	else if (mount((char *)addr.str, (char *)mtpt.str, "9p", 0, (char *)optstr.str)) {
+		fprintf(stderr, "9mount: mount failed: %s\n", strerror(errno));
+		return 1;
+	}
+	arenarelease(arena);
+	return 0;
 }
