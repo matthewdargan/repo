@@ -127,11 +127,11 @@ main(int argc, char *argv[])
 		return 1;
 	}
 	if (stat((char *)mtpt.str, &st) || access((char *)mtpt.str, W_OK)) {
-		fprintf(stderr, "9mount: %s: %s\n", (char *)mtpt.str, strerror(errno));
+		fprintf(stderr, "9mount: %.*s: %s\n", (int)mtpt.len, mtpt.str, strerror(errno));
 		return 1;
 	}
 	if (st.st_mode & S_ISVTX) {
-		fprintf(stderr, "9mount: refusing to mount over sticky directory %s\n", (char *)mtpt.str);
+		fprintf(stderr, "9mount: refusing to mount over sticky directory %.*s\n", (int)mtpt.len, mtpt.str);
 		return 1;
 	}
 	memset(&opts, 0, sizeof opts);
@@ -192,7 +192,8 @@ main(int argc, char *argv[])
 	join.post = str8zero();
 	optstr = str8listjoin(arena, &opts, &join);
 	if (dryrun)
-		fprintf(stderr, "mount -t 9p -o %s %s %s\n", (char *)optstr.str, (char *)addr.str, (char *)mtpt.str);
+		fprintf(stderr, "mount -t 9p -o %.*s %.*s %.*s\n", (int)optstr.len, optstr.str, (int)addr.len, addr.str,
+		        (int)mtpt.len, mtpt.str);
 	else if (mount((char *)addr.str, (char *)mtpt.str, "9p", 0, (char *)optstr.str)) {
 		fprintf(stderr, "9mount: mount failed: %s\n", strerror(errno));
 		return 1;

@@ -35,6 +35,22 @@
           shellHook = "${config.pre-commit.installationScript}";
         };
         packages = {
+          "9bind" = pkgs.clangStdenv.mkDerivation {
+            buildPhase = "./build release 9bind";
+            installPhase = ''
+              mkdir -p "$out/bin"
+              cp ./bin/9bind "$out/bin"
+            '';
+            meta = with lib; {
+              description = "Mounts a 9p filesystem";
+              homepage = "https://github.com/matthewdargan/src";
+              license = licenses.bsd3;
+              maintainers = with maintainers; [matthewdargan];
+            };
+            pname = "9bind";
+            src = ./.;
+            version = "0.1.0";
+          };
           "9mount" = pkgs.clangStdenv.mkDerivation {
             buildPhase = "./build release 9mount";
             installPhase = ''
