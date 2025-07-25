@@ -42,7 +42,7 @@
               cp ./bin/9bind "$out/bin"
             '';
             meta = with lib; {
-              description = "Mounts a 9p filesystem";
+              description = "Performs a bind mount";
               homepage = "https://github.com/matthewdargan/src";
               license = licenses.bsd3;
               maintainers = with maintainers; [matthewdargan];
@@ -64,6 +64,22 @@
               maintainers = with maintainers; [matthewdargan];
             };
             pname = "9mount";
+            src = ./.;
+            version = "0.1.0";
+          };
+          "9umount" = pkgs.clangStdenv.mkDerivation {
+            buildPhase = "./build release 9umount";
+            installPhase = ''
+              mkdir -p "$out/bin"
+              cp ./bin/9umount "$out/bin"
+            '';
+            meta = with lib; {
+              description = "Unmounts a 9p filesystem";
+              homepage = "https://github.com/matthewdargan/src";
+              license = licenses.bsd3;
+              maintainers = with maintainers; [matthewdargan];
+            };
+            pname = "9umount";
             src = ./.;
             version = "0.1.0";
           };
