@@ -734,11 +734,11 @@
         "pre-commit-hooks": "pre-commit-hooks_4"
       },
       "locked": {
-        "lastModified": 1752471467,
-        "narHash": "sha256-RMrDTLOfFlxXGsuHhNyeYJQwqqbk8LFpKyS2DLXdhC8=",
+        "lastModified": 1753414757,
+        "narHash": "sha256-NkrVST3epthxn6v1XcKCjToxd5zPbp15rAQf+ad0Tqk=",
         "owner": "matthewdargan",
         "repo": "src",
-        "rev": "db91b573c1c1b690f4baf5f1648eca15125d5fd6",
+        "rev": "7995669868421244af9ac8f66a9b1566fa3e5ca0",
         "type": "github"
       },
       "original": {

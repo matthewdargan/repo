@@ -1,5 +1,6 @@
 {
   nixpkgs,
+  src,
   u9fs,
   ...
 }: {
@@ -64,6 +65,29 @@
   };
   nixpkgs.config.allowUnfree = true;
   programs.fish.enable = true;
+  security.wrappers = {
+    "9bind" = {
+      owner = "root";
+      group = "root";
+      permissions = "u+rx,g+x,o+x";
+      setuid = true;
+      source = "${src.packages.${pkgs.system}."9bind"}/bin/9bind";
+    };
+    "9mount" = {
+      owner = "root";
+      group = "root";
+      permissions = "u+rx,g+x,o+x";
+      setuid = true;
+      source = "${src.packages.${pkgs.system}."9mount"}/bin/9mount";
+    };
+    "9umount" = {
+      owner = "root";
+      group = "root";
+      permissions = "u+rx,g+x,o+x";
+      setuid = true;
+      source = "${src.packages.${pkgs.system}."9umount"}/bin/9umount";
+    };
+  };
   services = {
     btrfs.autoScrub.enable = true;
     jellyfin = {
@@ -86,6 +110,7 @@
       after = ["network.target"];
       description = "9P filesystem server";
       serviceConfig = {
+        # TODO: replace user with a different user that manages /media i.e. least access
         ExecStart = "${u9fs.packages.${pkgs.system}.u9fs}/bin/u9fs -D -a none -u ${user} -d ${mountDir}";
         StandardInput = "socket";
         StandardError = "journal";
@@ -99,6 +124,24 @@
         ListenStream = port;
       };
       wantedBy = ["sockets.target"];
+    };
+    user.services."nas-mount" = {
+      after = ["network.target"];
+      description = "mount nas";
+      serviceConfig = {
+        ExecStart = [
+          "/run/wrappers/bin/9mount 'tcp!nas!4500' /home/mpd/n/nas"
+          "/run/wrappers/bin/9bind /home/mpd/n/nas/movies /home/mpd/n/movies"
+          "/run/wrappers/bin/9bind /home/mpd/n/nas/shows /home/mpd/n/shows"
+        ];
+        ExecStartPre = [
+          "${pkgs.coreutils}/bin/mkdir -p /home/mpd/n/nas /home/mpd/n/movies /home/mpd/n/shows"
+        ];
+        ExecStop = ["/run/wrappers/bin/9umount /home/mpd/n/nas /home/mpd/n/movies /home/mpd/n/shows"];
+        RemainAfterExit = true;
+        Type = "oneshot";
+      };
+      wantedBy = ["multi-user.target"];
     };
   };
   time.timeZone = "America/Chicago";

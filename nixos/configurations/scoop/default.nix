@@ -1,4 +1,8 @@
-{nixpkgs, ...}: {pkgs, ...}: {
+{
+  nixpkgs,
+  src,
+  ...
+}: {pkgs, ...}: {
   imports = [./hardware.nix];
   boot.loader = {
     efi.canTouchEfiVariables = true;
@@ -40,7 +44,32 @@
     fish.enable = true;
     steam.enable = true;
   };
-  security.rtkit.enable = true;
+  security = {
+    rtkit.enable = true;
+    wrappers = {
+      "9bind" = {
+        owner = "root";
+        group = "root";
+        permissions = "u+rx,g+x,o+x";
+        setuid = true;
+        source = "${src.packages.${pkgs.system}."9bind"}/bin/9bind";
+      };
+      "9mount" = {
+        owner = "root";
+        group = "root";
+        permissions = "u+rx,g+x,o+x";
+        setuid = true;
+        source = "${src.packages.${pkgs.system}."9mount"}/bin/9mount";
+      };
+      "9umount" = {
+        owner = "root";
+        group = "root";
+        permissions = "u+rx,g+x,o+x";
+        setuid = true;
+        source = "${src.packages.${pkgs.system}."9umount"}/bin/9umount";
+      };
+    };
+  };
   services = {
     desktopManager.plasma6.enable = true;
     displayManager.sddm = {
@@ -65,32 +94,33 @@
     };
   };
   system.stateVersion = "25.05";
-  systemd.user.services."9pfuse-nas" = let
-    mountPoint = "%h/n/nas";
-    transport = "tcp";
-    host = "nas";
-    port = "4500";
-    socket = "${transport}!${host}!${port}";
-  in {
-    enable = true;
-    after = ["network-online.target"];
-    description = "mounts 9p filesystem to directory";
-    path = [
-      "/run/wrappers" # needed for fusermount with setuid
-    ];
+  systemd.user.services."nas-mount" = {
+    after = ["network.target"];
+    description = "mount nas";
     serviceConfig = {
-      ExecStart = "${pkgs.plan9port}/plan9/bin/9pfuse '${socket}' '${mountPoint}'";
-      ExecStop = "/run/wrappers/bin/fusermount -u '${mountPoint}'";
-      RemainAfterExit = "yes";
-      Type = "forking";
+      ExecStart = [
+        "/run/wrappers/bin/9mount 'tcp!nas!4500' /home/mpd/n/nas"
+        "/run/wrappers/bin/9bind /home/mpd/n/nas/movies /home/mpd/n/movies"
+        "/run/wrappers/bin/9bind /home/mpd/n/nas/shows /home/mpd/n/shows"
+      ];
+      ExecStartPre = [
+        "${pkgs.coreutils}/bin/mkdir -p /home/mpd/n/nas /home/mpd/n/movies /home/mpd/n/shows"
+      ];
+      ExecStop = ["/run/wrappers/bin/9umount /home/mpd/n/nas /home/mpd/n/movies /home/mpd/n/shows"];
+      RemainAfterExit = true;
+      Type = "oneshot";
     };
-    wants = ["network-online.target"];
     wantedBy = ["multi-user.target"];
   };
   time.timeZone = "America/Chicago";
   users.users.mpd = {
     description = "Matthew Dargan";
-    extraGroups = ["input" "networkmanager" "systemd-journal" "wheel"];
+    extraGroups = [
+      "input"
+      "networkmanager"
+      "systemd-journal"
+      "wheel"
+    ];
     isNormalUser = true;
     shell = pkgs.fish;
   };
