@@ -80,6 +80,7 @@ int
 main(int argc, char *argv[])
 {
 	Arenaparams ap;
+	Arena *arena;
 	String8list args, opts;
 	Cmd parsed;
 	b32 dryrun, singleattach, exclusive;

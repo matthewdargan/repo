@@ -27,6 +27,7 @@ int
 main(int argc, char *argv[])
 {
 	Arenaparams ap;
+	Arena *arena;
 	String8list args;
 	Cmd parsed;
 	String8 old, new;

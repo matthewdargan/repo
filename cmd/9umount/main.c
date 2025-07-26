@@ -47,6 +47,7 @@ int
 main(int argc, char *argv[])
 {
 	Arenaparams ap;
+	Arena *arena;
 	String8list args;
 	Cmd parsed;
 	uid_t uid;
@@ -80,7 +81,7 @@ main(int argc, char *argv[])
 	ret = 0;
 	for (node = parsed.inputs.start; node != NULL; node = node->next) {
 		mtpt = node->str;
-		path = abspath(mtpt);
+		path = abspath(arena, mtpt);
 		if (path.len == 0) {
 			fprintf(stderr, "9umount: %.*s: %s\n", (int)mtpt.len, mtpt.str, strerror(errno));
 			ret = 1;

@@ -351,7 +351,7 @@ sendfile(Arena *a, u64 clientfd, String8 path, String8 mime)
 	Fprops props;
 	String8 hdr, data, resp;
 
-	fd = openfd(path, O_RDONLY);
+	fd = openfd(a, path, O_RDONLY);
 	if (fd == 0) {
 		sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), str8lit("not found"));
 		return;
@@ -433,7 +433,7 @@ handleconn(void *arg)
 		url = str8substr(line, rng1u64(methodend + 1, urlend));
 	if (url.len == 0 || str8cmp(url, str8lit("/"), 0)) {
 		path = str8lit("web/index.html");
-		if (fileexists(path))
+		if (fileexists(a, path))
 			sendfile(a, clientfd, path, str8lit("text/html"));
 		else
 			sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), str8lit("not found"));
@@ -452,7 +452,7 @@ handleconn(void *arg)
 			path = pushstr8cat(a, str8lit("web"), url);
 		else
 			path = pushstr8f(a, "%.*s/web%.*s", imtpt.len, imtpt.str, url.len, url.str);
-		if (fileexists(path)) {
+		if (fileexists(a, path)) {
 			mime = mimetype(path);
 			sendfile(a, clientfd, path, mime);
 		} else {
@@ -469,7 +469,7 @@ handleconn(void *arg)
 			path = pushstr8cpy(a, str8skip(url, 1));
 		else
 			path = pushstr8cat(a, imtpt, url);
-		if (!fileexists(path)) {
+		if (!fileexists(a, path)) {
 			resptxt = str8lit("mediasrv: can't generate media");
 			sendresp(a, clientfd, str8lit("404 Not Found"), str8lit("text/plain"), resptxt);
 			arenarelease(a);
@@ -483,14 +483,14 @@ handleconn(void *arg)
 		name = str8prefixext(str8basename(url));
 		opath = pushstr8f(a, "%.*s/%.*s", mtpt.len, mtpt.str, name.len, name.str);
 		indexpath = pushstr8cat(a, opath, str8lit("-index"));
-		if (fileexists(indexpath))
+		if (fileexists(a, indexpath))
 			resptxt = readfile(a, indexpath);
 		else {
-			if (!direxists(opath))
-				osmkdir(opath);
+			if (!direxists(a, opath))
+				osmkdir(a, opath);
 			resptxt = mkmedia(a, path, opath);
 			if (resptxt.len > 0)
-				appendfile(indexpath, resptxt);
+				appendfile(a, indexpath, resptxt);
 		}
 		if (resptxt.len > 0)
 			sendresp(a, clientfd, str8lit("200 OK"), str8lit("text/plain"), resptxt);
@@ -504,7 +504,7 @@ handleconn(void *arg)
 	}
 	if (omtpt.len > 0) {
 		path = pushstr8cat(a, omtpt, url);
-		if (direxists(path)) {
+		if (direxists(a, path)) {
 			resptxt = listdir(a, path);
 			if (resptxt.len > 0)
 				sendresp(a, clientfd, str8lit("200 OK"), str8lit("text/plain"), resptxt);
@@ -516,7 +516,7 @@ handleconn(void *arg)
 			closefd(clientfd);
 			return;
 		}
-		if (fileexists(path)) {
+		if (fileexists(a, path)) {
 			mime = mimetype(path);
 			sendfile(a, clientfd, path, mime);
 			arenarelease(a);
@@ -528,7 +528,7 @@ handleconn(void *arg)
 		path = pushstr8cpy(a, str8skip(url, 1));
 	else
 		path = pushstr8cat(a, imtpt, url);
-	if (direxists(path)) {
+	if (direxists(a, path)) {
 		resptxt = listdir(a, path);
 		if (resptxt.len > 0)
 			sendresp(a, clientfd, str8lit("200 OK"), str8lit("text/plain"), resptxt);
@@ -540,7 +540,7 @@ handleconn(void *arg)
 		closefd(clientfd);
 		return;
 	}
-	if (fileexists(path)) {
+	if (fileexists(a, path)) {
 		mime = mimetype(path);
 		sendfile(a, clientfd, path, mime);
 		arenarelease(a);
@@ -577,6 +577,7 @@ int
 main(int argc, char *argv[])
 {
 	Arenaparams ap;
+	Arena *arena;
 	String8list args;
 	Cmd parsed;
 	String8 portstr;
@@ -603,8 +604,8 @@ main(int argc, char *argv[])
 		portstr = cmdstr(&parsed, str8lit("p"));
 	else
 		portstr = str8lit("8080");
-	if (!direxists(omtpt))
-		osmkdir(omtpt);
+	if (!direxists(arena, omtpt))
+		osmkdir(arena, omtpt);
 	memset(&pool, 0, sizeof pool);
 	pool.nthreads = sysinfo.nprocs;
 	pool.threads = pusharr(arena, pthread_t, pool.nthreads);

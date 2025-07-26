@@ -34,6 +34,7 @@ struct Params {
 	String8 query;
 };
 
+static Arena *arena;
 readonly static String8 filters[] = {str8lit("0"), str8lit("1"), str8lit("2")};
 readonly static String8 categories[] = {
     str8lit("0_0"), str8lit("1_0"), str8lit("1_1"), str8lit("1_2"), str8lit("1_3"), str8lit("1_4"),
@@ -224,11 +225,11 @@ downloadtorrents(Arena *a, String8array torrents)
 		return;
 	home = getenv("HOME");
 	cfgpath = pushstr8cat(a, str8cstr(home), str8lit("/.config/torrss"));
-	if (!direxists(cfgpath))
-		osmkdir(cfgpath);
+	if (!direxists(arena, cfgpath))
+		osmkdir(arena, cfgpath);
 	historypath = pushstr8cat(a, cfgpath, str8lit("/history"));
 	historydata = str8zero();
-	if (fileexists(historypath))
+	if (fileexists(arena, historypath))
 		historydata = readfile(a, historypath);
 	pack.set_int(libtorrent::settings_pack::alert_mask,
 	             libtorrent::alert::status_notification | libtorrent::alert::error_notification);
@@ -283,7 +284,7 @@ downloadtorrents(Arena *a, String8array torrents)
 		fprintf(stderr, "torrss: no torrents to download\n");
 		return;
 	}
-	appendfile(historypath, torrentstodl);
+	appendfile(arena, historypath, torrentstodl);
 	lastupdate = time(0);
 	for (done = 0; !done;) {
 		now = time(0);

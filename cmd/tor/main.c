@@ -48,6 +48,7 @@ struct Torrentarray {
 	u64 cnt;
 };
 
+static Arena *arena;
 readonly static String8 filters[] = {str8litc("0"), str8litc("1"), str8litc("2")};
 readonly static String8 categories[] = {
     str8litc("0_0"), str8litc("1_0"), str8litc("1_1"), str8litc("1_2"), str8litc("1_3"), str8litc("1_4"),

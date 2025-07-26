@@ -20,7 +20,7 @@ readfile(Arena *a, String8 path)
 	Fprops props;
 	String8 data;
 
-	fd = openfd(path, O_RDONLY);
+	fd = openfd(a, path, O_RDONLY);
 	props = osfstat(fd);
 	data = readfilerng(a, fd, rng1u64(0, props.size));
 	closefd(fd);
@@ -28,13 +28,13 @@ readfile(Arena *a, String8 path)
 }
 
 static b32
-writefile(String8 path, String8 data)
+writefile(Arena *a, String8 path, String8 data)
 {
 	b32 ok;
 	u64 fd;
 
 	ok = 0;
-	fd = openfd(path, O_WRONLY);
+	fd = openfd(a, path, O_WRONLY);
 	if (fd != 0) {
 		ok = 1;
 		writerng(fd, rng1u64(0, data.len), data.str);
@@ -44,14 +44,14 @@ writefile(String8 path, String8 data)
 }
 
 static b32
-appendfile(String8 path, String8 data)
+appendfile(Arena *a, String8 path, String8 data)
 {
 	b32 ok;
 	u64 fd, pos;
 
 	ok = 0;
 	if (data.len != 0) {
-		fd = openfd(path, O_WRONLY | O_APPEND | O_CREAT);
+		fd = openfd(a, path, O_WRONLY | O_APPEND | O_CREAT);
 		if (fd != 0) {
 			ok = 1;
 			pos = osfstat(fd).size;
@@ -203,13 +203,13 @@ osreservelarge(u64 size)
 }
 
 static u64
-openfd(String8 path, int flags)
+openfd(Arena *a, String8 path, int flags)
 {
 	Temp scratch;
 	String8 p;
 	int fd;
 
-	scratch = tempbegin(arena);
+	scratch = tempbegin(a);
 	p = pushstr8cpy(scratch.a, path);
 	fd = open((char *)p.str, flags, 0755);
 	tempend(scratch);
@@ -298,13 +298,13 @@ osfstat(u64 fd)
 }
 
 static b32
-osremove(String8 path)
+osremove(Arena *a, String8 path)
 {
 	Temp scratch;
 	b32 ok;
 	String8 p;
 
-	scratch = tempbegin(arena);
+	scratch = tempbegin(a);
 	ok = 0;
 	p = pushstr8cpy(scratch.a, path);
 	if (remove((char *)p.str) != -1)
@@ -314,13 +314,13 @@ osremove(String8 path)
 }
 
 static String8
-abspath(String8 path)
+abspath(Arena *a, String8 path)
 {
 	Temp scratch;
 	String8 p, s;
 	char buf[PATH_MAX];
 
-	scratch = tempbegin(arena);
+	scratch = tempbegin(a);
 	p = pushstr8cpy(scratch.a, path);
 	if (realpath((char *)p.str, buf) == NULL) {
 		tempend(scratch);
@@ -332,13 +332,13 @@ abspath(String8 path)
 }
 
 static b32
-fileexists(String8 path)
+fileexists(Arena *a, String8 path)
 {
 	Temp scratch;
 	String8 p;
 	b32 ok;
 
-	scratch = tempbegin(arena);
+	scratch = tempbegin(a);
 	p = pushstr8cpy(scratch.a, path);
 	ok = 0;
 	if (access((char *)p.str, F_OK) == 0)
@@ -348,14 +348,14 @@ fileexists(String8 path)
 }
 
 static b32
-direxists(String8 path)
+direxists(Arena *a, String8 path)
 {
 	Temp scratch;
 	String8 p;
 	b32 ok;
 	DIR *d;
 
-	scratch = tempbegin(arena);
+	scratch = tempbegin(a);
 	p = pushstr8cpy(scratch.a, path);
 	ok = 0;
 	d = opendir((char *)p.str);
@@ -368,14 +368,14 @@ direxists(String8 path)
 }
 
 static Fprops
-osstat(String8 path)
+osstat(Arena *a, String8 path)
 {
 	Temp scratch;
 	String8 p;
 	struct stat st;
 	Fprops props;
 
-	scratch = tempbegin(arena);
+	scratch = tempbegin(a);
 	p = pushstr8cpy(scratch.a, path);
 	memset(&props, 0, sizeof props);
 	if (stat((char *)p.str, &st) != -1)
@@ -385,13 +385,13 @@ osstat(String8 path)
 }
 
 static b32
-osmkdir(String8 path)
+osmkdir(Arena *a, String8 path)
 {
 	Temp scratch;
 	String8 p;
 	b32 ok;
 
-	scratch = tempbegin(arena);
+	scratch = tempbegin(a);
 	p = pushstr8cpy(scratch.a, path);
 	ok = 0;
 	if (mkdir((char *)p.str, 0755) != -1)
