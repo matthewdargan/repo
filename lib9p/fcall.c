@@ -1,38 +1,3 @@
-static void
-putb1(u8 *p, u8 v)
-{
-	p[0] = v;
-}
-
-static void
-putb2(u8 *p, u16 v)
-{
-	p[0] = v;
-	p[1] = v >> 8;
-}
-
-static void
-putb4(u8 *p, u32 v)
-{
-	p[0] = v;
-	p[1] = v >> 8;
-	p[2] = v >> 16;
-	p[3] = v >> 24;
-}
-
-static void
-putb8(u8 *p, u64 v)
-{
-	p[0] = v;
-	p[1] = v >> 8;
-	p[2] = v >> 16;
-	p[3] = v >> 24;
-	p[4] = v >> 32;
-	p[5] = v >> 40;
-	p[6] = v >> 48;
-	p[7] = v >> 56;
-}
-
 static u8 *
 putstr(u8 *p, String8 s)
 {
@@ -55,31 +20,6 @@ putqid(u8 *p, Qid qid)
 	putb8(p, qid.path);
 	p += 8;
 	return p;
-}
-
-static u32
-getb1(u8 *p)
-{
-	return p[0];
-}
-
-static u32
-getb2(u8 *p)
-{
-	return p[0] | (p[1] << 8);
-}
-
-static u32
-getb4(u8 *p)
-{
-	return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24);
-}
-
-static u64
-getb8(u8 *p)
-{
-	return (u64)p[0] | ((u64)p[1] << 8) | ((u64)p[2] << 16) | ((u64)p[3] << 24) | ((u64)p[4] << 32) |
-	       ((u64)p[5] << 40) | ((u64)p[6] << 48) | ((u64)p[7] << 56);
 }
 
 static u8 *
@@ -384,204 +324,206 @@ fcallencode(Arena *a, Fcall fc)
 		default:
 			return str8zero();
 	}
-	if (msg.len != p - msg.str)
+	if (msg.len != (u64)(p - msg.str))
 		return str8zero();
 	return msg;
 }
 
-static b32
-fcalldecode(Arena *a, String8 msg, Fcall *fc)
+static Fcall
+fcalldecode(String8 msg)
 {
+	Fcall fc, errfc;
 	u8 *p, *end;
 	u32 size, i;
 
+	memset(&fc, 0, sizeof fc);
+	memset(&errfc, 0, sizeof errfc);
 	if (msg.len < 7)
-		return 0;
+		return errfc;
 	p = msg.str;
 	end = msg.str + msg.len;
 	size = getb4(p);
 	p += 4;
-	if (size < 7)
-		return 0;
-	memset(fc, 0, sizeof *fc);
-	fc->type = getb1(p);
+	if (size != msg.len)
+		return errfc;
+	fc.type = getb1(p);
 	p++;
-	fc->tag = getb2(p);
+	fc.tag = getb2(p);
 	p += 2;
-	switch (fc->type) {
+	switch (fc.type) {
 		case Tversion:
 		case Rversion:
 			if (p + 4 > end)
-				return 0;
-			fc->msize = getb4(p);
+				return errfc;
+			fc.msize = getb4(p);
 			p += 4;
-			p = getstr(p, end, &fc->version);
+			p = getstr(p, end, &fc.version);
 			if (p == NULL)
-				return 0;
+				return errfc;
 			break;
 		case Tauth:
 			if (p + 4 > end)
-				return 0;
-			fc->afid = getb4(p);
+				return errfc;
+			fc.afid = getb4(p);
 			p += 4;
-			p = getstr(p, end, &fc->uname);
+			p = getstr(p, end, &fc.uname);
 			if (p == NULL)
-				return 0;
-			p = getstr(p, end, &fc->aname);
+				return errfc;
+			p = getstr(p, end, &fc.aname);
 			if (p == NULL)
-				return 0;
+				return errfc;
 			break;
 		case Rauth:
-			p = getqid(p, end, &fc->aqid);
+			p = getqid(p, end, &fc.aqid);
 			if (p == NULL)
-				return 0;
+				return errfc;
 			break;
 		case Rerror:
-			p = getstr(p, end, &fc->ename);
+			p = getstr(p, end, &fc.ename);
 			if (p == NULL)
-				return 0;
+				return errfc;
 			break;
 		case Tflush:
 			if (p + 2 > end)
-				return 0;
-			fc->oldtag = getb2(p);
+				return errfc;
+			fc.oldtag = getb2(p);
 			p += 2;
 			break;
 		case Rflush:
 			break;
 		case Tattach:
 			if (p + 8 > end)
-				return 0;
-			fc->fid = getb4(p);
+				return errfc;
+			fc.fid = getb4(p);
 			p += 4;
-			fc->afid = getb4(p);
+			fc.afid = getb4(p);
 			p += 4;
-			p = getstr(p, end, &fc->uname);
+			p = getstr(p, end, &fc.uname);
 			if (p == NULL)
-				return 0;
-			p = getstr(p, end, &fc->aname);
+				return errfc;
+			p = getstr(p, end, &fc.aname);
 			if (p == NULL)
-				return 0;
+				return errfc;
 			break;
 		case Rattach:
-			p = getqid(p, end, &fc->qid);
+			p = getqid(p, end, &fc.qid);
 			if (p == NULL)
-				return 0;
+				return errfc;
 			break;
 		case Twalk:
 			if (p + 10 > end)
-				return 0;
-			fc->fid = getb4(p);
+				return errfc;
+			fc.fid = getb4(p);
 			p += 4;
-			fc->newfid = getb4(p);
+			fc.newfid = getb4(p);
 			p += 4;
-			fc->nwname = getb2(p);
+			fc.nwname = getb2(p);
 			p += 2;
-			if (fc->nwname > MAXWELEM)
-				return 0;
-			for (i = 0; i < fc->nwname; i++) {
-				p = getstr(p, end, &fc->wname[i]);
+			if (fc.nwname > MAXWELEM)
+				return errfc;
+			for (i = 0; i < fc.nwname; i++) {
+				p = getstr(p, end, &fc.wname[i]);
 				if (p == NULL)
-					return 0;
+					return errfc;
 			}
 			break;
 		case Rwalk:
 			if (p + 2 > end)
-				return 0;
-			fc->nwqid = getb2(p);
+				return errfc;
+			fc.nwqid = getb2(p);
 			p += 2;
-			if (fc->nwqid > MAXWELEM)
-				return 0;
-			for (i = 0; i < fc->nwqid; i++) {
-				p = getqid(p, end, &fc->wqid[i]);
+			if (fc.nwqid > MAXWELEM)
+				return errfc;
+			for (i = 0; i < fc.nwqid; i++) {
+				p = getqid(p, end, &fc.wqid[i]);
 				if (p == NULL)
-					return 0;
+					return errfc;
 			}
 			break;
 		case Topen:
 			if (p + 5 > end)
-				return 0;
-			fc->fid = getb4(p);
+				return errfc;
+			fc.fid = getb4(p);
 			p += 4;
-			fc->mode = getb1(p);
+			fc.mode = getb1(p);
 			p++;
 			break;
 		case Ropen:
 		case Rcreate:
-			p = getqid(p, end, &fc->qid);
+			p = getqid(p, end, &fc.qid);
 			if (p == NULL)
-				return 0;
+				return errfc;
 			if (p + 4 > end)
-				return 0;
-			fc->iounit = getb4(p);
+				return errfc;
+			fc.iounit = getb4(p);
 			p += 4;
 			break;
 		case Tcreate:
 			if (p + 4 > end)
-				return 0;
-			fc->fid = getb4(p);
+				return errfc;
+			fc.fid = getb4(p);
 			p += 4;
-			p = getstr(p, end, &fc->name);
+			p = getstr(p, end, &fc.name);
 			if (p == NULL)
-				return 0;
+				return errfc;
 			if (p + 5 > end)
-				return 0;
-			fc->perm = getb4(p);
+				return errfc;
+			fc.perm = getb4(p);
 			p += 4;
-			fc->mode = getb1(p);
+			fc.mode = getb1(p);
 			p++;
 			break;
 		case Tread:
 			if (p + 16 > end)
-				return 0;
-			fc->fid = getb4(p);
+				return errfc;
+			fc.fid = getb4(p);
 			p += 4;
-			fc->offset = getb8(p);
+			fc.offset = getb8(p);
 			p += 8;
-			fc->count = getb4(p);
+			fc.count = getb4(p);
 			p += 4;
 			break;
 		case Rread:
 			if (p + 4 > end)
-				return 0;
-			fc->data.len = getb4(p);
+				return errfc;
+			fc.data.len = getb4(p);
 			p += 4;
-			if (p + fc->data.len > end)
-				return 0;
-			if (fc->data.len > 0) {
-				fc->data.str = p;
-				p += fc->data.len;
+			if (p + fc.data.len > end)
+				return errfc;
+			if (fc.data.len > 0) {
+				fc.data.str = p;
+				p += fc.data.len;
 			} else
-				fc->data.str = NULL;
+				fc.data.str = NULL;
 			break;
 		case Twrite:
 			if (p + 16 > end)
-				return 0;
-			fc->fid = getb4(p);
+				return errfc;
+			fc.fid = getb4(p);
 			p += 4;
-			fc->offset = getb8(p);
+			fc.offset = getb8(p);
 			p += 8;
-			fc->data.len = getb4(p);
+			fc.data.len = getb4(p);
 			p += 4;
-			if (p + fc->data.len > end)
-				return 0;
-			if (fc->data.len > 0) {
-				fc->data.str = p;
-				p += fc->data.len;
+			if (p + fc.data.len > end)
+				return errfc;
+			if (fc.data.len > 0) {
+				fc.data.str = p;
+				p += fc.data.len;
 			} else
-				fc->data.str = NULL;
+				fc.data.str = NULL;
 			break;
 		case Rwrite:
 			if (p + 4 > end)
-				return 0;
-			fc->count = getb4(p);
+				return errfc;
+			fc.count = getb4(p);
 			p += 4;
 			break;
 		case Tclunk:
 		case Tremove:
 			if (p + 4 > end)
-				return 0;
-			fc->fid = getb4(p);
+				return errfc;
+			fc.fid = getb4(p);
 			p += 4;
 			break;
 		case Rclunk:
@@ -589,44 +531,168 @@ fcalldecode(Arena *a, String8 msg, Fcall *fc)
 			break;
 		case Tstat:
 			if (p + 4 > end)
-				return 0;
-			fc->fid = getb4(p);
+				return errfc;
+			fc.fid = getb4(p);
 			p += 4;
 			break;
 		case Rstat:
 			if (p + 2 > end)
-				return 0;
-			fc->stat.len = getb2(p);
+				return errfc;
+			fc.stat.len = getb2(p);
 			p += 2;
-			if (p + fc->stat.len > end)
-				return 0;
-			if (fc->stat.len > 0) {
-				fc->stat.str = p;
-				p += fc->stat.len;
+			if (p + fc.stat.len > end)
+				return errfc;
+			if (fc.stat.len > 0) {
+				fc.stat.str = p;
+				p += fc.stat.len;
 			} else
-				fc->stat.str = NULL;
+				fc.stat.str = NULL;
 			break;
 		case Twstat:
 			if (p + 6 > end)
-				return 0;
-			fc->fid = getb4(p);
+				return errfc;
+			fc.fid = getb4(p);
 			p += 4;
-			fc->stat.len = getb2(p);
+			fc.stat.len = getb2(p);
 			p += 2;
-			if (p + fc->stat.len > end)
-				return 0;
-			if (fc->stat.len > 0) {
-				fc->stat.str = p;
-				p += fc->stat.len;
+			if (p + fc.stat.len > end)
+				return errfc;
+			if (fc.stat.len > 0) {
+				fc.stat.str = p;
+				p += fc.stat.len;
 			} else
-				fc->stat.str = NULL;
+				fc.stat.str = NULL;
 			break;
 		case Rwstat:
 			break;
 		default:
-			return 0;
+			return errfc;
 	}
 	if (p != end)
-		return 0;
-	return 1;
+		return errfc;
+	return fc;
+}
+
+static u32
+dirsize(Dir d)
+{
+	u32 size;
+
+	size = DIRFIXLEN;
+	size += 2 + d.name.len;
+	size += 2 + d.uid.len;
+	size += 2 + d.gid.len;
+	size += 2 + d.muid.len;
+	return size;
+}
+
+static String8
+direncode(Arena *a, Dir d)
+{
+	String8 msg;
+	u8 *p;
+
+	msg.len = dirsize(d);
+	if (msg.len == 0)
+		return str8zero();
+	msg.str = pusharrnoz(a, u8, msg.len);
+	p = msg.str;
+	putb2(p, msg.len - 2);
+	p += 2;
+	putb2(p, d.type);
+	p += 2;
+	putb4(p, d.dev);
+	p += 4;
+	putb1(p, d.qid.type);
+	p += 1;
+	putb4(p, d.qid.vers);
+	p += 4;
+	putb8(p, d.qid.path);
+	p += 8;
+	putb4(p, d.mode);
+	p += 4;
+	putb4(p, d.atime);
+	p += 4;
+	putb4(p, d.mtime);
+	p += 4;
+	putb8(p, d.len);
+	p += 8;
+	p = putstr(p, d.name);
+	p = putstr(p, d.uid);
+	p = putstr(p, d.gid);
+	p = putstr(p, d.muid);
+	if (msg.len != (u64)(p - msg.str))
+		return str8zero();
+	return msg;
+}
+
+static Dir
+dirdecode(String8 msg)
+{
+	Dir d, errd;
+	u8 *p, *end;
+
+	memset(&d, 0, sizeof d);
+	memset(&errd, 0, sizeof errd);
+	if (msg.len < DIRFIXLEN)
+		return errd;
+	p = msg.str;
+	end = msg.str + msg.len;
+	p += 2;
+	if (p + 39 > end)
+		return errd;
+	d.type = getb2(p);
+	p += 2;
+	d.dev = getb4(p);
+	p += 4;
+	d.qid.type = getb1(p);
+	p += 1;
+	d.qid.vers = getb4(p);
+	p += 4;
+	d.qid.path = getb8(p);
+	p += 8;
+	d.mode = getb4(p);
+	p += 4;
+	d.atime = getb4(p);
+	p += 4;
+	d.mtime = getb4(p);
+	p += 4;
+	d.len = getb8(p);
+	p += 8;
+	p = getstr(p, end, &d.name);
+	if (p == NULL)
+		return errd;
+	p = getstr(p, end, &d.uid);
+	if (p == NULL)
+		return errd;
+	p = getstr(p, end, &d.gid);
+	if (p == NULL)
+		return errd;
+	p = getstr(p, end, &d.muid);
+	if (p == NULL)
+		return errd;
+	if (p != end)
+		return errd;
+	return d;
+}
+
+static String8
+read9pmsg(Arena *a, u64 fd)
+{
+	u8 lenbuf[4];
+	u32 restlen;
+	ssize_t n;
+	String8 msg;
+
+	n = read(fd, lenbuf, sizeof lenbuf);
+	if (n != 4)
+		return str8zero();
+	msg.len = getb4(lenbuf);
+	msg.str = pusharrnoz(a, u8, msg.len);
+	memcpy(msg.str, lenbuf, sizeof lenbuf);
+	restlen = msg.len - 4;
+	n = read(fd, msg.str + 4, restlen);
+	if (n != restlen)
+		return str8zero();
+	return msg;
 }

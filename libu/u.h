@@ -33,6 +33,25 @@ typedef double f64;
 #define S32MIN (-S32MAX - 1)
 #define S64MIN (-S64MAX - 1)
 
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+#define LITTLEENDIAN 1
+#elif defined(__LITTLE_ENDIAN__) || defined(__ARMEL__) || defined(_WIN32) || defined(__i386__) || \
+    defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64) || defined(__aarch64__) || defined(_M_ARM64)
+#define LITTLEENDIAN 1
+#else
+#define LITTLEENDIAN 0
+#endif
+
+#if LITTLEENDIAN
+#define fromleu16(x) (x)
+#define fromleu32(x) (x)
+#define fromleu64(x) (x)
+#else
+#define fromleu16(x) bswapu16(x)
+#define fromleu32(x) bswapu32(x)
+#define fromleu64(x) bswapu64(x)
+#endif
+
 typedef struct U64array U64array;
 struct U64array {
 	u64 *v;
@@ -62,6 +81,9 @@ struct Fprops {
 	u32 flags;
 };
 
+static u16 bswapu16(u16 x);
+static u32 bswapu32(u32 x);
+static u64 bswapu64(u64 x);
 static u64 max(u64 a, u64 b);
 static u64 min(u64 a, u64 b);
 static u64 datetimetodense(Datetime dt);
