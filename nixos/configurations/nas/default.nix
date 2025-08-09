@@ -107,11 +107,21 @@
   system.stateVersion = "25.05";
   systemd = {
     services = {
+      jellyfin = {
+        after = ["nas-mount.service"];
+        wants = ["nas-mount.service"];
+      };
       "nas-mount" = {
-        after = ["network.target"];
+        after = [
+          "network-online.target"
+          "u9fs.socket"
+        ];
         description = "mount nas";
         serviceConfig = {
           ExecStart = [
+            ''/bin/sh -c "if ${pkgs.util-linux}/bin/mountpoint -q /home/media/n/nas; then /run/wrappers/bin/9umount /home/media/n/nas; fi"''
+            ''/bin/sh -c "if ${pkgs.util-linux}/bin/mountpoint -q /home/media/n/movies; then /run/wrappers/bin/9umount /home/media/n/movies; fi"''
+            ''/bin/sh -c "if ${pkgs.util-linux}/bin/mountpoint -q /home/media/n/shows; then /run/wrappers/bin/9umount /home/media/n/shows; fi"''
             "/run/wrappers/bin/9mount 'tcp!nas!4500' /home/media/n/nas"
             "/run/wrappers/bin/9bind /home/media/n/nas/movies /home/media/n/movies"
             "/run/wrappers/bin/9bind /home/media/n/nas/shows /home/media/n/shows"
@@ -119,14 +129,17 @@
           ExecStartPre = [
             "${pkgs.coreutils}/bin/mkdir -p /home/media/n/nas /home/media/n/movies /home/media/n/shows"
           ];
-          ExecStop = [
-            "/run/wrappers/bin/9umount /home/media/n/nas /home/media/n/movies /home/media/n/shows"
-          ];
           RemainAfterExit = true;
+          Restart = "on-failure";
+          RestartSec = "5s";
           Type = "oneshot";
           User = "media";
         };
         wantedBy = ["multi-user.target"];
+        wants = [
+          "network-online.target"
+          "u9fs.socket"
+        ];
       };
       "u9fs@" = {
         after = ["network.target"];
