@@ -94,7 +94,7 @@
     };
   };
   system.stateVersion = "25.05";
-  systemd.user.services."nas-mount" = {
+  systemd.services."nas-mount" = {
     after = ["network.target"];
     description = "mount nas";
     serviceConfig = {

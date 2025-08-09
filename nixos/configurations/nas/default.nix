@@ -1,5 +1,6 @@
 {
   nixpkgs,
+  self,
   src,
   u9fs,
   ...
@@ -92,7 +93,10 @@
     btrfs.autoScrub.enable = true;
     jellyfin = {
       enable = true;
+      cacheDir = "/home/media/.cache/jellyfin";
+      dataDir = "/home/media/jellyfin";
       openFirewall = true;
+      user = "media";
     };
     openssh = {
       enable = true;
@@ -101,63 +105,80 @@
     tailscale.enable = true;
   };
   system.stateVersion = "25.05";
-  systemd = let
-    mountDir = "/media";
-    port = "4500";
-    user = "mpd";
-  in {
-    services."u9fs@" = {
-      after = ["network.target"];
-      description = "9P filesystem server";
-      serviceConfig = {
-        # TODO: replace user with a different user that manages /media i.e. least access
-        ExecStart = "${u9fs.packages.${pkgs.system}.u9fs}/bin/u9fs -D -a none -u ${user} -d ${mountDir}";
-        StandardInput = "socket";
-        StandardError = "journal";
-        User = "${user}";
+  systemd = {
+    services = {
+      "nas-mount" = {
+        after = ["network.target"];
+        description = "mount nas";
+        serviceConfig = {
+          ExecStart = [
+            "/run/wrappers/bin/9mount 'tcp!nas!4500' /home/media/n/nas"
+            "/run/wrappers/bin/9bind /home/media/n/nas/movies /home/media/n/movies"
+            "/run/wrappers/bin/9bind /home/media/n/nas/shows /home/media/n/shows"
+          ];
+          ExecStartPre = [
+            "${pkgs.coreutils}/bin/mkdir -p /home/media/n/nas /home/media/n/movies /home/media/n/shows"
+          ];
+          ExecStop = [
+            "/run/wrappers/bin/9umount /home/media/n/nas /home/media/n/movies /home/media/n/shows"
+          ];
+          RemainAfterExit = true;
+          Type = "oneshot";
+          User = "media";
+        };
+        wantedBy = ["multi-user.target"];
+      };
+      "u9fs@" = {
+        after = ["network.target"];
+        description = "9P filesystem server";
+        serviceConfig = {
+          ExecStart = "${u9fs.packages.${pkgs.system}.u9fs}/bin/u9fs -D -a none -u storage -d /media";
+          StandardError = "journal";
+          StandardInput = "socket";
+          User = "storage";
+        };
       };
     };
     sockets.u9fs = {
       description = "9P filesystem server socket";
       socketConfig = {
         Accept = "yes";
-        ListenStream = port;
+        ListenStream = "4500";
       };
       wantedBy = ["sockets.target"];
     };
-    user.services."nas-mount" = {
-      after = ["network.target"];
-      description = "mount nas";
-      serviceConfig = {
-        ExecStart = [
-          "/run/wrappers/bin/9mount 'tcp!nas!4500' /home/mpd/n/nas"
-          "/run/wrappers/bin/9bind /home/mpd/n/nas/movies /home/mpd/n/movies"
-          "/run/wrappers/bin/9bind /home/mpd/n/nas/shows /home/mpd/n/shows"
-        ];
-        ExecStartPre = [
-          "${pkgs.coreutils}/bin/mkdir -p /home/mpd/n/nas /home/mpd/n/movies /home/mpd/n/shows"
-        ];
-        ExecStop = ["/run/wrappers/bin/9umount /home/mpd/n/nas /home/mpd/n/movies /home/mpd/n/shows"];
-        RemainAfterExit = true;
-        Type = "oneshot";
-      };
-      wantedBy = ["multi-user.target"];
-    };
   };
   time.timeZone = "America/Chicago";
-  users.users.mpd = {
-    description = "Matthew Dargan";
-    extraGroups = [
-      "input"
-      "jellyfin"
-      "networkmanager"
-      "systemd-journal"
-      "wheel"
-    ];
-    isNormalUser = true;
-    openssh.authorizedKeys.keys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILe/v2phdFJcaINc1bphWEM6vXDSlXY/e0B2zyb3ik1M matthewdargan57@gmail.com"
-    ];
-    shell = pkgs.fish;
+  users = {
+    groups.media = {};
+    groups.storage = {};
+    users = {
+      media = {
+        extraGroups = ["systemd-journal"];
+        group = "media";
+        isNormalUser = true;
+        linger = true;
+        packages = [self.packages.${pkgs.system}.neovim];
+        shell = pkgs.fish;
+      };
+      mpd = {
+        description = "Matthew Dargan";
+        extraGroups = [
+          "input"
+          "networkmanager"
+          "systemd-journal"
+          "wheel"
+        ];
+        isNormalUser = true;
+        openssh.authorizedKeys.keys = [
+          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILe/v2phdFJcaINc1bphWEM6vXDSlXY/e0B2zyb3ik1M matthewdargan57@gmail.com"
+        ];
+        shell = pkgs.fish;
+      };
+      storage = {
+        group = "storage";
+        isSystemUser = true;
+      };
+    };
   };
 }
