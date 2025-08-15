@@ -1,3 +1,6 @@
 {
-  imports = [./neovim];
+  imports = [
+    ./installer-image.nix
+    ./neovim.nix
+  ];
 }
