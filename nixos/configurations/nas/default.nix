@@ -39,12 +39,10 @@
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "nas";
     firewall = {
-      allowedTCPPorts = [
-        22
-        4500
-      ];
+      allowedTCPPorts = [4500];
       checkReversePath = "loose";
       interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
+        22
         7246
         8096
       ];
@@ -107,7 +105,6 @@
     };
     tailscale.enable = true;
   };
-  system.stateVersion = "25.05";
   systemd = {
     services = {
       jellyfin = {
@@ -164,6 +161,7 @@
       wantedBy = ["sockets.target"];
     };
   };
+  system.stateVersion = "25.05";
   time.timeZone = "America/Chicago";
   users = {
     groups.media = {};

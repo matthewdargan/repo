@@ -96,7 +96,6 @@
       };
     };
   };
-  system.stateVersion = "25.05";
   systemd.services."nas-mount" = {
     after = [
       "network-online.target"
@@ -124,6 +123,7 @@
       "network-online.target"
     ];
   };
+  system.stateVersion = "25.05";
   time.timeZone = "America/Chicago";
   users.users.mpd = {
     description = "Matthew Dargan";

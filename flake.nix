@@ -1,6 +1,10 @@
 {
   description = "home config";
   inputs = {
+    disko = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:nix-community/disko";
+    };
     epify = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:matthewdargan/epify";
