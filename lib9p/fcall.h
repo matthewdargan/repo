@@ -95,6 +95,8 @@ enum {
 #define getb4(p) ((u32)fromleu32(*(u32 *)(p)))
 #define getb8(p) ((u64)fromleu64(*(u64 *)(p)))
 #define DIRFIXLEN (2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4 + 8)
+#define NOTAG 0xffff
+#define NOFID 0xffffffff
 
 static u32 fcallsize(Fcall fc);
 static String8 fcallencode(Arena *a, Fcall fc);

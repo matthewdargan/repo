@@ -22,12 +22,12 @@ typedef double f64;
 
 #define U8MAX 0xff
 #define U16MAX 0xffff
-#define U32MAX 0xffffffffU
-#define U64MAX 0xffffffffffffffffULL
+#define U32MAX 0xffffffffu
+#define U64MAX 0xffffffffffffffffull
 #define S8MAX 0x7f
 #define S16MAX 0x7fff
 #define S32MAX 0x7fffffff
-#define S64MAX 0x7fffffffffffffffLL
+#define S64MAX 0x7fffffffffffffffll
 #define S8MIN (-S8MAX - 1)
 #define S16MIN (-S16MAX - 1)
 #define S32MIN (-S32MAX - 1)

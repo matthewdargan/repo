@@ -33,7 +33,7 @@ mountedby(Arena *a, String8 mntopts, String8 user)
 	String8 opt, uname;
 
 	opts = str8split(a, mntopts, (u8 *)",", 1, 0);
-	for (node = opts.start; node; node = node->next) {
+	for (node = opts.start; node != NULL; node = node->next) {
 		opt = node->str;
 		if (str8index(opt, 0, str8lit("uname="), 0) == 0) {
 			uname = str8skip(opt, 6);
