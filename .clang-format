@@ -1,0 +1,13 @@
+Language: Cpp
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+BasedOnStyle: Google
+BreakAfterReturnType: TopLevelDefinitions
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+ColumnLimit: 120
+IndentWidth: 4
+TabWidth: 4
+UseTab: ForIndentation

@@ -1,5 +1,5 @@
 {
-  description = "home config";
+  description = "monorepo";
   inputs = {
     disko = {
       inputs.nixpkgs.follows = "nixpkgs";
@@ -31,10 +31,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:cachix/pre-commit-hooks.nix";
     };
-    src = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/src";
-    };
     u9fs = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:justinrubek/u9fs";
@@ -47,8 +43,52 @@
         inputs.pre-commit-hooks.flakeModule
         ./nixos/configurations
         ./packages
-        ./parts
       ];
+      perSystem = {
+        config,
+        inputs',
+        lib,
+        pkgs,
+        ...
+      }: {
+        devShells.default = pkgs.mkShell {
+          buildInputs = [
+            pkgs.boost
+            pkgs.curl
+            pkgs.ffmpeg-full
+            pkgs.libtorrent-rasterbar
+            pkgs.libxml2
+            pkgs.pkg-config
+          ];
+          packages = [
+            inputs'.home-manager.packages.home-manager
+            pkgs.bear
+            pkgs.clang
+            pkgs.gdb
+            pkgs.libllvm
+            pkgs.nh
+            pkgs.valgrind
+          ];
+          shellHook = "${config.pre-commit.installationScript}";
+        };
+        pre-commit = {
+          settings = {
+            hooks = {
+              alejandra.enable = true;
+              clang-format = {
+                enable = false;
+                types_or = lib.mkForce [
+                  "c"
+                  "c++"
+                ];
+              };
+              deadnix.enable = true;
+              statix.enable = true;
+            };
+            src = ../.;
+          };
+        };
+      };
       systems = ["x86_64-linux"];
     };
 }

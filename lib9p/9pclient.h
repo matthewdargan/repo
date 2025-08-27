@@ -1,0 +1,38 @@
+#ifndef _9PCLIENT_H
+#define _9PCLIENT_H
+
+typedef struct Cfsys Cfsys;
+typedef struct Cfid Cfid;
+struct Cfsys {
+	u64 fd;
+	u32 msize;
+	u32 nexttag;
+	u32 nextfid;
+	Cfid *root;
+};
+
+struct Cfid {
+	u32 fid;
+	u32 mode;
+	Qid qid;
+	u64 offset;
+	Cfsys *fs;
+};
+
+static Cfsys *fsinit(Arena *a, u64 fd);
+static Cfsys *fs9mount(Arena *a, u64 fd, String8 aname);
+static void fs9unmount(Arena *a, Cfsys *fs);
+static b32 fsversion(Arena *a, Cfsys *fs, u32 msize);
+static Cfid *fsauth(Arena *a, Cfsys *fs, String8 uname, String8 aname);
+static Cfid *fsattach(Arena *a, Cfsys *fs, u32 afid, String8 uname, String8 aname);
+static void fsclose(Arena *a, Cfid *fid);
+static Cfid *fswalk(Arena *a, Cfid *fid, String8 path);
+static b32 fsfcreate(Arena *a, Cfid *fid, String8 name, u32 mode, u32 perm);
+static Cfid *fscreate(Arena *a, Cfsys *fs, String8 name, u32 mode, u32 perm);
+static b32 fsfremove(Arena *a, Cfid *fid);
+static b32 fsremove(Arena *a, Cfsys *fs, String8 name);
+static b32 fsfopen(Arena *a, Cfid *fid, u32 mode);
+static Cfid *fs9open(Arena *a, Cfsys *fs, String8 name, u32 mode);
+/* TODO: fspread, fsread, fsreadn */
+
+#endif /* _9PCLIENT_H */

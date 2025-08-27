@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+mkdir -p bin
+cd bin
+
+bear --append -- clang -O3 -I.. -g -fdiagnostics-absolute-paths -Wall -Wextra \
+    ../cmd/9bind/main.c -o 9bind
+bear --append -- clang -O3 -I.. -g -fdiagnostics-absolute-paths -Wall -Wextra \
+    ../cmd/9mount/main.c -o 9mount
+bear --append -- clang -O3 -I.. -g -fdiagnostics-absolute-paths -Wall -Wextra \
+    ../cmd/9umount/main.c -o 9umount
+bear -- clang -O3 -I.. -g -fdiagnostics-absolute-paths -Wall -Wextra \
+    -lavcodec -lavformat -lavutil \
+    ../cmd/mediasrv/main.c -o mediasrv
+bear --append -- clang -O3 -I.. -g -fdiagnostics-absolute-paths -Wall -Wextra \
+    $(pkg-config --cflags --libs libxml-2.0) -lcurl \
+    ../cmd/tor/main.c -o tor
+bear --append -- clang++ -O3 -I.. -g -fdiagnostics-absolute-paths -Wall -Wextra \
+    $(pkg-config --cflags --libs libtorrent-rasterbar) \
+    ../cmd/tordl/main.cpp -o tordl
+bear --append -- clang++ -O3 -I.. -g -fdiagnostics-absolute-paths -Wall -Wextra \
+    $(pkg-config --cflags --libs libxml-2.0 libtorrent-rasterbar) -lcurl \
+    ../cmd/torrss/main.cpp -o torrss
+
+cd ..

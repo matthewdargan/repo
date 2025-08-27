@@ -1,0 +1,62 @@
+#!/bin/sh
+set -eu
+
+history="${XDG_STATE_HOME:-$HOME/.local/state}/play/history"
+addr='http://localhost:8080'
+lang='eng'
+mkdir -p "$(dirname "$history")"
+touch "$history"
+
+playfile() {
+	path="$1"
+	resp="$(curl -s "$addr/$path")"
+	manifest="$(echo "$resp" | grep 'manifest' | head -1)"
+	if [ -z "$manifest" ]; then
+		echo "play: error requesting $path: $resp" >&2
+		exit 1
+	fi
+	echo "$path" >> "$history"
+	subtitles="$(echo "$resp" | grep "$lang")"
+	url="$addr/$manifest"
+	opts=""
+	if [ -n "$subtitles" ]; then
+		subdir="$(mktemp -d)"
+		trap 'rm -rf "$subdir"' EXIT
+		oldifs="$IFS"
+		IFS='
+'
+		for subtitle in $subtitles; do
+			subfile="$subdir/$(basename "$subtitle")"
+			curl -s -o "$subfile" "$addr/$subtitle"
+			opts="$opts --sub-file $subfile"
+		done
+		IFS="$oldifs"
+	fi
+	vlc -- "$url" $opts
+}
+
+path='shows'
+[ $# -gt 0 ] && path="$1"
+resp="$(curl -s "$addr/$path")"
+manifest="$(echo "$resp" | grep 'manifest' | head -1)"
+if [ -n "$manifest" ]; then
+	playfile "$path"
+	exit 0
+fi
+files="$(echo "$resp" | grep -E '\.(mkv|mp4|avi|mov)$' | sort)"
+if [ -z "$files" ]; then
+	echo "$resp"
+	exit 0
+fi
+dirpath="$path/"
+last="$(grep "^$dirpath" "$history" | tail -1 | sed "s|^$dirpath||")"
+next=''
+if [ -n "$last" ]; then
+	next="$(echo "$files" | awk -v last="$last" 'p {print; exit} $0 == last {p=1}')"
+fi
+[ -z "$next" ] && next="$(echo "$files" | head -1)"
+if [ -z "$next" ]; then
+	echo "play: no files to play in $path" >&2
+	exit 1
+fi
+playfile "$path/$next"
