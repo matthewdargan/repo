@@ -447,3 +447,65 @@ fsreadn(Arena *a, Cfid *fid, void *buf, u64 n)
 	}
 	return nread;
 }
+
+static s64
+fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
+{
+	Temp scratch;
+	Fcall tx, rx;
+	u32 msize;
+	s64 nwrite, nleft, want, got;
+	u8 *p;
+
+	if (fid == NULL || buf == NULL)
+		return -1;
+	scratch = tempbegin(a);
+	msize = fid->fs->msize - IOHDRSZ;
+	nwrite = 0;
+	nleft = n;
+	p = buf;
+	while (nleft > 0) {
+		want = nleft;
+		if (want > msize)
+			want = msize;
+		memset(&tx, 0, sizeof tx);
+		tx.type = Twrite;
+		tx.fid = fid->fid;
+		if (offset == -1)
+			tx.offset = fid->offset;
+		else
+			tx.offset = offset + nwrite;
+		tx.data.len = want;
+		tx.data.str = p + nwrite;
+		rx = fsrpc(scratch.a, fid->fs, tx);
+		if (rx.type != Rwrite) {
+			if (nwrite == 0) {
+				tempend(scratch);
+				return -1;
+			}
+			break;
+		}
+		got = rx.count;
+		if (got <= 0) {
+			if (nwrite == 0) {
+				tempend(scratch);
+				return -1;
+			}
+			break;
+		}
+		nwrite += got;
+		nleft -= got;
+		if (offset == -1)
+			fid->offset += got;
+		if (got < want)
+			break;
+	}
+	tempend(scratch);
+	return nwrite;
+}
+
+static s64
+fswrite(Arena *a, Cfid *fid, void *buf, u64 n)
+{
+	return fspwrite(a, fid, buf, n, -1);
+}

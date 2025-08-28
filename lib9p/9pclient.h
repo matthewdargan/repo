@@ -36,5 +36,7 @@ static Cfid *fs9open(Arena *a, Cfsys *fs, String8 name, u32 mode);
 static s64 fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset);
 static s64 fsread(Arena *a, Cfid *fid, void *buf, u64 n);
 static s64 fsreadn(Arena *a, Cfid *fid, void *buf, u64 n);
+static s64 fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset);
+static s64 fswrite(Arena *a, Cfid *fid, void *buf, u64 n);
 
 #endif /* _9PCLIENT_H */
