@@ -15,7 +15,7 @@ struct Cfid {
 	u32 fid;
 	u32 mode;
 	Qid qid;
-	u64 offset;
+	s64 offset;
 	Cfsys *fs;
 };
 
@@ -33,6 +33,8 @@ static b32 fsfremove(Arena *a, Cfid *fid);
 static b32 fsremove(Arena *a, Cfsys *fs, String8 name);
 static b32 fsfopen(Arena *a, Cfid *fid, u32 mode);
 static Cfid *fs9open(Arena *a, Cfsys *fs, String8 name, u32 mode);
-/* TODO: fspread, fsread, fsreadn */
+static s64 fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset);
+static s64 fsread(Arena *a, Cfid *fid, void *buf, u64 n);
+static s64 fsreadn(Arena *a, Cfid *fid, void *buf, u64 n);
 
 #endif /* _9PCLIENT_H */

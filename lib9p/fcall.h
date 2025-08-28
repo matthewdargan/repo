@@ -35,7 +35,7 @@ struct Fcall {
 	String8 wname[MAXWELEM]; /* Twalk */
 	u32 nwqid;               /* Rwalk */
 	Qid wqid[MAXWELEM];      /* Rwalk */
-	u64 offset;              /* Tread, Twrite */
+	s64 offset;              /* Tread, Twrite */
 	u32 count;               /* Tread, Rread, Twrite, Rwrite */
 	String8 data;            /* Rread, Twrite */
 	String8 stat;            /* Rstat, Twstat */
@@ -97,6 +97,7 @@ enum {
 #define DIRFIXLEN (2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4 + 8)
 #define NOTAG 0xffff
 #define NOFID 0xffffffff
+#define IOHDRSZ 24
 
 static u32 fcallsize(Fcall fc);
 static String8 fcallencode(Arena *a, Fcall fc);

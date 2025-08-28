@@ -380,3 +380,70 @@ fs9open(Arena *a, Cfsys *fs, String8 name, u32 mode)
 	tempend(scratch);
 	return fid;
 }
+
+static s64
+fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
+{
+	Temp scratch;
+	Fcall tx, rx;
+	u32 msize;
+	s64 nr;
+
+	if (fid == NULL || buf == NULL)
+		return -1;
+	scratch = tempbegin(a);
+	msize = fid->fs->msize - IOHDRSZ;
+	if (n > msize)
+		n = msize;
+	memset(&tx, 0, sizeof tx);
+	tx.type = Tread;
+	tx.fid = fid->fid;
+	if (offset == -1)
+		tx.offset = fid->offset;
+	else
+		tx.offset = offset;
+	tx.count = n;
+	rx = fsrpc(scratch.a, fid->fs, tx);
+	if (rx.type != Rread) {
+		tempend(scratch);
+		return -1;
+	}
+	nr = rx.data.len;
+	if (nr > (s64)n)
+		nr = n;
+	if (nr > 0) {
+		memcpy(buf, rx.data.str, nr);
+		if (offset == -1)
+			fid->offset += nr;
+	}
+	tempend(scratch);
+	return nr;
+}
+
+static s64
+fsread(Arena *a, Cfid *fid, void *buf, u64 n)
+{
+	return fspread(a, fid, buf, n, -1);
+}
+
+static s64
+fsreadn(Arena *a, Cfid *fid, void *buf, u64 n)
+{
+	s64 nread, nleft, nr;
+	u8 *p;
+
+	nread = 0;
+	nleft = n;
+	p = buf;
+	while (nleft > 0) {
+		nr = fsread(a, fid, p + nread, nleft);
+		if (nr <= 0) {
+			if (nread == 0)
+				return nr;
+			break;
+		}
+		nread += nr;
+		nleft -= nr;
+	}
+	return nread;
+}
