@@ -429,7 +429,8 @@ fsread(Arena *a, Cfid *fid, void *buf, u64 n)
 static s64
 fsreadn(Arena *a, Cfid *fid, void *buf, u64 n)
 {
-	s64 nread, nleft, nr;
+	u64 nread, nleft;
+	s64 nr;
 	u8 *p;
 
 	nread = 0;
@@ -453,8 +454,8 @@ fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 {
 	Temp scratch;
 	Fcall tx, rx;
-	u32 msize;
-	s64 nwrite, nleft, want, got;
+	u32 msize, got;
+	u64 nwrite, nleft, want;
 	u8 *p;
 
 	if (fid == NULL || buf == NULL)
@@ -486,7 +487,7 @@ fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 			break;
 		}
 		got = rx.count;
-		if (got <= 0) {
+		if (got == 0) {
 			if (nwrite == 0) {
 				tempend(scratch);
 				return -1;

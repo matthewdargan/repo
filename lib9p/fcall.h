@@ -35,7 +35,7 @@ struct Fcall {
 	String8 wname[MAXWELEM]; /* Twalk */
 	u32 nwqid;               /* Rwalk */
 	Qid wqid[MAXWELEM];      /* Rwalk */
-	s64 offset;              /* Tread, Twrite */
+	u64 offset;              /* Tread, Twrite */
 	u32 count;               /* Tread, Rread, Twrite, Rwrite */
 	String8 data;            /* Rread, Twrite */
 	String8 stat;            /* Rstat, Twstat */

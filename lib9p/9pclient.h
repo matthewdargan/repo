@@ -15,7 +15,7 @@ struct Cfid {
 	u32 fid;
 	u32 mode;
 	Qid qid;
-	s64 offset;
+	u64 offset;
 	Cfsys *fs;
 };
 
