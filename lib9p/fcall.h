@@ -56,6 +56,19 @@ struct Dir {
 	String8 muid; /* last modifier */
 };
 
+typedef struct Dirnode Dirnode;
+struct Dirnode {
+	Dirnode *next;
+	Dir dir;
+};
+
+typedef struct Dirlist Dirlist;
+struct Dirlist {
+	u64 cnt;
+	Dirnode *start;
+	Dirnode *end;
+};
+
 enum {
 	Tversion = 100,
 	Rversion = 101,
@@ -98,6 +111,8 @@ enum {
 #define NOTAG 0xffff
 #define NOFID 0xffffffff
 #define IOHDRSZ 24
+#define DIRMAX 8192
+#define DIRBUFMAX (DIRMAX * 16)
 
 static u32 fcallsize(Fcall fc);
 static String8 fcallencode(Arena *a, Fcall fc);
@@ -106,5 +121,6 @@ static u32 dirsize(Dir d);
 static String8 direncode(Arena *a, Dir d);
 static Dir dirdecode(String8 msg);
 static String8 read9pmsg(Arena *a, u64 fd);
+static void dirlistpush(Arena *a, Dirlist *list, Dir d);
 
 #endif /* FCALL_H */

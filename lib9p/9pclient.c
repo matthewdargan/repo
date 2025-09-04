@@ -510,3 +510,77 @@ fswrite(Arena *a, Cfid *fid, void *buf, u64 n)
 {
 	return fspwrite(a, fid, buf, n, -1);
 }
+
+static s64
+dirpackage(Arena *a, u8 *buf, s64 ts, Dirlist *list)
+{
+	s64 n;
+	u64 i, m;
+	String8 dirmsg;
+	Dir d;
+
+	memset(&list, 0, sizeof list);
+	n = 0;
+	for (i = 0; i < ts; i += m) {
+		if (i + 2 > ts)
+			return -1;
+		m = 2 + getb2(&buf[i]);
+		if (i + m > ts)
+			return -1;
+		dirmsg.str = &buf[i];
+		dirmsg.len = m;
+		d = dirdecode(dirmsg);
+		if (d.name.len == 0 && m > 2)
+			return -1;
+		dirlistpush(a, list, d);
+		n++;
+	}
+	return n;
+}
+
+static s64
+fsdirread(Arena *a, Cfid *fid, Dirlist *list)
+{
+	Temp scratch;
+	u8 *buf;
+	s64 ts;
+
+	if (fid == NULL || list == NULL)
+		return -1;
+	scratch = tempbegin(a);
+	buf = pusharrnoz(scratch.a, u8, DIRMAX);
+	ts = fsread(a, fid, buf, DIRMAX);
+	if (ts >= 0)
+		ts = dirpackage(a, buf, ts, list);
+	tempend(scratch);
+	return ts;
+}
+
+static s64
+fsdirreadall(Arena *a, Cfid *fid, Dirlist *list)
+{
+	Temp scratch;
+	u8 *buf;
+	s64 ts, n;
+	u64 nleft;
+
+	if (fid == NULL || list == NULL)
+		return -1;
+	scratch = tempbegin(a);
+	buf = pusharrnoz(scratch.a, u8, DIRBUFMAX);
+	ts = 0;
+	nleft = DIRBUFMAX;
+	while (nleft >= DIRMAX) {
+		n = fsread(a, fid, buf + ts, DIRMAX);
+		if (n <= 0)
+			break;
+		ts += n;
+		nleft -= n;
+	}
+	if (ts >= 0)
+		ts = dirpackage(a, buf, ts, list);
+	tempend(scratch);
+	if (ts == 0 && n < 0)
+		return -1;
+	return ts;
+}

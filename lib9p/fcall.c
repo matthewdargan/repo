@@ -696,3 +696,20 @@ read9pmsg(Arena *a, u64 fd)
 		return str8zero();
 	return msg;
 }
+
+static void
+dirlistpush(Arena *a, Dirlist *list, Dir d)
+{
+	Dirnode *node;
+
+	node = pusharrnoz(a, Dirnode, 1);
+	node->dir = d;
+	if (list->start == NULL) {
+		list->start = node;
+		list->end = node;
+	} else {
+		list->end->next = node;
+		list->end = node;
+	}
+	list->cnt++;
+}
