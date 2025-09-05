@@ -519,13 +519,13 @@ dirpackage(Arena *a, u8 *buf, s64 ts, Dirlist *list)
 	String8 dirmsg;
 	Dir d;
 
-	memset(&list, 0, sizeof list);
+	memset(list, 0, sizeof *list);
 	n = 0;
-	for (i = 0; i < ts; i += m) {
-		if (i + 2 > ts)
+	for (i = 0; i < (u64)ts; i += m) {
+		if (i + 2 > (u64)ts)
 			return -1;
 		m = 2 + getb2(&buf[i]);
-		if (i + m > ts)
+		if (i + m > (u64)ts)
 			return -1;
 		dirmsg.str = &buf[i];
 		dirmsg.len = m;
@@ -583,4 +583,50 @@ fsdirreadall(Arena *a, Cfid *fid, Dirlist *list)
 	if (ts == 0 && n < 0)
 		return -1;
 	return ts;
+}
+
+static Dir
+fsdirfstat(Arena *a, Cfid *fid)
+{
+	Temp scratch;
+	Fcall tx, rx;
+	Dir d, errd;
+
+	memset(&errd, 0, sizeof errd);
+	if (fid == NULL)
+		return errd;
+	scratch = tempbegin(a);
+	memset(&tx, 0, sizeof tx);
+	tx.type = Tstat;
+	tx.fid = fid->fid;
+	rx = fsrpc(scratch.a, fid->fs, tx);
+	if (rx.type != Rstat) {
+		tempend(scratch);
+		return errd;
+	}
+	d = dirdecode(rx.stat);
+	tempend(scratch);
+	return d;
+}
+
+static Dir
+fsdirstat(Arena *a, Cfsys *fs, String8 name)
+{
+	Temp scratch;
+	Cfid *fid;
+	Dir d, errd;
+
+	memset(&errd, 0, sizeof errd);
+	if (fs == NULL || fs->root == NULL)
+		return errd;
+	scratch = tempbegin(a);
+	fid = fswalk(a, fs->root, name);
+	if (fid == NULL) {
+		tempend(scratch);
+		return errd;
+	}
+	d = fsdirfstat(a, fid);
+	fsclose(scratch.a, fid);
+	tempend(scratch);
+	return d;
 }

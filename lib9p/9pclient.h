@@ -40,5 +40,7 @@ static s64 fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset);
 static s64 fswrite(Arena *a, Cfid *fid, void *buf, u64 n);
 static s64 fsdirread(Arena *a, Cfid *fid, Dirlist *list);
 static s64 fsdirreadall(Arena *a, Cfid *fid, Dirlist *list);
+static Dir fsdirfstat(Arena *a, Cfid *fid);
+static Dir fsdirstat(Arena *a, Cfsys *fs, String8 name);
 
 #endif /* _9PCLIENT_H */
