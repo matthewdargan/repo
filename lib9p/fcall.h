@@ -113,14 +113,17 @@ enum {
 #define IOHDRSZ 24
 #define DIRMAX 8192
 #define DIRBUFMAX (DIRMAX * 16)
-#define OREAD 0  /* open for read */
-#define OWRITE 1 /* open for write */
-#define ORDWR 2  /* open for read and write */
-#define OEXEC 3  /* open for execute */
-#define AEXIST 0 /* test for existence */
-#define AEXEC 1  /* execute access */
-#define AWRITE 2 /* write access */
-#define AREAD 4  /* read access */
+#define OREAD 0   /* open for read */
+#define OWRITE 1  /* open for write */
+#define ORDWR 2   /* open for read and write */
+#define OEXEC 3   /* open for execute */
+#define AEXIST 0  /* test for existence */
+#define AEXEC 1   /* execute access */
+#define AWRITE 2  /* write access */
+#define AREAD 4   /* read access */
+#define SEEKSET 0 /* seek from beginning of file */
+#define SEEKCUR 1 /* seek from current position */
+#define SEEKEND 2 /* seek from end of file */
 
 static u32 fcallsize(Fcall fc);
 static String8 fcallencode(Arena *a, Fcall fc);

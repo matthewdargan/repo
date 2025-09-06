@@ -708,3 +708,46 @@ fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode)
 	tempend(scratch);
 	return 1;
 }
+
+static s64
+fsseek(Arena *a, Cfid *fid, s64 offset, u32 type)
+{
+	Temp scratch;
+	Dir d;
+	s64 pos;
+
+	if (fid == NULL)
+		return -1;
+	scratch = tempbegin(a);
+	switch (type) {
+		case SEEKSET:
+			pos = offset;
+			fid->offset = offset;
+		case SEEKCUR:
+			pos = (s64)fid->offset + offset;
+			if (pos < 0) {
+				tempend(scratch);
+				return -1;
+			}
+			fid->offset = pos;
+			break;
+		case SEEKEND:
+			d = fsdirfstat(scratch.a, fid);
+			if (d.name.len == 0) {
+				tempend(scratch);
+				return -1;
+			}
+			pos = (s64)d.len + offset;
+			if (pos < 0) {
+				tempend(scratch);
+				return -1;
+			}
+			fid->offset = pos;
+			break;
+		default:
+			tempend(scratch);
+			return -1;
+	}
+	tempend(scratch);
+	return pos;
+}

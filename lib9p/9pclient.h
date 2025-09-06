@@ -47,6 +47,6 @@ static Dir fsdirstat(Arena *a, Cfsys *fs, String8 name);
 static b32 fsdirfwstat(Arena *a, Cfid *fid, Dir d);
 static b32 fsdirwstat(Arena *a, Cfsys *fs, String8 name, Dir d);
 static b32 fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode);
-/* TODO: fsseek */
+static s64 fsseek(Arena *a, Cfid *fid, s64 offset, u32 type);
 
 #endif /* _9PCLIENT_H */
