@@ -630,3 +630,81 @@ fsdirstat(Arena *a, Cfsys *fs, String8 name)
 	tempend(scratch);
 	return d;
 }
+
+static b32
+fsdirfwstat(Arena *a, Cfid *fid, Dir d)
+{
+	Temp scratch;
+	Fcall tx, rx;
+	String8 stat;
+
+	if (fid == NULL)
+		return 0;
+	scratch = tempbegin(a);
+	stat = direncode(scratch.a, d);
+	if (stat.len == 0) {
+		tempend(scratch);
+		return 0;
+	}
+	memset(&tx, 0, sizeof tx);
+	tx.type = Twstat;
+	tx.fid = fid->fid;
+	tx.stat = stat;
+	rx = fsrpc(scratch.a, fid->fs, tx);
+	if (rx.type != Rwstat) {
+		tempend(scratch);
+		return 0;
+	}
+	tempend(scratch);
+	return 1;
+}
+
+static b32
+fsdirwstat(Arena *a, Cfsys *fs, String8 name, Dir d)
+{
+	Temp scratch;
+	Cfid *fid;
+	b32 ok;
+
+	if (fs == NULL || fs->root == NULL)
+		return 0;
+	scratch = tempbegin(a);
+	fid = fswalk(a, fs->root, name);
+	if (fid == NULL) {
+		tempend(scratch);
+		return 0;
+	}
+	ok = fsdirfwstat(scratch.a, fid, d);
+	fsclose(scratch.a, fid);
+	tempend(scratch);
+	return ok;
+}
+
+static b32
+fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode)
+{
+	Temp scratch;
+	Cfid *fid;
+	Dir d;
+
+	if (fs == NULL || fs->root == NULL)
+		return 0;
+	scratch = tempbegin(a);
+	if (mode == AEXIST) {
+		d = fsdirstat(scratch.a, fs, name);
+		if (d.name.len == 0) {
+			tempend(scratch);
+			return 0;
+		}
+		tempend(scratch);
+		return 1;
+	}
+	fid = fs9open(scratch.a, fs, name, omodetab[mode & 7]);
+	if (fid == NULL) {
+		tempend(scratch);
+		return 0;
+	}
+	fsclose(scratch.a, fid);
+	tempend(scratch);
+	return 1;
+}

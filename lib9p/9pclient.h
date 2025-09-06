@@ -19,6 +19,8 @@ struct Cfid {
 	Cfsys *fs;
 };
 
+readonly static u32 omodetab[8] = {0, OEXEC, OWRITE, ORDWR, OREAD, OEXEC, ORDWR, ORDWR};
+
 static Cfsys *fsinit(Arena *a, u64 fd);
 static Cfsys *fs9mount(Arena *a, u64 fd, String8 aname);
 static void fs9unmount(Arena *a, Cfsys *fs);
@@ -42,5 +44,9 @@ static s64 fsdirread(Arena *a, Cfid *fid, Dirlist *list);
 static s64 fsdirreadall(Arena *a, Cfid *fid, Dirlist *list);
 static Dir fsdirfstat(Arena *a, Cfid *fid);
 static Dir fsdirstat(Arena *a, Cfsys *fs, String8 name);
+static b32 fsdirfwstat(Arena *a, Cfid *fid, Dir d);
+static b32 fsdirwstat(Arena *a, Cfsys *fs, String8 name, Dir d);
+static b32 fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode);
+/* TODO: fsseek */
 
 #endif /* _9PCLIENT_H */
