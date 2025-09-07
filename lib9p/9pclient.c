@@ -56,6 +56,114 @@ fs9unmount(Arena *a, Cfsys *fs)
 	fs->fd = -1;
 }
 
+static void
+debug9pprint(String8 dir, Fcall fc)
+{
+	u32 i;
+
+	if (!debug9p)
+		return;
+	fprintf(stderr, "%.*s ", dir.len, dir.str);
+	switch (fc.type) {
+		case Tversion:
+			fprintf(stderr, "Tversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, fc.version.len,
+			        fc.version.str);
+			break;
+		case Rversion:
+			fprintf(stderr, "Rversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, fc.version.len,
+			        fc.version.str);
+			break;
+		case Tauth:
+			fprintf(stderr, "Tauth tag=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.afid, fc.uname.len,
+			        fc.uname.str, fc.aname.len, fc.aname.str);
+			break;
+		case Rauth:
+			fprintf(stderr, "Rauth tag=%u qid=(type=%u vers=%u path=%llu)\n", fc.tag, fc.aqid.type, fc.aqid.vers,
+			        fc.aqid.path);
+			break;
+		case Rerror:
+			fprintf(stderr, "Rerror tag=%u ename='%.*s'\n", fc.tag, fc.ename.len, fc.ename.str);
+			break;
+		case Tattach:
+			fprintf(stderr, "Tattach tag=%u fid=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.fid, fc.afid,
+			        fc.uname.len, fc.uname.str, fc.aname.len, fc.aname.str);
+			break;
+		case Rattach:
+			fprintf(stderr, "Rattach tag=%u qid=(type=%u vers=%u path=%llu)\n", fc.tag, fc.qid.type, fc.qid.vers,
+			        fc.qid.path);
+			break;
+		case Twalk:
+			fprintf(stderr, "Twalk tag=%u fid=%u newfid=%u nwname=%u", fc.tag, fc.fid, fc.newfid, fc.nwname);
+			for (i = 0; i < fc.nwname; i++) {
+				fprintf(stderr, " '%.*s'", fc.wname[i].len, fc.wname[i].str);
+			}
+			fprintf(stderr, "\n");
+			break;
+		case Rwalk:
+			fprintf(stderr, "Rwalk tag=%u nwqid=%u", fc.tag, fc.nwqid);
+			for (i = 0; i < fc.nwqid; i++) {
+				fprintf(stderr, " qid%u=(type=%u vers=%u path=%llu)", i, fc.wqid[i].type, fc.wqid[i].vers,
+				        fc.wqid[i].path);
+			}
+			fprintf(stderr, "\n");
+			break;
+		case Topen:
+			fprintf(stderr, "Topen tag=%u fid=%u mode=%u\n", fc.tag, fc.fid, fc.mode);
+			break;
+		case Ropen:
+			fprintf(stderr, "Ropen tag=%u qid=(type=%u vers=%u path=%llu) iounit=%u\n", fc.tag, fc.qid.type,
+			        fc.qid.vers, fc.qid.path, fc.iounit);
+			break;
+		case Tcreate:
+			fprintf(stderr, "Tcreate tag=%u fid=%u name='%.*s' perm=%u mode=%u\n", fc.tag, fc.fid, fc.name.len,
+			        fc.name.str, fc.perm, fc.mode);
+			break;
+		case Rcreate:
+			fprintf(stderr, "Rcreate tag=%u qid=(type=%u vers=%u path=%llu) iounit=%u\n", fc.tag, fc.qid.type,
+			        fc.qid.vers, fc.qid.path, fc.iounit);
+			break;
+		case Tread:
+			fprintf(stderr, "Tread tag=%u fid=%u offset=%llu count=%u\n", fc.tag, fc.fid, fc.offset, fc.count);
+			break;
+		case Rread:
+			fprintf(stderr, "Rread tag=%u count=%llu\n", fc.tag, fc.data.len);
+			break;
+		case Twrite:
+			fprintf(stderr, "Twrite tag=%u fid=%u offset=%llu count=%llu\n", fc.tag, fc.fid, fc.offset, fc.data.len);
+			break;
+		case Rwrite:
+			fprintf(stderr, "Rwrite tag=%u count=%u\n", fc.tag, fc.count);
+			break;
+		case Tclunk:
+			fprintf(stderr, "Tclunk tag=%u fid=%u\n", fc.tag, fc.fid);
+			break;
+		case Rclunk:
+			fprintf(stderr, "Rclunk tag=%u\n", fc.tag);
+			break;
+		case Tremove:
+			fprintf(stderr, "Tremove tag=%u fid=%u\n", fc.tag, fc.fid);
+			break;
+		case Rremove:
+			fprintf(stderr, "Rremove tag=%u\n", fc.tag);
+			break;
+		case Tstat:
+			fprintf(stderr, "Tstat tag=%u fid=%u\n", fc.tag, fc.fid);
+			break;
+		case Rstat:
+			fprintf(stderr, "Rstat tag=%u stat.len=%llu\n", fc.tag, fc.stat.len);
+			break;
+		case Twstat:
+			fprintf(stderr, "Twstat tag=%u fid=%u stat.len=%llu\n", fc.tag, fc.fid, fc.stat.len);
+			break;
+		case Rwstat:
+			fprintf(stderr, "Rwstat tag=%u\n", fc.tag);
+			break;
+		default:
+			fprintf(stderr, "unknown type=%u tag=%u\n", fc.type, fc.tag);
+			break;
+	}
+}
+
 static Fcall
 fsrpc(Arena *a, Cfsys *fs, Fcall tx)
 {
@@ -69,6 +177,7 @@ fsrpc(Arena *a, Cfsys *fs, Fcall tx)
 		if (fs->nexttag == NOTAG)
 			fs->nexttag = 1;
 	}
+	debug9pprint(str8lit("<-"), tx);
 	txmsg = fcallencode(a, tx);
 	if (txmsg.len == 0)
 		return errfc;
@@ -83,6 +192,7 @@ fsrpc(Arena *a, Cfsys *fs, Fcall tx)
 		return errfc;
 	if (rx.tag != tx.tag)
 		return errfc;
+	debug9pprint(str8lit("->"), rx);
 	return rx;
 }
 

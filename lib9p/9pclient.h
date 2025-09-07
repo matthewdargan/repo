@@ -19,6 +19,7 @@ struct Cfid {
 	Cfsys *fs;
 };
 
+readonly static b32 debug9p = 1;
 readonly static u32 omodetab[8] = {0, OEXEC, OWRITE, ORDWR, OREAD, OEXEC, ORDWR, ORDWR};
 
 static Cfsys *fsinit(Arena *a, u64 fd);
