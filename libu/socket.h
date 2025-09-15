@@ -1,6 +1,17 @@
 #ifndef SOCKET_H
 #define SOCKET_H
 
+typedef struct Netaddr Netaddr;
+struct Netaddr {
+	String8 net;
+	String8 host;
+	String8 port;
+	b32 isunix;
+};
+
+static Netaddr netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv);
+static b32 netaddrparse(Arena *a, String8 addr, Netaddr *parsed);
+static u64 socketdial(Netaddr na, Netaddr local);
 static u64 socketlisten(String8 port, struct addrinfo *hints);
 static u64 socketaccept(u64 fd);
 static u64 socketconnect(String8 host, String8 port, struct addrinfo *hints);

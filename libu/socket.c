@@ -1,3 +1,209 @@
+static Netaddr
+netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv)
+{
+	Netaddr na;
+	u64 bangpos, colonpos;
+	String8 net, host, service, port;
+
+	memset(&na, 0, sizeof na);
+	if (addr.len == 0)
+		return na;
+	if (defnet.len == 0)
+		defnet = str8lit("net");
+	bangpos = str8index(addr, 0, str8lit("!"), 0);
+	colonpos = str8index(addr, 0, str8lit(":"), 0);
+	if (bangpos >= addr.len) {
+		if (fileexists(a, addr)) {
+			na.net = str8lit("unix");
+			na.host = pushstr8cpy(a, addr);
+			na.isunix = 1;
+			return na;
+		}
+		if (colonpos < addr.len) {
+			host = str8prefix(addr, colonpos);
+			service = str8skip(addr, colonpos + 1);
+			na.net = pushstr8cpy(a, defnet);
+			na.host = pushstr8cpy(a, host);
+			na.port = pushstr8cpy(a, service);
+			na.isunix = 0;
+			return na;
+		}
+		na.net = pushstr8cpy(a, defnet);
+		na.host = pushstr8cpy(a, addr);
+		na.isunix = 0;
+		if (defsrv.len > 0)
+			na.port = pushstr8cpy(a, defsrv);
+		return na;
+	}
+	net = str8prefix(addr, bangpos);
+	service = str8skip(addr, bangpos + 1);
+	bangpos = str8index(service, 0, str8lit("!"), 0);
+	if (bangpos < service.len) {
+		host = str8prefix(addr, bangpos);
+		port = str8skip(addr, bangpos + 1);
+		na.net = pushstr8cpy(a, net);
+		na.host = pushstr8cpy(a, host);
+		na.port = pushstr8cpy(a, port);
+		na.isunix = str8cmp(na.net, str8lit("unix"), 0);
+		return na;
+	}
+	if (str8cmp(net, str8lit("unix"), 0)) {
+		na.net = str8lit("unix");
+		na.host = pushstr8cpy(a, service);
+		na.isunix = 1;
+		return na;
+	}
+	na.net = pushstr8cpy(a, net);
+	na.host = pushstr8cpy(a, service);
+	na.isunix = 0;
+	if (defsrv.len > 0)
+		na.port = pushstr8cpy(a, defsrv);
+	return na;
+}
+
+static b32
+netaddrparse(Arena *a, String8 addr, Netaddr *na)
+{
+	String8 remaining;
+	u64 bangpos;
+
+	if (addr.len == 0 || na == NULL)
+		return 0;
+	memset(na, 0, sizeof *na);
+	bangpos = str8index(addr, 0, str8lit("!"), 0);
+	if (bangpos >= addr.len)
+		return 0;
+	na->net = pushstr8cpy(a, str8prefix(addr, bangpos));
+	remaining = str8skip(addr, bangpos + 1);
+	if (remaining.len == 0)
+		return 0;
+	bangpos = str8index(remaining, 0, str8lit("!"), 0);
+	if (bangpos >= remaining.len) {
+		na->host = pushstr8cpy(a, remaining);
+		na->isunix = str8cmp(na->net, str8lit("unix"), 0);
+		return 1;
+	}
+	na->host = pushstr8cpy(a, str8prefix(remaining, bangpos));
+	na->port = pushstr8cpy(a, str8skip(remaining, bangpos + 1));
+	na->isunix = str8cmp(na->net, str8lit("unix"), 0);
+	if (!na->isunix && (na->host.len == 0 || na->port.len == 0))
+		return 0;
+	if (!str8cmp(na->net, str8lit("tcp"), 0) && !str8cmp(na->net, str8lit("udp"), 0) &&
+	    !str8cmp(na->net, str8lit("net"), 0) && !str8cmp(na->net, str8lit("unix"), 0))
+		return 0;
+	return 1;
+}
+
+static u64
+socketdial(Netaddr na, Netaddr local)
+{
+	char hostbuf[1024], portbuf[16], localhostbuf[1024], localportbuf[16];
+	struct addrinfo hints, *res, *localres;
+	struct sockaddr_un unaddr;
+	int fd, opt, socktype;
+
+	if (na.isunix) {
+		if (local.net.len > 0)
+			return 0;
+		if (na.host.len == 0)
+			return 0;
+		memcpy(hostbuf, na.host.str, na.host.len);
+		hostbuf[na.host.len] = 0;
+		fd = open(hostbuf, O_RDWR);
+		if (fd >= 0)
+			return (u64)fd;
+		fd = socket(AF_UNIX, SOCK_STREAM, 0);
+		if (fd < 0)
+			return 0;
+		memset(&unaddr, 0, sizeof unaddr);
+		unaddr.sun_family = AF_UNIX;
+		memcpy(unaddr.sun_path, na.host.str, na.host.len);
+		if (connect(fd, (struct sockaddr *)&unaddr, sizeof unaddr) < 0) {
+			close(fd);
+			return 0;
+		}
+		return (u64)fd;
+	}
+	if (na.host.len > 0 && str8cmp(na.host, str8lit("*"), 0) == 0)
+		return 0;
+	if (na.port.len == 0)
+		return 0;
+	memcpy(portbuf, na.port.str, na.port.len);
+	portbuf[na.port.len] = 0;
+	if (na.host.len == 0) {
+		memcpy(hostbuf, "localhost", 9);
+		hostbuf[9] = 0;
+	} else {
+		memcpy(hostbuf, na.host.str, na.host.len);
+		hostbuf[na.host.len] = 0;
+	}
+	if (str8cmp(na.net, str8lit("tcp"), 0) == 0 || str8cmp(na.net, str8lit("net"), 0) == 0)
+		socktype = SOCK_STREAM;
+	else if (str8cmp(na.net, str8lit("udp"), 0) == 0)
+		socktype = SOCK_DGRAM;
+	else
+		return 0;
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = socktype;
+	if (getaddrinfo(hostbuf, portbuf, &hints, &res) != 0)
+		return 0;
+	if (local.net.len > 0) {
+		if (local.isunix || local.port.len == 0) {
+			freeaddrinfo(res);
+			return 0;
+		}
+		memcpy(localportbuf, local.port.str, local.port.len);
+		localportbuf[local.port.len] = 0;
+		if (local.host.len == 0) {
+			memcpy(localhostbuf, "localhost", 9);
+			localhostbuf[9] = 0;
+		} else {
+			memcpy(localhostbuf, local.host.str, local.host.len);
+			localhostbuf[local.host.len] = 0;
+		}
+		if (getaddrinfo(localhostbuf, localportbuf, &hints, &localres) != 0) {
+			freeaddrinfo(res);
+			return 0;
+		}
+	}
+	fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+	if (fd < 0) {
+		freeaddrinfo(res);
+		if (localres)
+			freeaddrinfo(localres);
+		return 0;
+	}
+	if (localres) {
+		if (socktype == SOCK_STREAM) {
+			opt = 1;
+			setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt);
+		}
+		if (bind(fd, localres->ai_addr, localres->ai_addrlen) < 0) {
+			close(fd);
+			freeaddrinfo(res);
+			freeaddrinfo(localres);
+			return 0;
+		}
+		freeaddrinfo(localres);
+	}
+	if (socktype == SOCK_STREAM) {
+		opt = 1;
+		setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt);
+	}
+	if (socktype == SOCK_DGRAM) {
+		opt = 1;
+		setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &opt, sizeof opt);
+	}
+	if (connect(fd, res->ai_addr, res->ai_addrlen) < 0) {
+		close(fd);
+		freeaddrinfo(res);
+		return 0;
+	}
+	freeaddrinfo(res);
+	return (u64)fd;
+}
+
 static u64
 socketlisten(String8 port, struct addrinfo *hints)
 {
