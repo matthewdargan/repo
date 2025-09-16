@@ -124,7 +124,7 @@ socketdial(Netaddr na, Netaddr local)
 		}
 		return (u64)fd;
 	}
-	if (na.host.len > 0 && str8cmp(na.host, str8lit("*"), 0) == 0)
+	if (na.host.len > 0 && str8cmp(na.host, str8lit("*"), 0))
 		return 0;
 	if (na.port.len == 0)
 		return 0;
@@ -137,9 +137,9 @@ socketdial(Netaddr na, Netaddr local)
 		memcpy(hostbuf, na.host.str, na.host.len);
 		hostbuf[na.host.len] = 0;
 	}
-	if (str8cmp(na.net, str8lit("tcp"), 0) == 0 || str8cmp(na.net, str8lit("net"), 0) == 0)
+	if (str8cmp(na.net, str8lit("tcp"), 0) || str8cmp(na.net, str8lit("net"), 0))
 		socktype = SOCK_STREAM;
-	else if (str8cmp(na.net, str8lit("udp"), 0) == 0)
+	else if (str8cmp(na.net, str8lit("udp"), 0))
 		socktype = SOCK_DGRAM;
 	else
 		return 0;

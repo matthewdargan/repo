@@ -229,8 +229,8 @@ fsauth(Arena *a, Cfsys *fs, String8 uname, String8 aname)
 	Fcall tx, rx;
 	Cfid *afid;
 
-	scratch = tempbegin(a);
 	afid = pusharr(a, Cfid, 1);
+	scratch = tempbegin(a);
 	afid->fid = fs->nextfid++;
 	afid->fs = fs;
 	memset(&tx, 0, sizeof tx);
@@ -255,8 +255,8 @@ fsattach(Arena *a, Cfsys *fs, u32 afid, String8 uname, String8 aname)
 	Fcall tx, rx;
 	Cfid *fid;
 
-	scratch = tempbegin(a);
 	fid = pusharr(a, Cfid, 1);
+	scratch = tempbegin(a);
 	fid->fid = fs->nextfid++;
 	fid->fs = fs;
 	memset(&tx, 0, sizeof tx);
@@ -305,8 +305,8 @@ fswalk(Arena *a, Cfid *fid, String8 path)
 
 	if (fid == NULL)
 		return NULL;
-	scratch = tempbegin(a);
 	wfid = pusharr(a, Cfid, 1);
+	scratch = tempbegin(a);
 	wfid->fid = fid->fs->nextfid++;
 	wfid->qid = fid->qid;
 	wfid->fs = fid->fs;

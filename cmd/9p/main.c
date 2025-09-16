@@ -160,9 +160,9 @@ main(int argc, char *argv[])
 	}
 	cmd = parsed.inputs.start->str;
 	name = parsed.inputs.start->next->str;
-	if (str8cmp(cmd, str8lit("read"), 0) == 0)
+	if (str8cmp(cmd, str8lit("read"), 0))
 		cmd9pread(arena, addr, aname, name);
-	else if (str8cmp(cmd, str8lit("stat"), 0) == 0)
+	else if (str8cmp(cmd, str8lit("stat"), 0))
 		cmd9pstat(arena, addr, aname, name);
 	else {
 		fprintf(stderr, "unsupported command: %.*s\n", (int)cmd.len, cmd.str);
