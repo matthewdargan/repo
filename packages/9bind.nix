@@ -30,6 +30,7 @@
              -I. -fdiagnostics-absolute-paths -Wall -Wextra \
              cmd/9bind/main.c -o 9bind
         '';
+        dontStrip = true;
         installPhase = ''
           mkdir -p "$out/bin"
           cp 9bind "$out/bin"

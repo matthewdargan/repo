@@ -43,6 +43,7 @@
              $(pkg-config --cflags --libs libtorrent-rasterbar) \
              cmd/tordl/main.cpp -o tordl
         '';
+        dontStrip = true;
         installPhase = ''
           mkdir -p "$out/bin"
           cp tordl "$out/bin"

@@ -47,6 +47,7 @@
              $(pkg-config --cflags --libs libxml-2.0 libtorrent-rasterbar) -lcurl \
              cmd/torrss/main.cpp -o torrss
         '';
+        dontStrip = true;
         installPhase = ''
           mkdir -p "$out/bin"
           cp torrss "$out/bin"

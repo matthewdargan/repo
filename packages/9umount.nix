@@ -30,6 +30,7 @@
              -I. -fdiagnostics-absolute-paths -Wall -Wextra \
              cmd/9umount/main.c -o 9umount
         '';
+        dontStrip = true;
         installPhase = ''
           mkdir -p "$out/bin"
           cp 9umount "$out/bin"

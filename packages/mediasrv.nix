@@ -31,6 +31,7 @@
           clang -O0 -g -fsanitize=address -fno-omit-frame-pointer -I. -Wall -Wextra -lavcodec -lavformat -lavutil \
              cmd/mediasrv/main.c -o mediasrv
         '';
+        dontStrip = true;
         installPhase = ''
           mkdir -p "$out/bin"
           cp mediasrv "$out/bin"

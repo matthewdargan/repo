@@ -43,6 +43,7 @@
              $(pkg-config --cflags --libs libxml-2.0) -lcurl \
              cmd/tor/main.c -o tor
         '';
+        dontStrip = true;
         installPhase = ''
           mkdir -p "$out/bin"
           cp tor "$out/bin"

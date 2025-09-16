@@ -30,6 +30,7 @@
              -I. -fdiagnostics-absolute-paths -Wall -Wextra \
              cmd/9mount/main.c -o 9mount
         '';
+        dontStrip = true;
         installPhase = ''
           mkdir -p "$out/bin"
           cp 9mount "$out/bin"
