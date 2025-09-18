@@ -680,20 +680,31 @@ static String8
 read9pmsg(Arena *a, u64 fd)
 {
 	u8 lenbuf[4];
-	u32 restlen;
+	u32 nread, nleft;
 	ssize_t n;
 	String8 msg;
 
-	n = read(fd, lenbuf, sizeof lenbuf);
-	if (n != 4)
-		return str8zero();
+	nread = 0;
+	nleft = 4;
+	while (nleft > 0) {
+		n = read(fd, lenbuf + nread, nleft);
+		if (n <= 0)
+			return str8zero();
+		nread += n;
+		nleft -= n;
+	}
 	msg.len = getb4(lenbuf);
 	msg.str = pusharrnoz(a, u8, msg.len);
 	memcpy(msg.str, lenbuf, sizeof lenbuf);
-	restlen = msg.len - 4;
-	n = read(fd, msg.str + 4, restlen);
-	if (n != restlen)
-		return str8zero();
+	nread = 0;
+	nleft = msg.len - 4;
+	while (nleft > 0) {
+		n = read(fd, msg.str + 4 + nread, nleft);
+		if (n <= 0)
+			return str8zero();
+		nread += n;
+		nleft -= n;
+	}
 	return msg;
 }
 

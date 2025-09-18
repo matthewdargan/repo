@@ -199,38 +199,29 @@ fsrpc(Arena *a, Cfsys *fs, Fcall tx)
 static b32
 fsversion(Arena *a, Cfsys *fs, u32 msize)
 {
-	Temp scratch;
 	Fcall tx, rx;
 
-	scratch = tempbegin(a);
 	memset(&tx, 0, sizeof tx);
 	tx.type = Tversion;
 	tx.tag = NOTAG;
 	tx.msize = msize;
 	tx.version = version9p;
-	rx = fsrpc(scratch.a, fs, tx);
-	if (rx.type != Rversion) {
-		tempend(scratch);
+	rx = fsrpc(a, fs, tx);
+	if (rx.type != Rversion)
 		return 0;
-	}
 	fs->msize = rx.msize;
-	if (!str8cmp(rx.version, version9p, 0)) {
-		tempend(scratch);
+	if (!str8cmp(rx.version, version9p, 0))
 		return 0;
-	}
-	tempend(scratch);
 	return 1;
 }
 
 static Cfid *
 fsauth(Arena *a, Cfsys *fs, String8 uname, String8 aname)
 {
-	Temp scratch;
 	Fcall tx, rx;
 	Cfid *afid;
 
 	afid = pusharr(a, Cfid, 1);
-	scratch = tempbegin(a);
 	afid->fid = fs->nextfid++;
 	afid->fs = fs;
 	memset(&tx, 0, sizeof tx);
@@ -238,25 +229,20 @@ fsauth(Arena *a, Cfsys *fs, String8 uname, String8 aname)
 	tx.afid = afid->fid;
 	tx.uname = uname;
 	tx.aname = aname;
-	rx = fsrpc(scratch.a, fs, tx);
-	if (rx.type != Rauth) {
-		tempend(scratch);
+	rx = fsrpc(a, fs, tx);
+	if (rx.type != Rauth)
 		return NULL;
-	}
 	afid->qid = rx.aqid;
-	tempend(scratch);
 	return afid;
 }
 
 static Cfid *
 fsattach(Arena *a, Cfsys *fs, u32 afid, String8 uname, String8 aname)
 {
-	Temp scratch;
 	Fcall tx, rx;
 	Cfid *fid;
 
 	fid = pusharr(a, Cfid, 1);
-	scratch = tempbegin(a);
 	fid->fid = fs->nextfid++;
 	fid->fs = fs;
 	memset(&tx, 0, sizeof tx);
@@ -265,30 +251,24 @@ fsattach(Arena *a, Cfsys *fs, u32 afid, String8 uname, String8 aname)
 	tx.afid = afid;
 	tx.uname = uname;
 	tx.aname = aname;
-	rx = fsrpc(scratch.a, fs, tx);
-	if (rx.type != Rattach) {
-		tempend(scratch);
+	rx = fsrpc(a, fs, tx);
+	if (rx.type != Rattach)
 		return NULL;
-	}
 	fid->qid = rx.qid;
-	tempend(scratch);
 	return fid;
 }
 
 static void
 fsclose(Arena *a, Cfid *fid)
 {
-	Temp scratch;
 	Fcall tx;
 
 	if (fid == NULL)
 		return;
-	scratch = tempbegin(a);
 	memset(&tx, 0, sizeof tx);
 	tx.type = Tclunk;
 	tx.fid = fid->fid;
-	fsrpc(scratch.a, fid->fs, tx);
-	tempend(scratch);
+	fsrpc(a, fid->fs, tx);
 }
 
 static Cfid *
@@ -318,12 +298,9 @@ fswalk(Arena *a, Cfid *fid, String8 path)
 	tx.fid = fid->fid;
 	tx.newfid = wfid->fid;
 	if (node == NULL) {
-		rx = fsrpc(scratch.a, fid->fs, tx);
-		if (rx.type != Rwalk || rx.nwqid != tx.nwname) {
-			tempend(scratch);
+		rx = fsrpc(a, fid->fs, tx);
+		if (rx.type != Rwalk || rx.nwqid != tx.nwname)
 			return NULL;
-		}
-		tempend(scratch);
 		return wfid;
 	}
 	while (node != NULL) {
@@ -336,172 +313,137 @@ fswalk(Arena *a, Cfid *fid, String8 path)
 			i++;
 		}
 		tx.nwname = i;
-		rx = fsrpc(scratch.a, fid->fs, tx);
+		rx = fsrpc(a, fid->fs, tx);
 		if (rx.type != Rwalk || rx.nwqid != tx.nwname) {
 			if (!firstwalk)
-				fsclose(scratch.a, wfid);
-			tempend(scratch);
+				fsclose(a, wfid);
 			return NULL;
 		}
 		if (rx.nwqid > 0)
 			wfid->qid = rx.wqid[rx.nwqid - 1];
 		firstwalk = 0;
 	}
-	tempend(scratch);
 	return wfid;
 }
 
 static b32
 fsfcreate(Arena *a, Cfid *fid, String8 name, u32 mode, u32 perm)
 {
-	Temp scratch;
 	Fcall tx, rx;
 
 	if (fid == NULL)
 		return 0;
-	scratch = tempbegin(a);
 	memset(&tx, 0, sizeof tx);
 	tx.type = Tcreate;
 	tx.fid = fid->fid;
 	tx.name = name;
 	tx.perm = perm;
 	tx.mode = mode;
-	rx = fsrpc(scratch.a, fid->fs, tx);
-	if (rx.type != Rcreate) {
-		tempend(scratch);
+	rx = fsrpc(a, fid->fs, tx);
+	if (rx.type != Rcreate)
 		return 0;
-	}
 	fid->mode = mode;
-	tempend(scratch);
 	return 1;
 }
 
 static Cfid *
 fscreate(Arena *a, Cfsys *fs, String8 name, u32 mode, u32 perm)
 {
-	Temp scratch;
 	Cfid *fid;
 	String8 dir, elem;
 
 	if (fs == NULL || fs->root == NULL)
 		return NULL;
-	scratch = tempbegin(a);
 	dir = str8dirname(name);
 	elem = str8basename(name);
 	fid = fswalk(a, fs->root, dir);
 	if (fid == NULL) {
-		tempend(scratch);
 		return NULL;
 	}
-	if (!fsfcreate(scratch.a, fid, elem, mode, perm)) {
-		fsclose(scratch.a, fid);
-		tempend(scratch);
+	if (!fsfcreate(a, fid, elem, mode, perm)) {
+		fsclose(a, fid);
 		return NULL;
 	}
-	tempend(scratch);
 	return fid;
 }
 
 static b32
 fsfremove(Arena *a, Cfid *fid)
 {
-	Temp scratch;
 	Fcall tx, rx;
 
 	if (fid == NULL)
 		return 0;
-	scratch = tempbegin(a);
 	memset(&tx, 0, sizeof tx);
 	tx.type = Tremove;
 	tx.fid = fid->fid;
-	rx = fsrpc(scratch.a, fid->fs, tx);
-	if (rx.type != Rremove) {
-		tempend(scratch);
+	rx = fsrpc(a, fid->fs, tx);
+	if (rx.type != Rremove)
 		return 0;
-	}
-	tempend(scratch);
 	return 1;
 }
 
 static b32
 fsremove(Arena *a, Cfsys *fs, String8 name)
 {
-	Temp scratch;
 	Cfid *fid;
 
 	if (fs == NULL || fs->root == NULL)
 		return 0;
-	scratch = tempbegin(a);
 	fid = fswalk(a, fs->root, name);
 	if (fid == NULL) {
-		tempend(scratch);
 		return 0;
 	}
-	if (!fsfremove(scratch.a, fid)) {
-		tempend(scratch);
+	if (!fsfremove(a, fid))
 		return 0;
-	}
-	tempend(scratch);
 	return 1;
 }
 
 static b32
 fsfopen(Arena *a, Cfid *fid, u32 mode)
 {
-	Temp scratch;
 	Fcall tx, rx;
 
 	if (fid == NULL)
 		return 0;
-	scratch = tempbegin(a);
 	memset(&tx, 0, sizeof tx);
 	tx.type = Topen;
 	tx.fid = fid->fid;
 	tx.mode = mode;
-	rx = fsrpc(scratch.a, fid->fs, tx);
-	if (rx.type != Ropen) {
-		tempend(scratch);
+	rx = fsrpc(a, fid->fs, tx);
+	if (rx.type != Ropen)
 		return 0;
-	}
 	fid->mode = mode;
-	tempend(scratch);
 	return 1;
 }
 
 static Cfid *
 fs9open(Arena *a, Cfsys *fs, String8 name, u32 mode)
 {
-	Temp scratch;
 	Cfid *fid;
 
 	if (fs == NULL || fs->root == NULL)
 		return NULL;
-	scratch = tempbegin(a);
 	fid = fswalk(a, fs->root, name);
 	if (fid == NULL) {
-		tempend(scratch);
 		return NULL;
 	}
-	if (!fsfopen(scratch.a, fid, mode)) {
-		fsclose(scratch.a, fid);
-		tempend(scratch);
+	if (!fsfopen(a, fid, mode)) {
+		fsclose(a, fid);
 		return NULL;
 	}
-	tempend(scratch);
 	return fid;
 }
 
 static s64
 fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 {
-	Temp scratch;
 	Fcall tx, rx;
 	u32 msize;
 	s64 nr;
 
 	if (fid == NULL || buf == NULL)
 		return -1;
-	scratch = tempbegin(a);
 	msize = fid->fs->msize - IOHDRSZ;
 	if (n > msize)
 		n = msize;
@@ -513,11 +455,9 @@ fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 	else
 		tx.offset = offset;
 	tx.count = n;
-	rx = fsrpc(scratch.a, fid->fs, tx);
-	if (rx.type != Rread) {
-		tempend(scratch);
+	rx = fsrpc(a, fid->fs, tx);
+	if (rx.type != Rread)
 		return -1;
-	}
 	nr = rx.data.len;
 	if (nr > (s64)n)
 		nr = n;
@@ -526,7 +466,6 @@ fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 		if (offset == -1)
 			fid->offset += nr;
 	}
-	tempend(scratch);
 	return nr;
 }
 
@@ -562,7 +501,6 @@ fsreadn(Arena *a, Cfid *fid, void *buf, u64 n)
 static s64
 fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 {
-	Temp scratch;
 	Fcall tx, rx;
 	u32 msize, got;
 	u64 nwrite, nleft, want;
@@ -570,7 +508,6 @@ fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 
 	if (fid == NULL || buf == NULL)
 		return -1;
-	scratch = tempbegin(a);
 	msize = fid->fs->msize - IOHDRSZ;
 	nwrite = 0;
 	nleft = n;
@@ -588,20 +525,16 @@ fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 			tx.offset = offset + nwrite;
 		tx.data.len = want;
 		tx.data.str = p + nwrite;
-		rx = fsrpc(scratch.a, fid->fs, tx);
+		rx = fsrpc(a, fid->fs, tx);
 		if (rx.type != Rwrite) {
-			if (nwrite == 0) {
-				tempend(scratch);
+			if (nwrite == 0)
 				return -1;
-			}
 			break;
 		}
 		got = rx.count;
 		if (got == 0) {
-			if (nwrite == 0) {
-				tempend(scratch);
+			if (nwrite == 0)
 				return -1;
-			}
 			break;
 		}
 		nwrite += got;
@@ -611,7 +544,6 @@ fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 		if (got < want)
 			break;
 	}
-	tempend(scratch);
 	return nwrite;
 }
 
@@ -658,7 +590,7 @@ fsdirread(Arena *a, Cfid *fid, Dirlist *list)
 	if (fid == NULL || list == NULL)
 		return -1;
 	scratch = tempbegin(a);
-	buf = pusharrnoz(scratch.a, u8, DIRMAX);
+	buf = pusharrnoz(a, u8, DIRMAX);
 	ts = fsread(a, fid, buf, DIRMAX);
 	if (ts >= 0)
 		ts = dirpackage(a, buf, ts, list);
@@ -677,7 +609,7 @@ fsdirreadall(Arena *a, Cfid *fid, Dirlist *list)
 	if (fid == NULL || list == NULL)
 		return -1;
 	scratch = tempbegin(a);
-	buf = pusharrnoz(scratch.a, u8, DIRBUFMAX);
+	buf = pusharrnoz(a, u8, DIRBUFMAX);
 	ts = 0;
 	nleft = DIRBUFMAX;
 	while (nleft >= DIRMAX) {
@@ -698,46 +630,36 @@ fsdirreadall(Arena *a, Cfid *fid, Dirlist *list)
 static Dir
 fsdirfstat(Arena *a, Cfid *fid)
 {
-	Temp scratch;
 	Fcall tx, rx;
 	Dir d, errd;
 
 	memset(&errd, 0, sizeof errd);
 	if (fid == NULL)
 		return errd;
-	scratch = tempbegin(a);
 	memset(&tx, 0, sizeof tx);
 	tx.type = Tstat;
 	tx.fid = fid->fid;
-	rx = fsrpc(scratch.a, fid->fs, tx);
-	if (rx.type != Rstat) {
-		tempend(scratch);
+	rx = fsrpc(a, fid->fs, tx);
+	if (rx.type != Rstat)
 		return errd;
-	}
 	d = dirdecode(rx.stat);
-	tempend(scratch);
 	return d;
 }
 
 static Dir
 fsdirstat(Arena *a, Cfsys *fs, String8 name)
 {
-	Temp scratch;
 	Cfid *fid;
 	Dir d, errd;
 
 	memset(&errd, 0, sizeof errd);
 	if (fs == NULL || fs->root == NULL)
 		return errd;
-	scratch = tempbegin(a);
 	fid = fswalk(a, fs->root, name);
-	if (fid == NULL) {
-		tempend(scratch);
+	if (fid == NULL)
 		return errd;
-	}
 	d = fsdirfstat(a, fid);
-	fsclose(scratch.a, fid);
-	tempend(scratch);
+	fsclose(a, fid);
 	return d;
 }
 
@@ -752,112 +674,84 @@ fsdirfwstat(Arena *a, Cfid *fid, Dir d)
 		return 0;
 	scratch = tempbegin(a);
 	stat = direncode(scratch.a, d);
-	if (stat.len == 0) {
-		tempend(scratch);
+	if (stat.len == 0)
 		return 0;
-	}
 	memset(&tx, 0, sizeof tx);
 	tx.type = Twstat;
 	tx.fid = fid->fid;
 	tx.stat = stat;
-	rx = fsrpc(scratch.a, fid->fs, tx);
-	if (rx.type != Rwstat) {
-		tempend(scratch);
+	rx = fsrpc(a, fid->fs, tx);
+	if (rx.type != Rwstat)
 		return 0;
-	}
-	tempend(scratch);
 	return 1;
 }
 
 static b32
 fsdirwstat(Arena *a, Cfsys *fs, String8 name, Dir d)
 {
-	Temp scratch;
 	Cfid *fid;
 	b32 ok;
 
 	if (fs == NULL || fs->root == NULL)
 		return 0;
-	scratch = tempbegin(a);
 	fid = fswalk(a, fs->root, name);
-	if (fid == NULL) {
-		tempend(scratch);
+	if (fid == NULL)
 		return 0;
-	}
-	ok = fsdirfwstat(scratch.a, fid, d);
-	fsclose(scratch.a, fid);
-	tempend(scratch);
+	ok = fsdirfwstat(a, fid, d);
+	fsclose(a, fid);
 	return ok;
 }
 
 static b32
 fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode)
 {
-	Temp scratch;
 	Cfid *fid;
 	Dir d;
 
 	if (fs == NULL || fs->root == NULL)
 		return 0;
-	scratch = tempbegin(a);
 	if (mode == AEXIST) {
-		d = fsdirstat(scratch.a, fs, name);
-		if (d.name.len == 0) {
-			tempend(scratch);
+		d = fsdirstat(a, fs, name);
+		if (d.name.len == 0)
 			return 0;
-		}
-		tempend(scratch);
 		return 1;
 	}
-	fid = fs9open(scratch.a, fs, name, omodetab[mode & 7]);
-	if (fid == NULL) {
-		tempend(scratch);
+	fid = fs9open(a, fs, name, omodetab[mode & 7]);
+	if (fid == NULL)
 		return 0;
-	}
-	fsclose(scratch.a, fid);
-	tempend(scratch);
+	fsclose(a, fid);
 	return 1;
 }
 
 static s64
 fsseek(Arena *a, Cfid *fid, s64 offset, u32 type)
 {
-	Temp scratch;
 	Dir d;
 	s64 pos;
 
 	if (fid == NULL)
 		return -1;
-	scratch = tempbegin(a);
 	switch (type) {
 		case SEEKSET:
 			pos = offset;
 			fid->offset = offset;
 		case SEEKCUR:
 			pos = (s64)fid->offset + offset;
-			if (pos < 0) {
-				tempend(scratch);
+			if (pos < 0)
 				return -1;
-			}
 			fid->offset = pos;
 			break;
 		case SEEKEND:
-			d = fsdirfstat(scratch.a, fid);
-			if (d.name.len == 0) {
-				tempend(scratch);
+			d = fsdirfstat(a, fid);
+			if (d.name.len == 0)
 				return -1;
-			}
 			pos = (s64)d.len + offset;
-			if (pos < 0) {
-				tempend(scratch);
+			if (pos < 0)
 				return -1;
-			}
 			fid->offset = pos;
 			break;
 		default:
-			tempend(scratch);
 			return -1;
 	}
-	tempend(scratch);
 	return pos;
 }
