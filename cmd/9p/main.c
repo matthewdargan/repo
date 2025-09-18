@@ -54,24 +54,24 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 	Cfsys *fs;
 
 	if (addr.len == 0) {
-		fprintf(stderr, "namespace mounting not implemented yet\n");
+		fprintf(stderr, "9p: namespace mounting not implemented\n");
 		return NULL;
 	}
 	na = netaddr(a, addr, str8lit("tcp"), str8lit("9fs"));
 	if (na.net.len == 0) {
-		fprintf(stderr, "failed to parse address\n");
+		fprintf(stderr, "9p: failed to parse address '%.*s'\n", (int)addr.len, addr.str);
 		return NULL;
 	}
 	memset(&local, 0, sizeof local);
 	fd = socketdial(na, local);
 	if (fd == 0) {
-		fprintf(stderr, "dial failed\n");
+		fprintf(stderr, "9p: dial failed for '%.*s'\n", (int)addr.len, addr.str);
 		return NULL;
 	}
 	fs = fs9mount(a, fd, aname);
 	if (fs == NULL) {
 		close(fd);
-		fprintf(stderr, "mount failed\n");
+		fprintf(stderr, "9p: mount failed\n");
 		return NULL;
 	}
 	return fs;
@@ -80,53 +80,66 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 static void
 cmd9pread(Arena *a, String8 addr, String8 aname, String8 name)
 {
+	Temp scratch;
 	Cfsys *fs;
 	Cfid *fid;
-	char buf[4096];
+	u8 *buf;
 	s64 n;
 
-	fs = fsconnect(a, addr, aname);
-	if (fs == NULL)
-		return;
-	fid = fs9open(a, fs, name, OREAD);
-	if (fid == NULL) {
-		fs9unmount(a, fs);
-		fprintf(stderr, "open failed: %.*s\n", (int)name.len, name.str);
+	scratch = tempbegin(a);
+	fs = fsconnect(scratch.a, addr, aname);
+	if (fs == NULL) {
+		tempend(scratch);
 		return;
 	}
+	fid = fs9open(scratch.a, fs, name, OREAD);
+	if (fid == NULL) {
+		fprintf(stderr, "9p: failed to open '%.*s'\n", (int)name.len, name.str);
+		fs9unmount(scratch.a, fs);
+		tempend(scratch);
+		return;
+	}
+	buf = pusharrnoz(scratch.a, u8, DIRMAX);
 	for (;;) {
-		n = fsread(a, fid, buf, sizeof buf);
+		n = fsread(scratch.a, fid, buf, DIRMAX);
 		if (n <= 0)
 			break;
 		if (write(STDOUT_FILENO, buf, n) != n) {
-			fprintf(stderr, "write error: %s\n", strerror(errno));
+			fprintf(stderr, "9p: write error: %s\n", strerror(errno));
 			break;
 		}
 	}
 	if (n < 0)
-		fprintf(stderr, "read error\n");
-	fsclose(a, fid);
-	fs9unmount(a, fs);
+		fprintf(stderr, "9p: read error\n");
+	fsclose(scratch.a, fid);
+	fs9unmount(scratch.a, fs);
+	tempend(scratch);
 }
 
 static void
 cmd9pstat(Arena *a, String8 addr, String8 aname, String8 name)
 {
+	Temp scratch;
 	Cfsys *fs;
 	Dir d;
 
-	fs = fsconnect(a, addr, aname);
-	if (fs == NULL)
+	scratch = tempbegin(a);
+	fs = fsconnect(scratch.a, addr, aname);
+	if (fs == NULL) {
+		tempend(scratch);
 		return;
-	d = fsdirstat(a, fs, name);
+	}
+	d = fsdirstat(scratch.a, fs, name);
 	if (d.name.len == 0) {
-		fs9unmount(a, fs);
-		fprintf(stderr, "stat failed\n");
+		fprintf(stderr, "9p: failed to stat '%.*s'\n", (int)name.len, name.str);
+		fs9unmount(scratch.a, fs);
+		tempend(scratch);
 		return;
 	}
 	printf("%.*s %lld %d %.*s %.*s\n", (int)d.name.len, d.name.str, d.len, d.mtime, (int)d.uid.len, d.uid.str,
 	       (int)d.gid.len, d.gid.str);
-	fs9unmount(a, fs);
+	fs9unmount(scratch.a, fs);
+	tempend(scratch);
 }
 
 int
@@ -165,7 +178,7 @@ main(int argc, char *argv[])
 	else if (str8cmp(cmd, str8lit("stat"), 0))
 		cmd9pstat(arena, addr, aname, name);
 	else {
-		fprintf(stderr, "unsupported command: %.*s\n", (int)cmd.len, cmd.str);
+		fprintf(stderr, "9p: unsupported command '%.*s'\n", (int)cmd.len, cmd.str);
 		arenarelease(arena);
 		return 1;
 	}
