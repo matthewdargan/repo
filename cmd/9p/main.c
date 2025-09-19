@@ -117,6 +117,46 @@ cmd9pread(Arena *a, String8 addr, String8 aname, String8 name)
 }
 
 static void
+cmd9pwrite(Arena *a, String8 addr, String8 aname, String8 name)
+{
+	Temp scratch;
+	Cfsys *fs;
+	Cfid *fid;
+	u8 *buf;
+	s64 n, nwrite;
+
+	scratch = tempbegin(a);
+	fs = fsconnect(scratch.a, addr, aname);
+	if (fs == NULL) {
+		tempend(scratch);
+		return;
+	}
+	fid = fs9open(scratch.a, fs, name, OWRITE | OTRUNC);
+	if (fid == NULL) {
+		fprintf(stderr, "9p: failed to open '%.*s'\n", (int)name.len, name.str);
+		fs9unmount(scratch.a, fs);
+		tempend(scratch);
+		return;
+	}
+	buf = pusharrnoz(scratch.a, u8, DIRMAX);
+	for (;;) {
+		n = read(STDIN_FILENO, buf, DIRMAX);
+		if (n <= 0)
+			break;
+		nwrite = fswrite(scratch.a, fid, buf, n);
+		if (nwrite != n) {
+			fprintf(stderr, "9p: write error\n");
+			break;
+		}
+	}
+	if (n < 0)
+		fprintf(stderr, "9p: write error: %s\n", strerror(errno));
+	fsclose(scratch.a, fid);
+	fs9unmount(scratch.a, fs);
+	tempend(scratch);
+}
+
+static void
 cmd9pstat(Arena *a, String8 addr, String8 aname, String8 name)
 {
 	Temp scratch;
@@ -136,7 +176,7 @@ cmd9pstat(Arena *a, String8 addr, String8 aname, String8 name)
 		tempend(scratch);
 		return;
 	}
-	printf("%.*s %lld %d %.*s %.*s\n", (int)d.name.len, d.name.str, d.len, d.mtime, (int)d.uid.len, d.uid.str,
+	printf("%.*s %lu %d %.*s %.*s\n", (int)d.name.len, d.name.str, d.len, d.mtime, (int)d.uid.len, d.uid.str,
 	       (int)d.gid.len, d.gid.str);
 	fs9unmount(scratch.a, fs);
 	tempend(scratch);
@@ -173,8 +213,11 @@ main(int argc, char *argv[])
 	}
 	cmd = parsed.inputs.start->str;
 	name = parsed.inputs.start->next->str;
+	/* TODO: add cmd9pcreate */
 	if (str8cmp(cmd, str8lit("read"), 0))
 		cmd9pread(arena, addr, aname, name);
+	else if (str8cmp(cmd, str8lit("write"), 0))
+		cmd9pwrite(arena, addr, aname, name);
 	else if (str8cmp(cmd, str8lit("stat"), 0))
 		cmd9pstat(arena, addr, aname, name);
 	else {

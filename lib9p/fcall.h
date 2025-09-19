@@ -117,6 +117,7 @@ enum {
 #define OWRITE 1  /* open for write */
 #define ORDWR 2   /* open for read and write */
 #define OEXEC 3   /* open for execute */
+#define OTRUNC 16 /* truncate file first */
 #define AEXIST 0  /* test for existence */
 #define AEXEC 1   /* execute access */
 #define AWRITE 2  /* write access */

@@ -9,7 +9,7 @@ netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv)
 	if (addr.len == 0)
 		return na;
 	if (defnet.len == 0)
-		defnet = str8lit("net");
+		defnet = str8lit("tcp");
 	bangpos = str8index(addr, 0, str8lit("!"), 0);
 	colonpos = str8index(addr, 0, str8lit(":"), 0);
 	if (bangpos >= addr.len) {
@@ -39,8 +39,8 @@ netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv)
 	service = str8skip(addr, bangpos + 1);
 	bangpos = str8index(service, 0, str8lit("!"), 0);
 	if (bangpos < service.len) {
-		host = str8prefix(addr, bangpos);
-		port = str8skip(addr, bangpos + 1);
+		host = str8prefix(service, bangpos);
+		port = str8skip(service, bangpos + 1);
 		na.net = pushstr8cpy(a, net);
 		na.host = pushstr8cpy(a, host);
 		na.port = pushstr8cpy(a, port);
@@ -89,7 +89,7 @@ netaddrparse(Arena *a, String8 addr, Netaddr *na)
 	if (!na->isunix && (na->host.len == 0 || na->port.len == 0))
 		return 0;
 	if (!str8cmp(na->net, str8lit("tcp"), 0) && !str8cmp(na->net, str8lit("udp"), 0) &&
-	    !str8cmp(na->net, str8lit("net"), 0) && !str8cmp(na->net, str8lit("unix"), 0))
+	    !str8cmp(na->net, str8lit("unix"), 0))
 		return 0;
 	return 1;
 }
@@ -137,7 +137,7 @@ socketdial(Netaddr na, Netaddr local)
 		memcpy(hostbuf, na.host.str, na.host.len);
 		hostbuf[na.host.len] = 0;
 	}
-	if (str8cmp(na.net, str8lit("tcp"), 0) || str8cmp(na.net, str8lit("net"), 0))
+	if (str8cmp(na.net, str8lit("tcp"), 0))
 		socktype = SOCK_STREAM;
 	else if (str8cmp(na.net, str8lit("udp"), 0))
 		socktype = SOCK_DGRAM;

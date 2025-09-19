@@ -63,46 +63,46 @@ debug9pprint(String8 dir, Fcall fc)
 
 	if (!debug9p)
 		return;
-	fprintf(stderr, "%.*s ", dir.len, dir.str);
+	fprintf(stderr, "%.*s ", (int)dir.len, dir.str);
 	switch (fc.type) {
 		case Tversion:
-			fprintf(stderr, "Tversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, fc.version.len,
+			fprintf(stderr, "Tversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, (int)fc.version.len,
 			        fc.version.str);
 			break;
 		case Rversion:
-			fprintf(stderr, "Rversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, fc.version.len,
+			fprintf(stderr, "Rversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, (int)fc.version.len,
 			        fc.version.str);
 			break;
 		case Tauth:
-			fprintf(stderr, "Tauth tag=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.afid, fc.uname.len,
-			        fc.uname.str, fc.aname.len, fc.aname.str);
+			fprintf(stderr, "Tauth tag=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.afid, (int)fc.uname.len,
+			        fc.uname.str, (int)fc.aname.len, fc.aname.str);
 			break;
 		case Rauth:
-			fprintf(stderr, "Rauth tag=%u qid=(type=%u vers=%u path=%llu)\n", fc.tag, fc.aqid.type, fc.aqid.vers,
+			fprintf(stderr, "Rauth tag=%u qid=(type=%u vers=%u path=%lu)\n", fc.tag, fc.aqid.type, fc.aqid.vers,
 			        fc.aqid.path);
 			break;
 		case Rerror:
-			fprintf(stderr, "Rerror tag=%u ename='%.*s'\n", fc.tag, fc.ename.len, fc.ename.str);
+			fprintf(stderr, "Rerror tag=%u ename='%.*s'\n", fc.tag, (int)fc.ename.len, fc.ename.str);
 			break;
 		case Tattach:
 			fprintf(stderr, "Tattach tag=%u fid=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.fid, fc.afid,
-			        fc.uname.len, fc.uname.str, fc.aname.len, fc.aname.str);
+			        (int)fc.uname.len, fc.uname.str, (int)fc.aname.len, fc.aname.str);
 			break;
 		case Rattach:
-			fprintf(stderr, "Rattach tag=%u qid=(type=%u vers=%u path=%llu)\n", fc.tag, fc.qid.type, fc.qid.vers,
+			fprintf(stderr, "Rattach tag=%u qid=(type=%u vers=%u path=%lu)\n", fc.tag, fc.qid.type, fc.qid.vers,
 			        fc.qid.path);
 			break;
 		case Twalk:
 			fprintf(stderr, "Twalk tag=%u fid=%u newfid=%u nwname=%u", fc.tag, fc.fid, fc.newfid, fc.nwname);
 			for (i = 0; i < fc.nwname; i++) {
-				fprintf(stderr, " '%.*s'", fc.wname[i].len, fc.wname[i].str);
+				fprintf(stderr, " '%.*s'", (int)fc.wname[i].len, fc.wname[i].str);
 			}
 			fprintf(stderr, "\n");
 			break;
 		case Rwalk:
 			fprintf(stderr, "Rwalk tag=%u nwqid=%u", fc.tag, fc.nwqid);
 			for (i = 0; i < fc.nwqid; i++) {
-				fprintf(stderr, " qid%u=(type=%u vers=%u path=%llu)", i, fc.wqid[i].type, fc.wqid[i].vers,
+				fprintf(stderr, " qid%u=(type=%u vers=%u path=%lu)", i, fc.wqid[i].type, fc.wqid[i].vers,
 				        fc.wqid[i].path);
 			}
 			fprintf(stderr, "\n");
@@ -111,25 +111,25 @@ debug9pprint(String8 dir, Fcall fc)
 			fprintf(stderr, "Topen tag=%u fid=%u mode=%u\n", fc.tag, fc.fid, fc.mode);
 			break;
 		case Ropen:
-			fprintf(stderr, "Ropen tag=%u qid=(type=%u vers=%u path=%llu) iounit=%u\n", fc.tag, fc.qid.type,
-			        fc.qid.vers, fc.qid.path, fc.iounit);
+			fprintf(stderr, "Ropen tag=%u qid=(type=%u vers=%u path=%lu) iounit=%u\n", fc.tag, fc.qid.type, fc.qid.vers,
+			        fc.qid.path, fc.iounit);
 			break;
 		case Tcreate:
-			fprintf(stderr, "Tcreate tag=%u fid=%u name='%.*s' perm=%u mode=%u\n", fc.tag, fc.fid, fc.name.len,
+			fprintf(stderr, "Tcreate tag=%u fid=%u name='%.*s' perm=%u mode=%u\n", fc.tag, fc.fid, (int)fc.name.len,
 			        fc.name.str, fc.perm, fc.mode);
 			break;
 		case Rcreate:
-			fprintf(stderr, "Rcreate tag=%u qid=(type=%u vers=%u path=%llu) iounit=%u\n", fc.tag, fc.qid.type,
+			fprintf(stderr, "Rcreate tag=%u qid=(type=%u vers=%u path=%lu) iounit=%u\n", fc.tag, fc.qid.type,
 			        fc.qid.vers, fc.qid.path, fc.iounit);
 			break;
 		case Tread:
-			fprintf(stderr, "Tread tag=%u fid=%u offset=%llu count=%u\n", fc.tag, fc.fid, fc.offset, fc.count);
+			fprintf(stderr, "Tread tag=%u fid=%u offset=%lu count=%u\n", fc.tag, fc.fid, fc.offset, fc.count);
 			break;
 		case Rread:
-			fprintf(stderr, "Rread tag=%u count=%llu\n", fc.tag, fc.data.len);
+			fprintf(stderr, "Rread tag=%u count=%lu\n", fc.tag, fc.data.len);
 			break;
 		case Twrite:
-			fprintf(stderr, "Twrite tag=%u fid=%u offset=%llu count=%llu\n", fc.tag, fc.fid, fc.offset, fc.data.len);
+			fprintf(stderr, "Twrite tag=%u fid=%u offset=%lu count=%lu\n", fc.tag, fc.fid, fc.offset, fc.data.len);
 			break;
 		case Rwrite:
 			fprintf(stderr, "Rwrite tag=%u count=%u\n", fc.tag, fc.count);
@@ -150,10 +150,10 @@ debug9pprint(String8 dir, Fcall fc)
 			fprintf(stderr, "Tstat tag=%u fid=%u\n", fc.tag, fc.fid);
 			break;
 		case Rstat:
-			fprintf(stderr, "Rstat tag=%u stat.len=%llu\n", fc.tag, fc.stat.len);
+			fprintf(stderr, "Rstat tag=%u stat.len=%lu\n", fc.tag, fc.stat.len);
 			break;
 		case Twstat:
-			fprintf(stderr, "Twstat tag=%u fid=%u stat.len=%llu\n", fc.tag, fc.fid, fc.stat.len);
+			fprintf(stderr, "Twstat tag=%u fid=%u stat.len=%lu\n", fc.tag, fc.fid, fc.stat.len);
 			break;
 		case Rwstat:
 			fprintf(stderr, "Rwstat tag=%u\n", fc.tag);
@@ -357,9 +357,8 @@ fscreate(Arena *a, Cfsys *fs, String8 name, u32 mode, u32 perm)
 	dir = str8dirname(name);
 	elem = str8basename(name);
 	fid = fswalk(a, fs->root, dir);
-	if (fid == NULL) {
+	if (fid == NULL)
 		return NULL;
-	}
 	if (!fsfcreate(a, fid, elem, mode, perm)) {
 		fsclose(a, fid);
 		return NULL;
@@ -391,9 +390,8 @@ fsremove(Arena *a, Cfsys *fs, String8 name)
 	if (fs == NULL || fs->root == NULL)
 		return 0;
 	fid = fswalk(a, fs->root, name);
-	if (fid == NULL) {
+	if (fid == NULL)
 		return 0;
-	}
 	if (!fsfremove(a, fid))
 		return 0;
 	return 1;
@@ -425,9 +423,8 @@ fs9open(Arena *a, Cfsys *fs, String8 name, u32 mode)
 	if (fs == NULL || fs->root == NULL)
 		return NULL;
 	fid = fswalk(a, fs->root, name);
-	if (fid == NULL) {
+	if (fid == NULL)
 		return NULL;
-	}
 	if (!fsfopen(a, fid, mode)) {
 		fsclose(a, fid);
 		return NULL;
