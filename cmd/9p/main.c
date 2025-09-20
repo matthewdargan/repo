@@ -37,13 +37,14 @@
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: 9p [-a address] [-A aname] cmd args...\n");
-	fprintf(stderr, "possible cmds:\n");
-	fprintf(stderr, " read name\n");
-	fprintf(stderr, " write [-l] name\n");
-	fprintf(stderr, " stat name\n");
-	fprintf(stderr, " rdwr name\n");
-	fprintf(stderr, " ls [-dlnt] name\n");
+	fprintf(stderr,
+	        "usage: 9p [-a address] [-A aname] cmd args...\n"
+	        "possible cmds:\n"
+	        " read name\n"
+	        " write [-l] name\n"
+	        " stat name\n"
+	        " rdwr name\n"
+	        " ls [-dlnt] name\n");
 }
 
 static Cfsys *
@@ -59,13 +60,13 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 	}
 	na = netaddr(a, addr, str8lit("tcp"), str8lit("9fs"));
 	if (na.net.len == 0) {
-		fprintf(stderr, "9p: failed to parse address '%.*s'\n", (int)addr.len, addr.str);
+		fprintf(stderr, "9p: failed to parse address '%.*s'\n", str8varg(addr));
 		return NULL;
 	}
 	memset(&local, 0, sizeof local);
 	fd = socketdial(na, local);
 	if (fd == 0) {
-		fprintf(stderr, "9p: dial failed for '%.*s'\n", (int)addr.len, addr.str);
+		fprintf(stderr, "9p: dial failed for '%.*s'\n", str8varg(addr));
 		return NULL;
 	}
 	fs = fs9mount(a, fd, aname);
@@ -94,7 +95,7 @@ cmd9pread(Arena *a, String8 addr, String8 aname, String8 name)
 	}
 	fid = fs9open(scratch.a, fs, name, OREAD);
 	if (fid == NULL) {
-		fprintf(stderr, "9p: failed to open '%.*s'\n", (int)name.len, name.str);
+		fprintf(stderr, "9p: failed to open '%.*s'\n", str8varg(name));
 		fs9unmount(scratch.a, fs);
 		tempend(scratch);
 		return;
@@ -133,7 +134,7 @@ cmd9pwrite(Arena *a, String8 addr, String8 aname, String8 name)
 	}
 	fid = fs9open(scratch.a, fs, name, OWRITE | OTRUNC);
 	if (fid == NULL) {
-		fprintf(stderr, "9p: failed to open '%.*s'\n", (int)name.len, name.str);
+		fprintf(stderr, "9p: failed to open '%.*s'\n", str8varg(name));
 		fs9unmount(scratch.a, fs);
 		tempend(scratch);
 		return;
@@ -171,13 +172,12 @@ cmd9pstat(Arena *a, String8 addr, String8 aname, String8 name)
 	}
 	d = fsdirstat(scratch.a, fs, name);
 	if (d.name.len == 0) {
-		fprintf(stderr, "9p: failed to stat '%.*s'\n", (int)name.len, name.str);
+		fprintf(stderr, "9p: failed to stat '%.*s'\n", str8varg(name));
 		fs9unmount(scratch.a, fs);
 		tempend(scratch);
 		return;
 	}
-	printf("%.*s %lu %d %.*s %.*s\n", (int)d.name.len, d.name.str, d.len, d.mtime, (int)d.uid.len, d.uid.str,
-	       (int)d.gid.len, d.gid.str);
+	printf("%.*s %lu %d %.*s %.*s\n", str8varg(d.name), d.len, d.mtime, str8varg(d.uid), str8varg(d.gid));
 	fs9unmount(scratch.a, fs);
 	tempend(scratch);
 }
@@ -221,7 +221,7 @@ main(int argc, char *argv[])
 	else if (str8cmp(cmd, str8lit("stat"), 0))
 		cmd9pstat(arena, addr, aname, name);
 	else {
-		fprintf(stderr, "9p: unsupported command '%.*s'\n", (int)cmd.len, cmd.str);
+		fprintf(stderr, "9p: unsupported command '%.*s'\n", str8varg(cmd));
 		arenarelease(arena);
 		return 1;
 	}

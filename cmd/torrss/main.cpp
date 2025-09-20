@@ -76,19 +76,19 @@ validparams(Params ps)
 		for (i = 0; i < nelem(orders); i++)
 			orderok |= str8cmp(ps.order, orders[i], 0);
 	if (!filterok) {
-		fprintf(stderr, "invalid filter: %s\n", ps.filter.str);
+		fprintf(stderr, "invalid filter: %.*s\n", str8varg(ps.filter));
 		return 0;
 	}
 	if (!categoryok) {
-		fprintf(stderr, "invalid category: %s\n", ps.category.str);
+		fprintf(stderr, "invalid category: %.*s\n", str8varg(ps.category));
 		return 0;
 	}
 	if (ps.sort.len > 0 && !sortok) {
-		fprintf(stderr, "invalid sort: %s\n", ps.sort.str);
+		fprintf(stderr, "invalid sort: %.*s\n", str8varg(ps.sort));
 		return 0;
 	}
 	if (ps.order.len > 0 && !orderok) {
-		fprintf(stderr, "invalid order: %s\n", ps.order.str);
+		fprintf(stderr, "invalid order: %.*s\n", str8varg(ps.order));
 		return 0;
 	}
 	return 1;
@@ -205,7 +205,7 @@ static void
 downloadtorrents(Arena *a, String8array torrents)
 {
 	char *home;
-	String8 cfgpath, historypath, historydata, tmppath, torrentstodl, torrentnl;
+	String8 cfgpath, historypath, historydata, tmppath, torrentstodl, torrentnl, status;
 	libtorrent::settings_pack pack;
 	CURL *curl;
 	u64 i, j;
@@ -219,7 +219,6 @@ downloadtorrents(Arena *a, String8array torrents)
 	std::vector<libtorrent::torrent_handle> handles;
 	libtorrent::torrent_handle h;
 	libtorrent::torrent_status s;
-	u8 *statusstr;
 
 	if (torrents.cnt == 0)
 		return;
@@ -246,12 +245,12 @@ downloadtorrents(Arena *a, String8array torrents)
 	for (i = 0; i < torrents.cnt; i++) {
 		if (historydata.len > 0)
 			if (str8index(historydata, 0, torrents.v[i], 0) != historydata.len) {
-				fprintf(stderr, "torrss: already downloaded %s\n", torrents.v[i].str);
+				fprintf(stderr, "torrss: already downloaded %.*s\n", str8varg(torrents.v[i]));
 				continue;
 			}
 		fp = fopen((const char *)tmppath.str, "wb");
 		if (fp == NULL) {
-			fprintf(stderr, "torrss: could not write to temporary file: %s\n", tmppath.str);
+			fprintf(stderr, "torrss: could not write to temporary file: %.*s\n", str8varg(tmppath));
 			continue;
 		}
 		curl_easy_setopt(curl, CURLOPT_URL, torrents.v[i].str);
@@ -299,19 +298,19 @@ downloadtorrents(Arena *a, String8array torrents)
 				s = h.status();
 				switch (s.state) {
 					case libtorrent::torrent_status::seeding:
-						statusstr = (u8 *)"seeding";
+						status = str8lit("seeding");
 						break;
 					case libtorrent::torrent_status::finished:
-						statusstr = (u8 *)"finished";
+						status = str8lit("finished");
 						break;
 					case libtorrent::torrent_status::downloading:
-						statusstr = (u8 *)"downloading";
+						status = str8lit("downloading");
 						break;
 					default:
-						statusstr = (u8 *)"other";
+						status = str8lit("other");
 						break;
 				}
-				printf("torrss: name=%s, status=%s, downloaded=%ld, peers=%d\n", s.name.c_str(), statusstr,
+				printf("torrss: name=%s, status=%.*s, downloaded=%ld, peers=%d\n", s.name.c_str(), str8varg(status),
 				       s.total_done, s.num_peers);
 				done &=
 				    (s.state == libtorrent::torrent_status::seeding || s.state == libtorrent::torrent_status::finished);

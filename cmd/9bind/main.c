@@ -49,11 +49,11 @@ main(int argc, char *argv[])
 	old = parsed.inputs.start->str;
 	new = parsed.inputs.start->next->str;
 	if (stat((char *)new.str, &st) || access((char *)new.str, W_OK)) {
-		fprintf(stderr, "9bind: %.*s: %s\n", (int)new.len, new.str, strerror(errno));
+		fprintf(stderr, "9bind: %.*s: %s\n", str8varg(new), strerror(errno));
 		return 1;
 	}
 	if (st.st_mode & S_ISVTX) {
-		fprintf(stderr, "9bind: refusing to bind over sticky directory %.*s\n", (int)new.len, new.str);
+		fprintf(stderr, "9bind: refusing to bind over sticky directory %.*s\n", str8varg(new));
 		return 1;
 	}
 	if (mount((char *)old.str, (char *)new.str, NULL, MS_BIND, NULL)) {

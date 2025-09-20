@@ -59,12 +59,13 @@ readonly static u8 hexdigitvals[128] = {
     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 };
 
-#define str8lit(s) str8((u8 *)(s), sizeof s - 1)
-#define str8litc(s)   \
-	{                 \
-	    (u8 *)(s),    \
-	    sizeof s - 1, \
+#define str8lit(s) str8((u8 *)((s)), sizeof((s)) - 1)
+#define str8litc(s)      \
+	{                    \
+	    (u8 *)((s)),     \
+	    sizeof((s)) - 1, \
 	}
+#define str8varg(s) (int)((s).len), ((s).str)
 
 static b32 charislower(u8 c);
 static b32 charisupper(u8 c);

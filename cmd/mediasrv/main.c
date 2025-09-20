@@ -129,7 +129,7 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 	mpdpath = pushstr8f(a, "%.*s/%.*s", opath.len, opath.str, path.len, path.str);
 	ret = avformat_open_input(&ictx, (char *)ipath.str, NULL, NULL);
 	if (ret < 0) {
-		fprintf(stderr, "mkmedia: can't open '%s'\n", ipath.str);
+		fprintf(stderr, "mkmedia: can't open '%.*s'\n", str8varg(ipath));
 		return str8zero();
 	}
 	ret = avformat_find_stream_info(ictx, NULL);
@@ -230,7 +230,7 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 				continue;
 			ret = avio_open(&subctxs[i]->pb, (char *)subpath.str, AVIO_FLAG_WRITE);
 			if (ret < 0) {
-				fprintf(stderr, "mkmedia: can't open subtitle file '%s'\n", subpath.str);
+				fprintf(stderr, "mkmedia: can't open subtitle file '%.*s'\n", str8varg(subpath));
 				continue;
 			}
 			ret = avformat_write_header(subctxs[i], NULL);
@@ -246,7 +246,7 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 	av_dict_set(&opts, "streaming", "1", 0);
 	ret = avio_open(&mpdctx->pb, (char *)mpdpath.str, AVIO_FLAG_WRITE);
 	if (ret < 0) {
-		fprintf(stderr, "mkmedia: can't open MPD output file '%s'\n", mpdpath.str);
+		fprintf(stderr, "mkmedia: can't open MPD output file '%.*s'\n", str8varg(mpdpath));
 		av_dict_free(&opts);
 		freesubs(subctxs, ictx->nb_streams);
 		avformat_free_context(mpdctx);

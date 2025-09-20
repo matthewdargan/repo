@@ -39,7 +39,7 @@ resolvehost(Arena *a, String8 host)
 	hostbuf[host.len] = 0;
 	ret = getaddrinfo(hostbuf, NULL, NULL, &ai);
 	if (ret != 0) {
-		fprintf(stderr, "9mount: getaddrinfo %.*s: %s\n", (int)host.len, host.str, gai_strerror(ret));
+		fprintf(stderr, "9mount: getaddrinfo %.*s: %s\n", str8varg(host), gai_strerror(ret));
 		return str8zero();
 	}
 	ret = getnameinfo(ai->ai_addr, ai->ai_addrlen, ipbuf, sizeof ipbuf, NULL, 0, NI_NUMERICHOST);
@@ -72,7 +72,7 @@ resolveport(String8 port)
 		endservent();
 		return ntohs((uint16_t)sv->s_port);
 	}
-	fprintf(stderr, "9mount: unknown service %.*s\n", (int)port.len, port.str);
+	fprintf(stderr, "9mount: unknown service %.*s\n", str8varg(port));
 	return 0;
 }
 
@@ -128,11 +128,11 @@ main(int argc, char *argv[])
 		return 1;
 	}
 	if (stat((char *)mtpt.str, &st) || access((char *)mtpt.str, W_OK)) {
-		fprintf(stderr, "9mount: %.*s: %s\n", (int)mtpt.len, mtpt.str, strerror(errno));
+		fprintf(stderr, "9mount: %.*s: %s\n", str8varg(mtpt), strerror(errno));
 		return 1;
 	}
 	if (st.st_mode & S_ISVTX) {
-		fprintf(stderr, "9mount: refusing to mount over sticky directory %.*s\n", (int)mtpt.len, mtpt.str);
+		fprintf(stderr, "9mount: refusing to mount over sticky directory %.*s\n", str8varg(mtpt));
 		return 1;
 	}
 	memset(&opts, 0, sizeof opts);
@@ -152,7 +152,7 @@ main(int argc, char *argv[])
 			host = str8prefix(dial, bang);
 			portstr = str8skip(dial, bang + 1);
 			if (portstr.len == 0) {
-				fprintf(stderr, "9mount: invalid dial string tcp!%.*s\n", (int)dial.len, dial.str);
+				fprintf(stderr, "9mount: invalid dial string tcp!%.*s\n", str8varg(dial));
 				return 1;
 			}
 		} else {
@@ -167,7 +167,7 @@ main(int argc, char *argv[])
 			return 1;
 		str8listpush(arena, &opts, pushstr8f(arena, "trans=tcp,port=%lu", port));
 	} else {
-		fprintf(stderr, "9mount: invalid dial string %.*s\n", (int)dial.len, dial.str);
+		fprintf(stderr, "9mount: invalid dial string %.*s\n", str8varg(dial));
 		return 1;
 	}
 	user = str8cstr(pw->pw_name);
@@ -193,8 +193,7 @@ main(int argc, char *argv[])
 	join.post = str8zero();
 	optstr = str8listjoin(arena, &opts, &join);
 	if (dryrun)
-		fprintf(stderr, "mount -t 9p -o %.*s %.*s %.*s\n", (int)optstr.len, optstr.str, (int)addr.len, addr.str,
-		        (int)mtpt.len, mtpt.str);
+		fprintf(stderr, "mount -t 9p -o %.*s %.*s %.*s\n", str8varg(optstr), str8varg(addr), str8varg(mtpt));
 	else if (mount((char *)addr.str, (char *)mtpt.str, "9p", 0, (char *)optstr.str)) {
 		fprintf(stderr, "9mount: mount failed: %s\n", strerror(errno));
 		return 1;

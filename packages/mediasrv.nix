@@ -8,7 +8,7 @@
       mediasrv = pkgs.clangStdenv.mkDerivation {
         buildInputs = [pkgs.ffmpeg];
         buildPhase = ''
-          clang -O3 -I. -g -Wall -Wextra -lavcodec -lavformat -lavutil \
+          clang -O3 -I. -g -fdiagnostics-absolute-paths -Wall -Wextra -lavcodec -lavformat -lavutil \
              cmd/mediasrv/main.c -o mediasrv
         '';
         installPhase = ''

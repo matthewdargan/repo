@@ -57,7 +57,7 @@ downloadtorrents(String8array torrents)
 	std::vector<libtorrent::torrent_handle> handles;
 	libtorrent::torrent_handle h;
 	libtorrent::torrent_status s;
-	u8 *statusstr;
+	String8 status;
 
 	if (torrents.cnt == 0)
 		return;
@@ -91,20 +91,20 @@ downloadtorrents(String8array torrents)
 				s = h.status();
 				switch (s.state) {
 					case libtorrent::torrent_status::seeding:
-						statusstr = (u8 *)"seeding";
+						status = str8lit("seeding");
 						break;
 					case libtorrent::torrent_status::finished:
-						statusstr = (u8 *)"finished";
+						status = str8lit("finished");
 						break;
 					case libtorrent::torrent_status::downloading:
-						statusstr = (u8 *)"downloading";
+						status = str8lit("downloading");
 						break;
 					default:
-						statusstr = (u8 *)"other";
+						status = str8lit("other");
 						break;
 				}
-				printf("tordl: name=%s, status=%s, downloaded=%ld, peers=%d\n", s.name.c_str(), statusstr, s.total_done,
-				       s.num_peers);
+				printf("tordl: name=%s, status=%.*s, downloaded=%ld, peers=%d\n", s.name.c_str(), str8varg(status),
+				       s.total_done, s.num_peers);
 				done &=
 				    (s.state == libtorrent::torrent_status::seeding || s.state == libtorrent::torrent_status::finished);
 			}
@@ -142,7 +142,7 @@ main(int argc, char *argv[])
 	if (path.len > 0) {
 		data = readfile(arena, path);
 		if (data.len == 0) {
-			fprintf(stderr, "tordl: failed to read file: %s\n", path.str);
+			fprintf(stderr, "tordl: failed to read file: %.*s\n", str8varg(path));
 			arenarelease(arena);
 			return 1;
 		}

@@ -87,19 +87,19 @@ validparams(Params ps)
 		for (i = 0; i < nelem(orders); i++)
 			orderok |= str8cmp(ps.order, orders[i], 0);
 	if (!filterok) {
-		fprintf(stderr, "invalid filter: %s\n", (char *)ps.filter.str);
+		fprintf(stderr, "invalid filter: %.*s\n", str8varg(ps.filter));
 		return 0;
 	}
 	if (!categoryok) {
-		fprintf(stderr, "invalid category: %s\n", (char *)ps.category.str);
+		fprintf(stderr, "invalid category: %.*s\n", str8varg(ps.category));
 		return 0;
 	}
 	if (ps.sort.len > 0 && !sortok) {
-		fprintf(stderr, "invalid sort: %s\n", (char *)ps.sort.str);
+		fprintf(stderr, "invalid sort: %.*s\n", str8varg(ps.sort));
 		return 0;
 	}
 	if (ps.order.len > 0 && !orderok) {
-		fprintf(stderr, "invalid order: %s\n", (char *)ps.order.str);
+		fprintf(stderr, "invalid order: %.*s\n", str8varg(ps.order));
 		return 0;
 	}
 	return 1;
