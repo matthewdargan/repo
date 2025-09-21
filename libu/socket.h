@@ -5,12 +5,12 @@ typedef struct Netaddr Netaddr;
 struct Netaddr {
 	String8 net;
 	String8 host;
-	String8 port;
+	u64 port;
 	b32 isunix;
 };
 
+static u64 resolveport(String8 port, String8 proto);
 static Netaddr netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv);
-static b32 netaddrparse(Arena *a, String8 addr, Netaddr *parsed);
 static u64 socketdial(Netaddr na, Netaddr local);
 static u64 socketlisten(String8 port, struct addrinfo *hints);
 static u64 socketaccept(u64 fd);

@@ -1,3 +1,28 @@
+static u64
+resolveport(String8 port, String8 proto)
+{
+	char portbuf[1024], protobuf[16];
+	struct servent *sv;
+
+	if (str8isint(port, 10))
+		return str8tou64(port, 10);
+	if (port.len >= sizeof portbuf)
+		return 0;
+	memcpy(portbuf, port.str, port.len);
+	portbuf[port.len] = 0;
+	protobuf[0] = 0;
+	if (proto.len > 0 && proto.len < sizeof protobuf) {
+		memcpy(protobuf, proto.str, proto.len);
+		protobuf[proto.len] = 0;
+	}
+	sv = getservbyname(portbuf, protobuf);
+	if (sv != NULL) {
+		endservent();
+		return ntohs((u16)sv->s_port);
+	}
+	return 0;
+}
+
 static Netaddr
 netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv)
 {
@@ -24,7 +49,7 @@ netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv)
 			service = str8skip(addr, colonpos + 1);
 			na.net = pushstr8cpy(a, defnet);
 			na.host = pushstr8cpy(a, host);
-			na.port = pushstr8cpy(a, service);
+			na.port = resolveport(service, na.net);
 			na.isunix = 0;
 			return na;
 		}
@@ -32,7 +57,7 @@ netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv)
 		na.host = pushstr8cpy(a, addr);
 		na.isunix = 0;
 		if (defsrv.len > 0)
-			na.port = pushstr8cpy(a, defsrv);
+			na.port = resolveport(defsrv, na.net);
 		return na;
 	}
 	net = str8prefix(addr, bangpos);
@@ -43,7 +68,7 @@ netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv)
 		port = str8skip(service, bangpos + 1);
 		na.net = pushstr8cpy(a, net);
 		na.host = pushstr8cpy(a, host);
-		na.port = pushstr8cpy(a, port);
+		na.port = resolveport(port, na.net);
 		na.isunix = str8cmp(na.net, str8lit("unix"), 0);
 		return na;
 	}
@@ -57,47 +82,14 @@ netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv)
 	na.host = pushstr8cpy(a, service);
 	na.isunix = 0;
 	if (defsrv.len > 0)
-		na.port = pushstr8cpy(a, defsrv);
+		na.port = resolveport(defsrv, na.net);
 	return na;
-}
-
-static b32
-netaddrparse(Arena *a, String8 addr, Netaddr *na)
-{
-	String8 remaining;
-	u64 bangpos;
-
-	if (addr.len == 0 || na == NULL)
-		return 0;
-	memset(na, 0, sizeof *na);
-	bangpos = str8index(addr, 0, str8lit("!"), 0);
-	if (bangpos >= addr.len)
-		return 0;
-	na->net = pushstr8cpy(a, str8prefix(addr, bangpos));
-	remaining = str8skip(addr, bangpos + 1);
-	if (remaining.len == 0)
-		return 0;
-	bangpos = str8index(remaining, 0, str8lit("!"), 0);
-	if (bangpos >= remaining.len) {
-		na->host = pushstr8cpy(a, remaining);
-		na->isunix = str8cmp(na->net, str8lit("unix"), 0);
-		return 1;
-	}
-	na->host = pushstr8cpy(a, str8prefix(remaining, bangpos));
-	na->port = pushstr8cpy(a, str8skip(remaining, bangpos + 1));
-	na->isunix = str8cmp(na->net, str8lit("unix"), 0);
-	if (!na->isunix && (na->host.len == 0 || na->port.len == 0))
-		return 0;
-	if (!str8cmp(na->net, str8lit("tcp"), 0) && !str8cmp(na->net, str8lit("udp"), 0) &&
-	    !str8cmp(na->net, str8lit("unix"), 0))
-		return 0;
-	return 1;
 }
 
 static u64
 socketdial(Netaddr na, Netaddr local)
 {
-	char hostbuf[1024], portbuf[16], localhostbuf[1024], localportbuf[16];
+	char hostbuf[1024], localhostbuf[1024];
 	struct addrinfo hints, *res, *localres;
 	struct sockaddr_un unaddr;
 	int fd, opt, socktype;
@@ -126,10 +118,8 @@ socketdial(Netaddr na, Netaddr local)
 	}
 	if (na.host.len > 0 && str8cmp(na.host, str8lit("*"), 0))
 		return 0;
-	if (na.port.len == 0)
+	if (na.port == 0)
 		return 0;
-	memcpy(portbuf, na.port.str, na.port.len);
-	portbuf[na.port.len] = 0;
 	if (na.host.len == 0) {
 		memcpy(hostbuf, "localhost", 9);
 		hostbuf[9] = 0;
@@ -146,15 +136,24 @@ socketdial(Netaddr na, Netaddr local)
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = socktype;
-	if (getaddrinfo(hostbuf, portbuf, &hints, &res) != 0)
+	if (getaddrinfo(hostbuf, NULL, &hints, &res) != 0)
 		return 0;
+	switch (res->ai_family) {
+		case AF_INET:
+			((struct sockaddr_in *)res->ai_addr)->sin_port = htons((u16)na.port);
+			break;
+		case AF_INET6:
+			((struct sockaddr_in6 *)res->ai_addr)->sin6_port = htons((u16)na.port);
+			break;
+		default:
+			freeaddrinfo(res);
+			return 0;
+	}
 	if (local.net.len > 0) {
-		if (local.isunix || local.port.len == 0) {
+		if (local.isunix || local.port == 0) {
 			freeaddrinfo(res);
 			return 0;
 		}
-		memcpy(localportbuf, local.port.str, local.port.len);
-		localportbuf[local.port.len] = 0;
 		if (local.host.len == 0) {
 			memcpy(localhostbuf, "localhost", 9);
 			localhostbuf[9] = 0;
@@ -162,7 +161,7 @@ socketdial(Netaddr na, Netaddr local)
 			memcpy(localhostbuf, local.host.str, local.host.len);
 			localhostbuf[local.host.len] = 0;
 		}
-		if (getaddrinfo(localhostbuf, localportbuf, &hints, &localres) != 0) {
+		if (getaddrinfo(localhostbuf, NULL, &hints, &localres) != 0) {
 			freeaddrinfo(res);
 			return 0;
 		}

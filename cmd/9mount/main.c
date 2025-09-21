@@ -1,6 +1,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <netdb.h>
+#include <netinet/tcp.h>
 #include <pwd.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -8,7 +9,9 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -18,11 +21,13 @@
 #include "libu/string.h"
 #include "libu/cmd.h"
 #include "libu/os.h"
+#include "libu/socket.h"
 #include "libu/u.c"
 #include "libu/arena.c"
 #include "libu/string.c"
 #include "libu/cmd.c"
 #include "libu/os.c"
+#include "libu/socket.c"
 /* clang-format on */
 
 static String8
@@ -53,29 +58,6 @@ resolvehost(Arena *a, String8 host)
 	return s;
 }
 
-static u64
-resolveport(String8 port)
-{
-	char portbuf[1024];
-	struct servent *sv;
-
-	if (str8isint(port, 10))
-		return str8tou64(port, 10);
-	if (port.len >= sizeof portbuf) {
-		fprintf(stderr, "9mount: service name too long\n");
-		return 0;
-	}
-	memcpy(portbuf, port.str, port.len);
-	portbuf[port.len] = 0;
-	sv = getservbyname(portbuf, "tcp");
-	if (sv != NULL) {
-		endservent();
-		return ntohs((uint16_t)sv->s_port);
-	}
-	fprintf(stderr, "9mount: unknown service %.*s\n", str8varg(port));
-	return 0;
-}
-
 int
 main(int argc, char *argv[])
 {
@@ -84,13 +66,14 @@ main(int argc, char *argv[])
 	String8list args, opts;
 	Cmd parsed;
 	b32 dryrun, singleattach, exclusive;
-	String8 aname, msizestr, uidstr, gidstr, dial, mtpt, host, portstr, addr, user, optstr;
+	String8 aname, msizestr, uidstr, gidstr, dial, mtpt, addr, user, optstr;
 	uid_t uid;
 	gid_t gid;
 	struct passwd *pw;
 	struct stat st;
+	u64 msize;
+	Netaddr na;
 	Stringjoin join;
-	u64 bang, port, msize;
 
 	sysinfo.nprocs = sysconf(_SC_NPROCESSORS_ONLN);
 	sysinfo.pagesz = sysconf(_SC_PAGESIZE);
@@ -139,36 +122,31 @@ main(int argc, char *argv[])
 	if (str8cmp(dial, str8lit("-"), 0)) {
 		addr = str8lit("nodev");
 		str8listpush(arena, &opts, str8lit("trans=fd,rfdno=0,wrfdno=1"));
-	} else if (str8index(dial, 0, str8lit("unix!"), 0) == 0) {
-		addr = str8skip(dial, 5);
-		str8listpush(arena, &opts, str8lit("trans=unix"));
-	} else if (str8index(dial, 0, str8lit("virtio!"), 0) == 0) {
-		addr = str8skip(dial, 7);
-		str8listpush(arena, &opts, str8lit("trans=virtio"));
-	} else if (str8index(dial, 0, str8lit("tcp!"), 0) == 0) {
-		dial = str8skip(dial, 4);
-		bang = str8index(dial, 0, str8lit("!"), 0);
-		if (bang < dial.len) {
-			host = str8prefix(dial, bang);
-			portstr = str8skip(dial, bang + 1);
-			if (portstr.len == 0) {
-				fprintf(stderr, "9mount: invalid dial string tcp!%.*s\n", str8varg(dial));
+	} else {
+		na = netaddr(arena, dial, str8lit("tcp"), str8lit("9pfs"));
+		if (na.net.len == 0) {
+			fprintf(stderr, "9mount: invalid dial string %.*s\n", str8varg(dial));
+			return 1;
+		}
+		if (na.isunix) {
+			addr = na.host;
+			if (str8cmp(na.net, str8lit("virtio"), 0))
+				str8listpush(arena, &opts, str8lit("trans=virtio"));
+			else
+				str8listpush(arena, &opts, str8lit("trans=unix"));
+		} else if (str8cmp(na.net, str8lit("tcp"), 0)) {
+			addr = resolvehost(arena, na.host);
+			if (addr.len == 0)
+				return 1;
+			if (na.port == 0) {
+				fprintf(stderr, "9mount: port resolution failed\n");
 				return 1;
 			}
+			str8listpush(arena, &opts, pushstr8f(arena, "trans=tcp,port=%lu", na.port));
 		} else {
-			host = dial;
-			portstr = str8lit("564");
+			fprintf(stderr, "9mount: unsupported network type %.*s\n", str8varg(na.net));
+			return 1;
 		}
-		addr = resolvehost(arena, host);
-		if (addr.len == 0)
-			return 1;
-		port = resolveport(portstr);
-		if (port == 0)
-			return 1;
-		str8listpush(arena, &opts, pushstr8f(arena, "trans=tcp,port=%lu", port));
-	} else {
-		fprintf(stderr, "9mount: invalid dial string %.*s\n", str8varg(dial));
-		return 1;
 	}
 	user = str8cstr(pw->pw_name);
 	str8listpush(arena, &opts, pushstr8f(arena, "uname=%.*s", (int)user.len, user.str));

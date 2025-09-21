@@ -58,7 +58,7 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 		fprintf(stderr, "9p: namespace mounting not implemented\n");
 		return NULL;
 	}
-	na = netaddr(a, addr, str8lit("tcp"), str8lit("9fs"));
+	na = netaddr(a, addr, str8lit("tcp"), str8lit("9pfs"));
 	if (na.net.len == 0) {
 		fprintf(stderr, "9p: failed to parse address '%.*s'\n", str8varg(addr));
 		return NULL;
