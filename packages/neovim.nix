@@ -5,13 +5,7 @@
     ...
   }: {
     packages.neovim = inputs'.nixvim.legacyPackages.makeNixvimWithModule {
-      module = {helpers, ...}: {
-        autoCmd = [
-          {
-            callback = helpers.mkRaw "function() vim.lsp.buf.format() end";
-            event = ["BufWritePre"];
-          }
-        ];
+      module = {
         clipboard = {
           providers.wl-copy.enable = true;
           register = "unnamedplus";
@@ -55,30 +49,12 @@
                 "<C-p>" = "cmp.mapping.select_prev_item { behavior = cmp.SelectBehavior.Insert }";
                 "<C-y>" = ''cmp.mapping(cmp.mapping.confirm { behavior = cmp.ConfirmBehavior.Insert, select = true }, { "i", "c" })'';
               };
-              snippet.expand = "function(args) require('luasnip').lsp_expand(args.body) end";
               sources = [
                 {name = "buffer";}
                 {name = "luasnip";}
-                {name = "nvim_lsp";}
                 {name = "path";}
                 {name = "treesitter";}
               ];
-            };
-          };
-          lastplace.enable = true;
-          lsp = {
-            enable = true;
-            keymaps = {
-              diagnostic = {
-                "<leader>j" = "goto_prev";
-                "<leader>k" = "goto_next";
-              };
-              lspBuf."<leader>r" = "rename";
-            };
-            servers = {
-              bashls.enable = true;
-              clangd.enable = true;
-              nil_ls.enable = true;
             };
           };
           luasnip.enable = true;
@@ -93,10 +69,6 @@
               "<leader>b" = "buffers";
               "<leader>f" = "find_files";
               "<leader>g" = "live_grep";
-              "gd" = "lsp_definitions";
-              "gi" = "lsp_implementations";
-              "gr" = "lsp_references";
-              "gt" = "lsp_type_definitions";
             };
           };
           treesitter = {
