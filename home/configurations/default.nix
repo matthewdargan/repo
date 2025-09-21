@@ -25,9 +25,6 @@
           (import ../modules/firefox.nix part-inputs)
           (import ../modules/ghostty.nix part-inputs)
           ../modules/discord.nix
-          ../modules/gemini.nix
-          ../modules/spotify.nix
-          ../modules/vscode.nix
         ];
       pkgs = pkgsLinux;
     };
