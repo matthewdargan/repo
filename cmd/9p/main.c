@@ -183,6 +183,29 @@ cmd9pwrite(Arena *a, String8 addr, String8 aname, String8 name)
 }
 
 static void
+cmd9premove(Arena *a, String8 addr, String8 aname, Cmd *parsed)
+{
+	Temp scratch;
+	Cfsys *fs;
+	String8node *node;
+	String8 name;
+
+	scratch = tempbegin(a);
+	fs = fsconnect(scratch.a, addr, aname);
+	if (fs == NULL) {
+		tempend(scratch);
+		return;
+	}
+	for (node = parsed->inputs.start->next; node != NULL; node = node->next) {
+		name = node->str;
+		if (fsremove(scratch.a, fs, name) < 0)
+			fprintf(stderr, "9p: failed to remove '%.*s'\n", str8varg(name));
+	}
+	fs9unmount(scratch.a, fs);
+	tempend(scratch);
+}
+
+static void
 cmd9pstat(Arena *a, String8 addr, String8 aname, String8 name)
 {
 	Temp scratch;
@@ -244,7 +267,8 @@ main(int argc, char *argv[])
 		cmd9pread(arena, addr, aname, name);
 	else if (str8cmp(cmd, str8lit("write"), 0))
 		cmd9pwrite(arena, addr, aname, name);
-	/* TODO: implement cmd9premove */
+	else if (str8cmp(cmd, str8lit("remove"), 0))
+		cmd9premove(arena, addr, aname, &parsed);
 	else if (str8cmp(cmd, str8lit("stat"), 0))
 		cmd9pstat(arena, addr, aname, name);
 	else {
