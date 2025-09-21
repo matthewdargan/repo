@@ -40,10 +40,11 @@ usage(void)
 	fprintf(stderr,
 	        "usage: 9p [-a address] [-A aname] cmd args...\n"
 	        "possible cmds:\n"
+	        " create name...\n"
 	        " read name\n"
-	        " write [-l] name\n"
+	        " write name\n"
+	        " remove name...\n"
 	        " stat name\n"
-	        " rdwr name\n"
 	        " ls [-dlnt] name\n");
 }
 
@@ -79,11 +80,13 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 }
 
 static void
-cmd9pcreate(Arena *a, String8 addr, String8 aname, String8 name)
+cmd9pcreate(Arena *a, String8 addr, String8 aname, Cmd *parsed)
 {
 	Temp scratch;
 	Cfsys *fs;
 	Cfid *fid;
+	String8node *node;
+	String8 name;
 
 	scratch = tempbegin(a);
 	fs = fsconnect(scratch.a, addr, aname);
@@ -91,14 +94,14 @@ cmd9pcreate(Arena *a, String8 addr, String8 aname, String8 name)
 		tempend(scratch);
 		return;
 	}
-	fid = fscreate(scratch.a, fs, name, OWRITE, 0644);
-	if (fid == NULL) {
-		fprintf(stderr, "9p: failed to create '%.*s'\n", str8varg(name));
-		fs9unmount(scratch.a, fs);
-		tempend(scratch);
-		return;
+	for (node = parsed->inputs.start->next; node != NULL; node = node->next) {
+		name = node->str;
+		fid = fscreate(scratch.a, fs, name, OREAD, 0666);
+		if (fid == NULL)
+			fprintf(stderr, "9p: failed to create '%.*s'\n", str8varg(name));
+		else
+			fsclose(scratch.a, fid);
 	}
-	fsclose(scratch.a, fid);
 	fs9unmount(scratch.a, fs);
 	tempend(scratch);
 }
@@ -260,18 +263,21 @@ main(int argc, char *argv[])
 		return 1;
 	}
 	cmd = parsed.inputs.start->str;
-	name = parsed.inputs.start->next->str;
+	/* TODO: add cmd9pls */
 	if (str8cmp(cmd, str8lit("create"), 0))
-		cmd9pcreate(arena, addr, aname, name);
-	else if (str8cmp(cmd, str8lit("read"), 0))
+		cmd9pcreate(arena, addr, aname, &parsed);
+	else if (str8cmp(cmd, str8lit("read"), 0)) {
+		name = parsed.inputs.start->next->str;
 		cmd9pread(arena, addr, aname, name);
-	else if (str8cmp(cmd, str8lit("write"), 0))
+	} else if (str8cmp(cmd, str8lit("write"), 0)) {
+		name = parsed.inputs.start->next->str;
 		cmd9pwrite(arena, addr, aname, name);
-	else if (str8cmp(cmd, str8lit("remove"), 0))
+	} else if (str8cmp(cmd, str8lit("remove"), 0))
 		cmd9premove(arena, addr, aname, &parsed);
-	else if (str8cmp(cmd, str8lit("stat"), 0))
+	else if (str8cmp(cmd, str8lit("stat"), 0)) {
+		name = parsed.inputs.start->next->str;
 		cmd9pstat(arena, addr, aname, name);
-	else {
+	} else {
 		fprintf(stderr, "9p: unsupported command '%.*s'\n", str8varg(cmd));
 		arenarelease(arena);
 		return 1;
