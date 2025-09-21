@@ -185,11 +185,11 @@ fsrpc(Arena *a, Cfsys *fs, Fcall tx)
 	if (rxmsg.len == 0)
 		return errfc;
 	rx = fcalldecode(rxmsg);
+	debug9pprint(str8lit("->"), rx);
 	if (rx.type == 0 || rx.type == Rerror || rx.type != tx.type + 1)
 		return errfc;
 	if (rx.tag != tx.tag)
 		return errfc;
-	debug9pprint(str8lit("->"), rx);
 	return rx;
 }
 
