@@ -79,6 +79,31 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 }
 
 static void
+cmd9pcreate(Arena *a, String8 addr, String8 aname, String8 name)
+{
+	Temp scratch;
+	Cfsys *fs;
+	Cfid *fid;
+
+	scratch = tempbegin(a);
+	fs = fsconnect(scratch.a, addr, aname);
+	if (fs == NULL) {
+		tempend(scratch);
+		return;
+	}
+	fid = fscreate(scratch.a, fs, name, OWRITE, 0644);
+	if (fid == NULL) {
+		fprintf(stderr, "9p: failed to create '%.*s'\n", str8varg(name));
+		fs9unmount(scratch.a, fs);
+		tempend(scratch);
+		return;
+	}
+	fsclose(scratch.a, fid);
+	fs9unmount(scratch.a, fs);
+	tempend(scratch);
+}
+
+static void
 cmd9pread(Arena *a, String8 addr, String8 aname, String8 name)
 {
 	Temp scratch;
@@ -213,11 +238,13 @@ main(int argc, char *argv[])
 	}
 	cmd = parsed.inputs.start->str;
 	name = parsed.inputs.start->next->str;
-	/* TODO: add cmd9pcreate */
-	if (str8cmp(cmd, str8lit("read"), 0))
+	if (str8cmp(cmd, str8lit("create"), 0))
+		cmd9pcreate(arena, addr, aname, name);
+    else if (str8cmp(cmd, str8lit("read"), 0))
 		cmd9pread(arena, addr, aname, name);
 	else if (str8cmp(cmd, str8lit("write"), 0))
 		cmd9pwrite(arena, addr, aname, name);
+    /* TODO: implement cmd9premove */
 	else if (str8cmp(cmd, str8lit("stat"), 0))
 		cmd9pstat(arena, addr, aname, name);
 	else {
