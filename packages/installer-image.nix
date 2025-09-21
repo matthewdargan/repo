@@ -4,7 +4,6 @@
   ...
 }: {
   perSystem = {
-    config,
     lib,
     system,
     self',
