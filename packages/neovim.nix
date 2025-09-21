@@ -29,35 +29,14 @@
           }
         ];
         opts = {
-          colorcolumn = "80";
-          expandtab = true;
-          guicursor = "";
           number = true;
           relativenumber = true;
           scrolloff = 8;
-          shiftwidth = 4;
           smartindent = true;
           softtabstop = 4;
           tabstop = 4;
         };
         plugins = {
-          cmp = {
-            enable = true;
-            settings = {
-              mapping = {
-                "<C-n>" = "cmp.mapping.select_next_item { behavior = cmp.SelectBehavior.Insert }";
-                "<C-p>" = "cmp.mapping.select_prev_item { behavior = cmp.SelectBehavior.Insert }";
-                "<C-y>" = ''cmp.mapping(cmp.mapping.confirm { behavior = cmp.ConfirmBehavior.Insert, select = true }, { "i", "c" })'';
-              };
-              sources = [
-                {name = "buffer";}
-                {name = "luasnip";}
-                {name = "path";}
-                {name = "treesitter";}
-              ];
-            };
-          };
-          luasnip.enable = true;
           mini = {
             enable = true;
             modules.icons = {};

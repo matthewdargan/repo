@@ -240,11 +240,11 @@ main(int argc, char *argv[])
 	name = parsed.inputs.start->next->str;
 	if (str8cmp(cmd, str8lit("create"), 0))
 		cmd9pcreate(arena, addr, aname, name);
-    else if (str8cmp(cmd, str8lit("read"), 0))
+	else if (str8cmp(cmd, str8lit("read"), 0))
 		cmd9pread(arena, addr, aname, name);
 	else if (str8cmp(cmd, str8lit("write"), 0))
 		cmd9pwrite(arena, addr, aname, name);
-    /* TODO: implement cmd9premove */
+	/* TODO: implement cmd9premove */
 	else if (str8cmp(cmd, str8lit("stat"), 0))
 		cmd9pstat(arena, addr, aname, name);
 	else {

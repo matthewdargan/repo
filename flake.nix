@@ -52,18 +52,8 @@
         ...
       }: {
         devShells.default = pkgs.mkShell {
-          buildInputs = [
-            pkgs.boost
-            pkgs.curl
-            pkgs.ffmpeg-full
-            pkgs.libtorrent-rasterbar
-            pkgs.libxml2
-            pkgs.pkg-config
-          ];
           packages = [
             inputs'.home-manager.packages.home-manager
-            pkgs.bear
-            pkgs.clang
             pkgs.gdb
             pkgs.libllvm
             pkgs.nh
@@ -76,7 +66,7 @@
             hooks = {
               alejandra.enable = true;
               clang-format = {
-                enable = false;
+                enable = true;
                 types_or = lib.mkForce [
                   "c"
                   "c++"
