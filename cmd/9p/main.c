@@ -45,7 +45,7 @@ usage(void)
 	        " write name\n"
 	        " remove name...\n"
 	        " stat name\n"
-	        " ls [-dlnt] name\n");
+	        " ls name\n");
 }
 
 static Cfsys *
@@ -80,7 +80,7 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 }
 
 static void
-cmd9pcreate(Arena *a, String8 addr, String8 aname, Cmd *parsed)
+cmd9pcreate(Arena *a, String8 addr, String8 aname, Cmd parsed)
 {
 	Temp scratch;
 	Cfsys *fs;
@@ -94,7 +94,7 @@ cmd9pcreate(Arena *a, String8 addr, String8 aname, Cmd *parsed)
 		tempend(scratch);
 		return;
 	}
-	for (node = parsed->inputs.start->next; node != NULL; node = node->next) {
+	for (node = parsed.inputs.start->next; node != NULL; node = node->next) {
 		name = node->str;
 		fid = fscreate(scratch.a, fs, name, OREAD, 0666);
 		if (fid == NULL)
@@ -186,7 +186,7 @@ cmd9pwrite(Arena *a, String8 addr, String8 aname, String8 name)
 }
 
 static void
-cmd9premove(Arena *a, String8 addr, String8 aname, Cmd *parsed)
+cmd9premove(Arena *a, String8 addr, String8 aname, Cmd parsed)
 {
 	Temp scratch;
 	Cfsys *fs;
@@ -199,7 +199,7 @@ cmd9premove(Arena *a, String8 addr, String8 aname, Cmd *parsed)
 		tempend(scratch);
 		return;
 	}
-	for (node = parsed->inputs.start->next; node != NULL; node = node->next) {
+	for (node = parsed.inputs.start->next; node != NULL; node = node->next) {
 		name = node->str;
 		if (fsremove(scratch.a, fs, name) < 0)
 			fprintf(stderr, "9p: failed to remove '%.*s'\n", str8varg(name));
@@ -229,6 +229,85 @@ cmd9pstat(Arena *a, String8 addr, String8 aname, String8 name)
 		return;
 	}
 	printf("%.*s %lu %d %.*s %.*s\n", str8varg(d.name), d.len, d.mtime, str8varg(d.uid), str8varg(d.gid));
+	fs9unmount(scratch.a, fs);
+	tempend(scratch);
+}
+
+static void
+cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
+{
+	Temp scratch;
+	Cfsys *fs;
+	Cfid *fid;
+	String8node *namenode;
+	String8 name;
+	Dir d;
+	Dirlist list;
+	Dirnode *node;
+
+	scratch = tempbegin(a);
+	fs = fsconnect(scratch.a, addr, aname);
+	if (fs == NULL) {
+		tempend(scratch);
+		return;
+	}
+	namenode = parsed.inputs.start->next;
+	if (namenode == NULL) {
+		name = str8lit(".");
+		d = fsdirstat(scratch.a, fs, name);
+		if (d.name.len == 0) {
+			fprintf(stderr, "9p: failed to stat '%.*s'\n", str8varg(name));
+			fs9unmount(scratch.a, fs);
+			tempend(scratch);
+			return;
+		}
+		if (d.mode & 0x80000000) { /* DMDIR = 0x80000000 */
+			fid = fs9open(scratch.a, fs, name, OREAD);
+			if (fid == NULL) {
+				fprintf(stderr, "9p: failed to open directory '%.*s'\n", str8varg(name));
+				fs9unmount(scratch.a, fs);
+				tempend(scratch);
+				return;
+			}
+			if (fsdirreadall(scratch.a, fid, &list) < 0) {
+				fprintf(stderr, "9p: failed to read directory '%.*s'\n", str8varg(name));
+				fsclose(scratch.a, fid);
+				fs9unmount(scratch.a, fs);
+				tempend(scratch);
+				return;
+			}
+			fsclose(scratch.a, fid);
+			for (node = list.start; node != NULL; node = node->next)
+				printf("%.*s\n", str8varg(node->dir.name));
+		} else
+			printf("%.*s\n", str8varg(d.name));
+	} else {
+		for (; namenode != NULL; namenode = namenode->next) {
+			name = namenode->str;
+			d = fsdirstat(scratch.a, fs, name);
+			if (d.name.len == 0) {
+				fprintf(stderr, "9p: failed to stat '%.*s'\n", str8varg(name));
+				continue;
+			}
+			if (d.mode & 0x80000000) { /* DMDIR = 0x80000000 */
+				fid = fs9open(scratch.a, fs, name, OREAD);
+				if (fid == NULL) {
+					fprintf(stderr, "9p: failed to open '%.*s'\n", str8varg(name));
+					continue;
+				}
+				memset(&list, 0, sizeof(list));
+				if (fsdirreadall(scratch.a, fid, &list) < 0) {
+					fprintf(stderr, "9p: failed to read directory '%.*s'\n", str8varg(name));
+					fsclose(scratch.a, fid);
+					continue;
+				}
+				fsclose(scratch.a, fid);
+				for (node = list.start; node != NULL; node = node->next)
+					printf("%.*s\n", str8varg(node->dir.name));
+			} else
+				printf("%.*s\n", str8varg(d.name));
+		}
+	}
 	fs9unmount(scratch.a, fs);
 	tempend(scratch);
 }
@@ -263,9 +342,8 @@ main(int argc, char *argv[])
 		return 1;
 	}
 	cmd = parsed.inputs.start->str;
-	/* TODO: add cmd9pls */
 	if (str8cmp(cmd, str8lit("create"), 0))
-		cmd9pcreate(arena, addr, aname, &parsed);
+		cmd9pcreate(arena, addr, aname, parsed);
 	else if (str8cmp(cmd, str8lit("read"), 0)) {
 		name = parsed.inputs.start->next->str;
 		cmd9pread(arena, addr, aname, name);
@@ -273,11 +351,13 @@ main(int argc, char *argv[])
 		name = parsed.inputs.start->next->str;
 		cmd9pwrite(arena, addr, aname, name);
 	} else if (str8cmp(cmd, str8lit("remove"), 0))
-		cmd9premove(arena, addr, aname, &parsed);
+		cmd9premove(arena, addr, aname, parsed);
 	else if (str8cmp(cmd, str8lit("stat"), 0)) {
 		name = parsed.inputs.start->next->str;
 		cmd9pstat(arena, addr, aname, name);
-	} else {
+	} else if (str8cmp(cmd, str8lit("ls"), 0))
+		cmd9pls(arena, addr, aname, parsed);
+	else {
 		fprintf(stderr, "9p: unsupported command '%.*s'\n", str8varg(cmd));
 		arenarelease(arena);
 		return 1;
