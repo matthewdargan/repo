@@ -35,8 +35,8 @@ readonly static u64 arenaressz = 0x4000000;
 readonly static u64 arenacmtsz = 0x10000;
 
 #define pusharrnozalign(a, T, c, align) (T *)arenapush((a), sizeof(T) * (c), (align))
-#define pusharralign(a, T, c, align) (T *)memset(pusharrnozalign(a, T, c, align), 0, sizeof(T) * (c))
-#define pusharrnoz(a, T, c) pusharrnozalign(a, T, c, max(8, __alignof(T)))
+#define pusharralign(a, T, c, align) (T *)memset(pusharrnozalign((a), T, (c), (align)), 0, sizeof(T) * (c))
+#define pusharrnoz(a, T, c) pusharrnozalign((a), T, (c), max(8, __alignof(T)))
 #define pusharr(a, T, c) pusharralign(a, T, c, max(8, __alignof(T)))
 
 static Arena *arenaalloc(Arenaparams params);

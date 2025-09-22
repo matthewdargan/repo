@@ -2,7 +2,7 @@
 #define U_H
 
 #define readonly __attribute__((section(".rodata")))
-#define nelem(a) (sizeof a / sizeof((a)[0]))
+#define nelem(a) (sizeof(a) / sizeof((a)[0]))
 #define roundup(x, n) (((x) + (n) - 1) & ~((n) - 1))
 
 typedef uint8_t u8;
@@ -47,9 +47,9 @@ typedef double f64;
 #define fromleu32(x) (x)
 #define fromleu64(x) (x)
 #else
-#define fromleu16(x) bswapu16(x)
-#define fromleu32(x) bswapu32(x)
-#define fromleu64(x) bswapu64(x)
+#define fromleu16(x) bswapu16((x))
+#define fromleu32(x) bswapu32((x))
+#define fromleu64(x) bswapu64((x))
 #endif
 
 typedef struct U64array U64array;
