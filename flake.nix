@@ -5,10 +5,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/disko";
     };
-    epify = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:matthewdargan/epify";
-    };
     firefox-addons = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "gitlab:rycee/nur-expressions?dir=pkgs/firefox-addons";

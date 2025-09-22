@@ -8,7 +8,7 @@
     font-size = 20
     fullscreen = true
     mouse-hide-while-typing = true
-    theme = "tokyonight"
+    theme = TokyoNight
     window-decoration = false
   '';
 }

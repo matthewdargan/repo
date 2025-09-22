@@ -15,7 +15,7 @@
       };
   in {
     "mpd@nas" = homeConfig {
-      modules = modulesLinux ++ [(import ../modules/media.nix part-inputs)];
+      modules = modulesLinux;
       pkgs = pkgsLinux;
     };
     "mpd@scoop" = homeConfig {
