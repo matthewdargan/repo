@@ -3,6 +3,10 @@
 Mediasrv streams media content in DASH format and serves static web
 content.
 
+See
+[matthewdargan.github.io/repo/mediasrv](https://matthewdargan.github.io/repo/mediasrv)
+for implementation details.
+
 Usage:
 
     mediasrv [-i inputmtpt] [-o outputmtpt] [-p port]
