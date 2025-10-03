@@ -34,6 +34,10 @@
 #include "lib9p/9pclient.c"
 /* clang-format on */
 
+readonly static String8 mon[] = {str8litc("Jan"), str8litc("Feb"), str8litc("Mar"), str8litc("Apr"),
+                                 str8litc("May"), str8litc("Jun"), str8litc("Jul"), str8litc("Aug"),
+                                 str8litc("Sep"), str8litc("Oct"), str8litc("Nov"), str8litc("Dec")};
+
 static void
 usage(void)
 {
@@ -45,7 +49,7 @@ usage(void)
 	        " write name\n"
 	        " remove name...\n"
 	        " stat name\n"
-	        " ls name\n");
+	        " ls [-dlnt] name...\n");
 }
 
 static Cfsys *
@@ -233,19 +237,130 @@ cmd9pstat(Arena *a, String8 addr, String8 aname, String8 name)
 	tempend(scratch);
 }
 
+static int
+timecmp(const void *va, const void *vb)
+{
+	Dirnode *a, *b;
+
+	a = (Dirnode *)va;
+	b = (Dirnode *)vb;
+	if (a->dir.mtime < b->dir.mtime)
+		return -1;
+	else if (a->dir.mtime > b->dir.mtime)
+		return 1;
+	else
+		return 0;
+}
+
+static int
+dircmp(const void *va, const void *vb)
+{
+	Dirnode *a, *b;
+
+	a = (Dirnode *)va;
+	b = (Dirnode *)vb;
+	return str8cmp(a->dir.name, b->dir.name, 0) ? 1 : -1;
+}
+
+static String8
+formattime(Arena *a, u32 mtime)
+{
+	u32 now;
+	Datetime dt;
+
+	now = nowunix();
+	dt = densetodatetime(mtime);
+	if ((now - mtime) < (6 * 30 * 86400))
+		return pushstr8f(a, "%s %2d %02d:%02d", mon[dt.mon], dt.day + 1, dt.hour, dt.min);
+	else
+		return pushstr8f(a, "%s %2d %5d", mon[dt.mon], dt.day + 1, dt.year);
+}
+
+static void
+printdir(Arena *a, Dir d, b32 lflag)
+{
+	String8 time;
+	char mode[11];
+
+	if (!lflag) {
+		printf("%.*s\n", str8varg(d.name));
+		return;
+	}
+	mode[0] = (d.mode & DMDIR) ? 'd' : '-';
+	mode[1] = (d.mode & 0400) ? 'r' : '-';
+	mode[2] = (d.mode & 0200) ? 'w' : '-';
+	mode[3] = (d.mode & 0100) ? 'x' : '-';
+	mode[4] = (d.mode & 0040) ? 'r' : '-';
+	mode[5] = (d.mode & 0020) ? 'w' : '-';
+	mode[6] = (d.mode & 0010) ? 'x' : '-';
+	mode[7] = (d.mode & 0004) ? 'r' : '-';
+	mode[8] = (d.mode & 0002) ? 'w' : '-';
+	mode[9] = (d.mode & 0001) ? 'x' : '-';
+	mode[10] = '\0';
+	time = formattime(a, d.mtime);
+	printf("%s %.*s %.*s %10lu %.*s %.*s\n", mode, str8varg(d.uid), str8varg(d.gid), d.len, str8varg(time),
+	       str8varg(d.name));
+}
+
+static void
+listdir(Arena *a, Cfsys *fs, String8 name, b32 lflag, b32 nflag, b32 tflag)
+{
+	Temp scratch;
+	Cfid *fid;
+	Dirlist list;
+	Dirnode *node, *arr;
+	u64 i;
+
+	scratch = tempbegin(a);
+	fid = fs9open(scratch.a, fs, name, OREAD);
+	if (fid == NULL) {
+		fprintf(stderr, "9p: failed to open directory '%.*s'\n", str8varg(name));
+		tempend(scratch);
+		return;
+	}
+	memset(&list, 0, sizeof list);
+	if (fsdirreadall(scratch.a, fid, &list) < 0) {
+		fprintf(stderr, "9p: failed to read directory '%.*s'\n", str8varg(name));
+		fsclose(scratch.a, fid);
+		tempend(scratch);
+		return;
+	}
+	fsclose(scratch.a, fid);
+	if (list.cnt > 0 && !nflag) {
+		arr = pusharrnoz(scratch.a, Dirnode, list.cnt);
+		i = 0;
+		for (node = list.start; node != NULL; node = node->next) {
+			arr[i] = *node;
+			i++;
+		}
+		if (tflag)
+			qsort(arr, list.cnt, sizeof(Dirnode), timecmp);
+		else
+			qsort(arr, list.cnt, sizeof(Dirnode), dircmp);
+		for (i = 0; i < list.cnt; i++)
+			printdir(scratch.a, arr[i].dir, lflag);
+	} else {
+		for (node = list.start; node != NULL; node = node->next)
+			printdir(scratch.a, node->dir, lflag);
+	}
+	tempend(scratch);
+}
+
 static void
 cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 {
 	Temp scratch;
+	b32 dflag, lflag, nflag, tflag;
 	Cfsys *fs;
-	Cfid *fid;
 	String8node *namenode;
 	String8 name;
 	Dir d;
-	Dirlist list;
-	Dirnode *node;
 
 	scratch = tempbegin(a);
+	dflag = cmdhasflag(&parsed, str8lit("d"));
+	lflag = cmdhasflag(&parsed, str8lit("l"));
+	nflag = cmdhasflag(&parsed, str8lit("n"));
+	tflag = cmdhasflag(&parsed, str8lit("t"));
 	fs = fsconnect(scratch.a, addr, aname);
 	if (fs == NULL) {
 		tempend(scratch);
@@ -261,26 +376,10 @@ cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 			tempend(scratch);
 			return;
 		}
-		if (d.mode & 0x80000000) { /* DMDIR = 0x80000000 */
-			fid = fs9open(scratch.a, fs, name, OREAD);
-			if (fid == NULL) {
-				fprintf(stderr, "9p: failed to open directory '%.*s'\n", str8varg(name));
-				fs9unmount(scratch.a, fs);
-				tempend(scratch);
-				return;
-			}
-			if (fsdirreadall(scratch.a, fid, &list) < 0) {
-				fprintf(stderr, "9p: failed to read directory '%.*s'\n", str8varg(name));
-				fsclose(scratch.a, fid);
-				fs9unmount(scratch.a, fs);
-				tempend(scratch);
-				return;
-			}
-			fsclose(scratch.a, fid);
-			for (node = list.start; node != NULL; node = node->next)
-				printf("%.*s\n", str8varg(node->dir.name));
-		} else
-			printf("%.*s\n", str8varg(d.name));
+		if ((d.mode & DMDIR) && !dflag)
+			listdir(scratch.a, fs, name, lflag, nflag, tflag);
+		else
+			printdir(scratch.a, d, lflag);
 	} else {
 		for (; namenode != NULL; namenode = namenode->next) {
 			name = namenode->str;
@@ -289,23 +388,10 @@ cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 				fprintf(stderr, "9p: failed to stat '%.*s'\n", str8varg(name));
 				continue;
 			}
-			if (d.mode & 0x80000000) { /* DMDIR = 0x80000000 */
-				fid = fs9open(scratch.a, fs, name, OREAD);
-				if (fid == NULL) {
-					fprintf(stderr, "9p: failed to open '%.*s'\n", str8varg(name));
-					continue;
-				}
-				memset(&list, 0, sizeof(list));
-				if (fsdirreadall(scratch.a, fid, &list) < 0) {
-					fprintf(stderr, "9p: failed to read directory '%.*s'\n", str8varg(name));
-					fsclose(scratch.a, fid);
-					continue;
-				}
-				fsclose(scratch.a, fid);
-				for (node = list.start; node != NULL; node = node->next)
-					printf("%.*s\n", str8varg(node->dir.name));
-			} else
-				printf("%.*s\n", str8varg(d.name));
+			if ((d.mode & DMDIR) && !dflag)
+				listdir(scratch.a, fs, name, lflag, nflag, tflag);
+			else
+				printdir(scratch.a, d, lflag);
 		}
 	}
 	fs9unmount(scratch.a, fs);
