@@ -595,14 +595,12 @@ fsdirread(Arena *a, Cfid *fid, Dirlist *list)
 static s64
 fsdirreadall(Arena *a, Cfid *fid, Dirlist *list)
 {
-	Temp scratch;
 	u8 *buf;
 	s64 ts, n;
 	u64 nleft;
 
 	if (fid == NULL || list == NULL)
 		return -1;
-	scratch = tempbegin(a);
 	buf = pusharrnoz(a, u8, DIRBUFMAX);
 	ts = 0;
 	nleft = DIRBUFMAX;
@@ -615,7 +613,6 @@ fsdirreadall(Arena *a, Cfid *fid, Dirlist *list)
 	}
 	if (ts >= 0)
 		ts = dirpackage(a, buf, ts, list);
-	tempend(scratch);
 	if (ts == 0 && n < 0)
 		return -1;
 	return ts;

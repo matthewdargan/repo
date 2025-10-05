@@ -45,7 +45,7 @@ usage(void)
 	        " write name\n"
 	        " remove name...\n"
 	        " stat name\n"
-	        " ls name\n");
+	        " ls name...\n");
 }
 
 static Cfsys *
@@ -261,7 +261,7 @@ cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 			tempend(scratch);
 			return;
 		}
-		if (d.mode & 0x80000000) { /* DMDIR = 0x80000000 */
+		if (d.mode & DMDIR) {
 			fid = fs9open(scratch.a, fs, name, OREAD);
 			if (fid == NULL) {
 				fprintf(stderr, "9p: failed to open directory '%.*s'\n", str8varg(name));
@@ -289,7 +289,7 @@ cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 				fprintf(stderr, "9p: failed to stat '%.*s'\n", str8varg(name));
 				continue;
 			}
-			if (d.mode & 0x80000000) { /* DMDIR = 0x80000000 */
+			if (d.mode & DMDIR) {
 				fid = fs9open(scratch.a, fs, name, OREAD);
 				if (fid == NULL) {
 					fprintf(stderr, "9p: failed to open '%.*s'\n", str8varg(name));
