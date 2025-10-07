@@ -1,9 +1,10 @@
 {
-  disko,
+  inputs,
+  pkgs,
   self,
   ...
-}: {pkgs, ...}: {
-  imports = [disko.nixosModules.disko];
+}: {
+  imports = [inputs.disko.nixosModules.disko];
   boot = {
     kernel.sysctl = {
       "net.ipv4.conf.all.forwarding" = 1;

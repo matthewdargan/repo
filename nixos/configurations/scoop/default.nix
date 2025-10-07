@@ -1,8 +1,9 @@
 {
-  nixpkgs,
+  inputs,
+  pkgs,
   self,
   ...
-}: {pkgs, ...}: {
+}: {
   imports = [./hardware.nix];
   boot.loader = {
     efi.canTouchEfiVariables = true;
@@ -31,8 +32,8 @@
       automatic = true;
       options = "--delete-older-than 5d";
     };
-    nixPath = ["nixpkgs=${nixpkgs}"];
-    registry.nixpkgs.flake = nixpkgs;
+    nixPath = ["nixpkgs=${inputs.nixpkgs}"];
+    registry.nixpkgs.flake = inputs.nixpkgs;
     settings = {
       auto-optimise-store = true;
       experimental-features = [

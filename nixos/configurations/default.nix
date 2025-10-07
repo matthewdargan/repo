@@ -1,24 +1,37 @@
-{inputs, ...}: {
+{
+  inputs,
+  self,
+  ...
+}: {
   flake.nixosConfigurations = {
     nas = inputs.nixpkgs.lib.nixosSystem {
       modules = [
-        (import ./nas inputs)
+        ./nas
         ../../modules/settings.nix
       ];
+      specialArgs = {
+        inherit inputs self;
+      };
       system = "x86_64-linux";
     };
     router = inputs.nixpkgs.lib.nixosSystem {
       modules = [
-        (import ./router inputs)
+        ./router.nix
         ../../modules/settings.nix
       ];
+      specialArgs = {
+        inherit inputs self;
+      };
       system = "x86_64-linux";
     };
     scoop = inputs.nixpkgs.lib.nixosSystem {
       modules = [
-        (import ./scoop inputs)
+        ./scoop
         ../../modules/settings.nix
       ];
+      specialArgs = {
+        inherit inputs self;
+      };
       system = "x86_64-linux";
     };
   };

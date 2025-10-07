@@ -1,11 +1,8 @@
 {
-  nixpkgs,
-  self,
-  u9fs,
-  ...
-}: {
   config,
+  inputs,
   pkgs,
+  self,
   ...
 }: {
   imports = [./hardware.nix];
@@ -53,8 +50,8 @@
       automatic = true;
       options = "--delete-older-than 5d";
     };
-    nixPath = ["nixpkgs=${nixpkgs}"];
-    registry.nixpkgs.flake = nixpkgs;
+    nixPath = ["nixpkgs=${inputs.nixpkgs}"];
+    registry.nixpkgs.flake = inputs.nixpkgs;
     settings = {
       auto-optimise-store = true;
       experimental-features = [
@@ -144,7 +141,7 @@
         after = ["network.target"];
         description = "9P filesystem server";
         serviceConfig = {
-          ExecStart = "${u9fs.packages.${pkgs.system}.u9fs}/bin/u9fs -D -a none -u storage -d /media";
+          ExecStart = "${inputs.u9fs.packages.${pkgs.system}.u9fs}/bin/u9fs -D -a none -u storage -d /media";
           StandardError = "journal";
           StandardInput = "socket";
           User = "storage";
