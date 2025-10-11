@@ -1,6 +1,6 @@
 {self, ...}: {pkgs, ...}: {
   home = {
-    packages = [self.packages.${pkgs.system}.neovim];
+    packages = [pkgs.claude-code self.packages.${pkgs.system}.neovim];
     stateVersion = "25.11";
     username = "mpd";
   };
