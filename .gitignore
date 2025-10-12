@@ -4,4 +4,5 @@ compile_commands.json
 .direnv
 .pre-commit-config.yaml
 result
+tags
 testdata

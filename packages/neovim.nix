@@ -5,7 +5,18 @@
     ...
   }: {
     packages.neovim = inputs'.nixvim.legacyPackages.makeNixvimWithModule {
-      module = {
+      module = {helpers, ...}: {
+        autoCmd = [
+          {
+            callback = helpers.mkRaw ''
+              function()
+                vim.fn.system("ctags -R --fields=+iaS --extra=+q --exclude=.direnv --exclude=.git --exclude=result .")
+              end
+            '';
+            event = ["BufWritePost"];
+            pattern = ["*.c" "*.h"];
+          }
+        ];
         clipboard = {
           providers.wl-copy.enable = true;
           register = "unnamedplus";
@@ -14,7 +25,10 @@
           enable = true;
           settings.style = "night";
         };
-        extraPackages = [pkgs.ripgrep];
+        extraPackages = [
+          pkgs.ripgrep
+          pkgs.universal-ctags
+        ];
         globals.mapleader = " ";
         keymaps = [
           {
@@ -32,6 +46,7 @@
           number = true;
           relativenumber = true;
           scrolloff = 8;
+          shiftwidth = 4;
           smartindent = true;
           softtabstop = 4;
           tabstop = 4;
@@ -48,6 +63,7 @@
               "<leader>b" = "buffers";
               "<leader>f" = "find_files";
               "<leader>g" = "live_grep";
+              "<leader>t" = "tags";
             };
           };
           treesitter = {
