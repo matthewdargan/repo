@@ -60,7 +60,7 @@ static void
 debug9pprint(String8 dir, Fcall fc)
 {
 	u32 i;
-	if (!debug9p)
+	if (!debug9pclient)
 		return;
 	fprintf(stderr, "%.*s ", str8varg(dir));
 	switch (fc.type) {

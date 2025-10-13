@@ -7,6 +7,7 @@
     ./installer-image.nix
     ./mediasrv.nix
     ./neovim.nix
+    ./ramfs.nix
     ./tordl.nix
     ./tor.nix
     ./torrss.nix

@@ -33,11 +33,7 @@ struct Rng1u64 {
 	u64 max;
 };
 
-enum {
-	CASEINSENSITIVE = 1 << 0,
-	RSIDETOL = 1 << 1,
-	SPLITKEEPEMPTY = 1 << 0,
-};
+enum { CASEINSENSITIVE = 1 << 0, RSIDETOL = 1 << 1, SPLITKEEPEMPTY = 1 << 0 };
 
 typedef struct Stringjoin Stringjoin;
 struct Stringjoin {

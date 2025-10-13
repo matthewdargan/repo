@@ -69,9 +69,7 @@ struct Datetime {
 	u32 year; /* 1 = 1 CE, 0 = 1 BC */
 };
 
-enum {
-	ISDIR = 1 << 0,
-};
+enum { ISDIR = 1 << 0 };
 
 typedef struct Fprops Fprops;
 struct Fprops {

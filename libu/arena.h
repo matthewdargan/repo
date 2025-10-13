@@ -1,10 +1,7 @@
 #ifndef ARENA_H
 #define ARENA_H
 
-enum {
-	ARENAHDRSZ = 128,
-	LARGEPAGES = 1 << 0,
-};
+enum { ARENAHDRSZ = 128, LARGEPAGES = 1 << 0 };
 
 typedef struct Arenaparams Arenaparams;
 struct Arenaparams {

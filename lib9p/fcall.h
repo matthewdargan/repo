@@ -96,7 +96,7 @@ enum {
 	Tstat = 124,
 	Rstat = 125,
 	Twstat = 126,
-	Rwstat = 127,
+	Rwstat = 127
 };
 
 #define putb1(p, v) ((p)[0] = (u8)(v))
