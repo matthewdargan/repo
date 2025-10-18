@@ -16,10 +16,12 @@
 #include "libu/arena.h"
 #include "libu/string.h"
 #include "libu/os.h"
+#include "libu/json.h"
 #include "libu/u.c"
 #include "libu/arena.c"
 #include "libu/string.c"
 #include "libu/os.c"
+#include "libu/json.c"
 #include <tree_sitter/api.h>
 #include "parser_c.c"
 /* clang-format on */
@@ -70,10 +72,8 @@ static String8
 extractfunctionsignature(Arena *a, String8 source, TSNode node)
 {
 	String8 signature;
-	String8list lines;
-	String8node *linenode;
 	u32 startbyte, endbyte;
-	u64 bracecount, i;
+	u64 i;
 	b32 foundopenbrace;
 
 	startbyte = ts_node_start_byte(node);
@@ -81,9 +81,7 @@ extractfunctionsignature(Arena *a, String8 source, TSNode node)
 	if (startbyte >= source.len || endbyte > source.len || endbyte <= startbyte)
 		return str8zero();
 	signature = str8substr(source, rng1u64(startbyte, endbyte));
-	lines = str8split(a, signature, (u8 *)"\n", 1, 0);
 	foundopenbrace = 0;
-	bracecount = 0;
 	for (i = 0; i < signature.len; i++) {
 		if (signature.str[i] == '{') {
 			foundopenbrace = 1;
@@ -169,37 +167,126 @@ listcfiles(Arena *a, String8 dirpath)
 }
 
 static void
-printjsonescaped(String8 s)
+symbolresult(Arena *a, Jsonbuilder *b, Symbollist *symbols)
 {
-	u64 i;
-	u8 c;
+	Symbolnode *node;
+	Symbol *sym;
+	Jsonbuilder textbuilder;
+	String8 textjson;
+	u64 estsize;
 
-	for (i = 0; i < s.len; i++) {
-		c = s.str[i];
-		switch (c) {
-			case '"':
-				printf("\\\"");
-				break;
-			case '\\':
-				printf("\\\\");
-				break;
-			case '\n':
-				printf("\\n");
-				break;
-			case '\r':
-				printf("\\r");
-				break;
-			case '\t':
-				printf("\\t");
-				break;
-			default:
-				if (c >= 32 && c <= 126)
-					putchar(c);
-				else
-					printf("\\u%04x", c);
-				break;
-		}
+	jsonbobjstart(b);
+	jsonbobjkey(b, str8lit("content"));
+	jsonbarrstart(b);
+
+	jsonbobjstart(b);
+	jsonbobjkey(b, str8lit("type"));
+	jsonbwritestr(b, str8lit("text"));
+	jsonbobjcomma(b);
+	jsonbobjkey(b, str8lit("text"));
+
+	estsize = 1024 + symbols->count * 200;
+	textbuilder = jsonbuilder(a, estsize);
+	jsonbobjstart(&textbuilder);
+	jsonbobjkey(&textbuilder, str8lit("symbols"));
+	jsonbarrstart(&textbuilder);
+
+	for (node = symbols->start; node != NULL; node = node->next) {
+		sym = &node->symbol;
+		if (node != symbols->start)
+			jsonbarrcomma(&textbuilder);
+		jsonbobjstart(&textbuilder);
+		jsonbobjkey(&textbuilder, str8lit("name"));
+		jsonbwritestr(&textbuilder, sym->name);
+		jsonbobjcomma(&textbuilder);
+		jsonbobjkey(&textbuilder, str8lit("type"));
+		jsonbwritestr(&textbuilder, sym->type);
+		jsonbobjcomma(&textbuilder);
+		jsonbobjkey(&textbuilder, str8lit("file"));
+		jsonbwritestr(&textbuilder, sym->file);
+		jsonbobjcomma(&textbuilder);
+		jsonbobjkey(&textbuilder, str8lit("line"));
+		jsonbwritenum(&textbuilder, sym->line);
+		jsonbobjcomma(&textbuilder);
+		jsonbobjkey(&textbuilder, str8lit("signature"));
+		jsonbwritestr(&textbuilder, sym->signature);
+		jsonbobjend(&textbuilder);
 	}
+
+	jsonbarrend(&textbuilder);
+	jsonbobjend(&textbuilder);
+	textjson = jsonbfinish(&textbuilder);
+	jsonbwritestr(b, textjson);
+
+	jsonbobjend(b);
+	jsonbarrend(b);
+	jsonbobjend(b);
+}
+
+static void
+printmcpresponse(Arena *a, String8 requestid, String8 result)
+{
+	Jsonbuilder b;
+	String8 output;
+	u64 estsize;
+
+	estsize = 100 + requestid.len + result.len;
+	b = jsonbuilder(a, estsize);
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("jsonrpc"));
+	jsonbwritestr(&b, str8lit("2.0"));
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("id"));
+	if (requestid.len > 0)
+		jsonbwritestr(&b, requestid);
+	else
+		jsonbwritenull(&b);
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("result"));
+	jsonbwrite(&b, result);
+	jsonbobjend(&b);
+
+	output = jsonbfinish(&b);
+	printf("%.*s\n", str8varg(output));
+	fflush(stdout);
+}
+
+static void
+printmcperror(Arena *a, String8 requestid, s32 code, String8 message)
+{
+	Jsonbuilder b;
+	String8 output;
+	u64 estsize;
+
+	estsize = 150 + requestid.len + message.len;
+	b = jsonbuilder(a, estsize);
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("jsonrpc"));
+	jsonbwritestr(&b, str8lit("2.0"));
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("id"));
+	if (requestid.len > 0)
+		jsonbwritestr(&b, requestid);
+	else
+		jsonbwritenull(&b);
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("error"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("code"));
+	jsonbwritenum(&b, code);
+	jsonbobjcomma(&b);
+	jsonbobjkey(&b, str8lit("message"));
+	jsonbwritestr(&b, message);
+	jsonbobjend(&b);
+	jsonbobjend(&b);
+
+	output = jsonbfinish(&b);
+	printf("%.*s\n", str8varg(output));
+	fflush(stdout);
 }
 
 static void
@@ -448,17 +535,19 @@ parsecfiletreesitter(Arena *a, String8 filepath, String8 source)
 	return symbols;
 }
 
-static void
-handlesymbolsearch(Arena *a, String8 pattern)
+static String8
+symbolsearch(Arena *a, String8 pattern)
 {
-	Symbollist allsymbols, filesymbols;
+	Symbollist allsymbols, filesymbols, filtered;
 	Symbolnode *node, *symnode;
 	Symbol *sym;
 	String8array files;
 	String8 source;
-	u64 d, i, matches;
+	Jsonbuilder b;
+	u64 d, i, estsize;
 
 	memset(&allsymbols, 0, sizeof(allsymbols));
+	memset(&filtered, 0, sizeof(filtered));
 	for (d = 0; d < nelem(directories); d++) {
 		files = listcfiles(a, directories[d]);
 		for (i = 0; i < files.cnt; i++) {
@@ -475,79 +564,188 @@ handlesymbolsearch(Arena *a, String8 pattern)
 			}
 		}
 	}
-	printf("{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"symbols\\\":[");
-	matches = 0;
 	for (node = allsymbols.start; node != NULL; node = node->next) {
 		sym = &node->symbol;
 		if (pattern.len == 0 ||
 		    (sym->name.len >= pattern.len && str8index(sym->name, 0, pattern, CASEINSENSITIVE) < sym->name.len)) {
-			if (matches > 0)
-				printf(",");
-			printf("{\\\"name\\\":\\\"");
-			printjsonescaped(sym->name);
-			printf("\\\",\\\"type\\\":\\\"");
-			printjsonescaped(sym->type);
-			printf("\\\",\\\"file\\\":\\\"");
-			printjsonescaped(sym->file);
-			printf("\\\",\\\"line\\\":%u,\\\"signature\\\":\\\"", sym->line);
-			printjsonescaped(sym->signature);
-			printf("\\\"}");
-			matches++;
+			symbollistpush(a, &filtered, *sym);
 		}
 	}
-	printf("]}\"}]}");
+	estsize = 1024 + filtered.count * 200;
+	b = jsonbuilder(a, estsize);
+	symbolresult(a, &b, &filtered);
+	return jsonbfinish(&b);
 }
 
 static void
-handleinitialize(String8 requestid)
+initialize(Arena *a, String8 requestid)
 {
-	printf("{\"jsonrpc\":\"2.0\",\"id\":");
-	if (requestid.len > 0)
-		printjsonescaped(requestid);
-	else
-		printf("null");
-	printf(
-	    ",\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{"
-	    "\"listChanged\":false}},\"serverInfo\":{\"name\":\"mcpsrv\",\"version\":\"0.1.0\"}}}\n");
-	fflush(stdout);
+	Jsonbuilder b;
+	String8 result;
+
+	b = jsonbuilder(a, 512);
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("protocolVersion"));
+	jsonbwritestr(&b, str8lit("2024-11-05"));
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("capabilities"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("tools"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("listChanged"));
+	jsonbwritebool(&b, 0);
+	jsonbobjend(&b);
+	jsonbobjend(&b);
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("serverInfo"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("name"));
+	jsonbwritestr(&b, str8lit("mcpsrv"));
+	jsonbobjcomma(&b);
+	jsonbobjkey(&b, str8lit("version"));
+	jsonbwritestr(&b, str8lit("0.1.0"));
+	jsonbobjend(&b);
+	jsonbobjend(&b);
+
+	result = jsonbfinish(&b);
+	printmcpresponse(a, requestid, result);
 }
 
 static void
-handletoolslist(String8 requestid)
+toolslist(Arena *a, String8 requestid)
 {
-	printf("{\"jsonrpc\":\"2.0\",\"id\":");
-	if (requestid.len > 0)
-		printjsonescaped(requestid);
-	else
-		printf("null");
-	printf(",\"result\":{\"tools\":[");
-	printf(
-	    "{\"name\":\"symbol_search\",\"description\":\"Search for symbols in C "
-	    "codebase\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"pattern\":{\"type\":\"string\","
-	    "\"description\":\"Search pattern for symbol names\"}},\"required\":[]}},");
-	printf(
-	    "{\"name\":\"symbol_info\",\"description\":\"Get detailed information about a specific "
-	    "symbol\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":"
-	    "\"Symbol name to look up\"}},\"required\":[\"name\"]}},");
-	printf(
-	    "{\"name\":\"file_symbols\",\"description\":\"List all symbols in a specific "
-	    "file\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"file\":{\"type\":\"string\",\"description\":"
-	    "\"File path to analyze\"}},\"required\":[\"file\"]}}");
-	printf("]}}\n");
-	fflush(stdout);
+	Jsonbuilder b;
+	String8 result;
+
+	b = jsonbuilder(a, 2048);
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("tools"));
+	jsonbarrstart(&b);
+
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("name"));
+	jsonbwritestr(&b, str8lit("symbol_search"));
+	jsonbobjcomma(&b);
+	jsonbobjkey(&b, str8lit("description"));
+	jsonbwritestr(&b, str8lit("Search for symbols in C codebase"));
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("inputSchema"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("type"));
+	jsonbwritestr(&b, str8lit("object"));
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("properties"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("pattern"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("type"));
+	jsonbwritestr(&b, str8lit("string"));
+	jsonbobjcomma(&b);
+	jsonbobjkey(&b, str8lit("description"));
+	jsonbwritestr(&b, str8lit("Search pattern for symbol names"));
+	jsonbobjend(&b);
+	jsonbobjend(&b);
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("required"));
+	jsonbarrstart(&b);
+	jsonbarrend(&b);
+	jsonbobjend(&b);
+	jsonbobjend(&b);
+	jsonbarrcomma(&b);
+
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("name"));
+	jsonbwritestr(&b, str8lit("symbol_info"));
+	jsonbobjcomma(&b);
+	jsonbobjkey(&b, str8lit("description"));
+	jsonbwritestr(&b, str8lit("Get detailed information about a specific symbol"));
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("inputSchema"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("type"));
+	jsonbwritestr(&b, str8lit("object"));
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("properties"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("name"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("type"));
+	jsonbwritestr(&b, str8lit("string"));
+	jsonbobjcomma(&b);
+	jsonbobjkey(&b, str8lit("description"));
+	jsonbwritestr(&b, str8lit("Symbol name to look up"));
+	jsonbobjend(&b);
+	jsonbobjend(&b);
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("required"));
+	jsonbarrstart(&b);
+	jsonbwritestr(&b, str8lit("name"));
+	jsonbarrend(&b);
+	jsonbobjend(&b);
+	jsonbobjend(&b);
+	jsonbarrcomma(&b);
+
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("name"));
+	jsonbwritestr(&b, str8lit("file_symbols"));
+	jsonbobjcomma(&b);
+	jsonbobjkey(&b, str8lit("description"));
+	jsonbwritestr(&b, str8lit("List all symbols in a specific file"));
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("inputSchema"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("type"));
+	jsonbwritestr(&b, str8lit("object"));
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("properties"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("file"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8lit("type"));
+	jsonbwritestr(&b, str8lit("string"));
+	jsonbobjcomma(&b);
+	jsonbobjkey(&b, str8lit("description"));
+	jsonbwritestr(&b, str8lit("File path to analyze"));
+	jsonbobjend(&b);
+	jsonbobjend(&b);
+	jsonbobjcomma(&b);
+
+	jsonbobjkey(&b, str8lit("required"));
+	jsonbarrstart(&b);
+	jsonbwritestr(&b, str8lit("file"));
+	jsonbarrend(&b);
+	jsonbobjend(&b);
+	jsonbobjend(&b);
+
+	jsonbarrend(&b);
+	jsonbobjend(&b);
+	result = jsonbfinish(&b);
+	printmcpresponse(a, requestid, result);
 }
 
-static void
-handlesymbolinfo(Arena *a, String8 symbolname)
+static String8
+symbolinfo(Arena *a, String8 symbolname)
 {
-	Symbollist allsymbols, filesymbols;
+	Symbollist allsymbols, filesymbols, filtered;
 	Symbolnode *node, *symnode;
 	Symbol *sym;
 	String8array files;
 	String8 source;
-	u64 d, i, matches;
+	Jsonbuilder b;
+	u64 d, i, estsize;
 
 	memset(&allsymbols, 0, sizeof(allsymbols));
+	memset(&filtered, 0, sizeof(filtered));
 	for (d = 0; d < nelem(directories); d++) {
 		files = listcfiles(a, directories[d]);
 		for (i = 0; i < files.cnt; i++) {
@@ -561,152 +759,97 @@ handlesymbolinfo(Arena *a, String8 symbolname)
 			}
 		}
 	}
-	printf("{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"symbols\\\":[");
-	matches = 0;
 	for (node = allsymbols.start; node != NULL; node = node->next) {
 		sym = &node->symbol;
 		if (str8cmp(sym->name, symbolname, 0)) {
-			if (matches > 0)
-				printf(",");
-			printf("{\\\"name\\\":\\\"");
-			printjsonescaped(sym->name);
-			printf("\\\",\\\"type\\\":\\\"");
-			printjsonescaped(sym->type);
-			printf("\\\",\\\"file\\\":\\\"");
-			printjsonescaped(sym->file);
-			printf("\\\",\\\"line\\\":%u,\\\"signature\\\":\\\"", sym->line);
-			printjsonescaped(sym->signature);
-			printf("\\\"}");
-			matches++;
+			symbollistpush(a, &filtered, *sym);
 		}
 	}
-	printf("]}\"}]}");
+	estsize = 1024 + filtered.count * 200;
+	b = jsonbuilder(a, estsize);
+	symbolresult(a, &b, &filtered);
+	return jsonbfinish(&b);
 }
 
-static void
-handlefilesymbols(Arena *a, String8 filepath)
+static String8
+filesymbols(Arena *a, String8 filepath)
 {
 	Symbollist symbols;
-	Symbolnode *node;
-	Symbol *sym;
 	String8 source;
-	u64 matches;
+	Jsonbuilder b;
+	u64 estsize;
 
 	memset(&symbols, 0, sizeof(symbols));
 	source = readfile(a, filepath);
 	if (source.len == 0 || source.str == NULL) {
-		printf("{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"error\\\":\\\"Failed to read file '%.*s'\\\"}\"}]}",
-		       str8varg(filepath));
-		return;
+		b = jsonbuilder(a, 512);
+		jsonbobjstart(&b);
+		jsonbobjkey(&b, str8lit("content"));
+		jsonbarrstart(&b);
+
+		jsonbobjstart(&b);
+		jsonbobjkey(&b, str8lit("type"));
+		jsonbwritestr(&b, str8lit("text"));
+		jsonbobjcomma(&b);
+		jsonbobjkey(&b, str8lit("text"));
+		jsonbwritec(&b, '"');
+		jsonbwrite(&b, str8lit("{\\\"error\\\":\\\"Failed to read file '"));
+		jsonbwrite(&b, filepath);
+		jsonbwrite(&b, str8lit("'\\\"}"));
+		jsonbwritec(&b, '"');
+		jsonbobjend(&b);
+
+		jsonbarrend(&b);
+		jsonbobjend(&b);
+		return jsonbfinish(&b);
 	}
 	symbols = parsecfiletreesitter(a, filepath, source);
-	if (symbols.count == 0) {
-		printf("{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"symbols\\\":[]}\"}]}");
-		return;
-	}
-	printf("{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"symbols\\\":[");
-	matches = 0;
-	for (node = symbols.start; node != NULL; node = node->next) {
-		sym = &node->symbol;
-		if (matches > 0)
-			printf(",");
-		printf("{\\\"name\\\":\\\"");
-		printjsonescaped(sym->name);
-		printf("\\\",\\\"type\\\":\\\"");
-		printjsonescaped(sym->type);
-		printf("\\\",\\\"file\\\":\\\"");
-		printjsonescaped(sym->file);
-		printf("\\\",\\\"line\\\":%u,\\\"signature\\\":\\\"", sym->line);
-		printjsonescaped(sym->signature);
-		printf("\\\"}");
-		matches++;
-	}
-	printf("]}\"}]}");
+	estsize = 1024 + symbols.count * 200;
+	b = jsonbuilder(a, estsize);
+	symbolresult(a, &b, &symbols);
+	return jsonbfinish(&b);
 }
 
 static void
-handletoolcall(Arena *a, String8 requestid, String8 toolname, String8 arguments)
+toolcall(Arena *a, String8 requestid, String8 toolname, String8 arguments)
 {
-	String8 pattern, filepath, symbolname;
-	u64 patternstart, patternend, filestart, fileend, namestart, nameend;
+	Jsonvalue argsobj, patternval, nameval, fileval;
+	String8 pattern, filepath, symbolname, result;
 
+	argsobj = jsonparse(a, arguments);
 	if (str8cmp(toolname, str8lit("symbol_search"), 0)) {
 		pattern = str8zero();
-		if (arguments.len > 10 && arguments.str != NULL) {
-			patternstart = str8index(arguments, 0, str8lit("\"pattern\":\""), 0);
-			if (patternstart < arguments.len) {
-				patternstart += 11;
-				if (patternstart < arguments.len) {
-					patternend = str8index(arguments, patternstart, str8lit("\""), 0);
-					if (patternend < arguments.len)
-						pattern = str8substr(arguments, rng1u64(patternstart, patternend));
-				}
-			}
+		if (argsobj.type == JSON_OBJECT) {
+			patternval = jsonget(argsobj, str8lit("pattern"));
+			if (patternval.type == JSON_STRING)
+				pattern = patternval.string;
 		}
-		printf("{\"jsonrpc\":\"2.0\",\"id\":");
-		if (requestid.len > 0)
-			printjsonescaped(requestid);
-		else
-			printf("null");
-		printf(",\"result\":");
-		handlesymbolsearch(a, pattern);
-		printf("}\n");
-		fflush(stdout);
+		result = symbolsearch(a, pattern);
+		printmcpresponse(a, requestid, result);
 	} else if (str8cmp(toolname, str8lit("symbol_info"), 0)) {
 		symbolname = str8zero();
-		if (arguments.len > 8 && arguments.str != NULL) {
-			namestart = str8index(arguments, 0, str8lit("\"name\":\""), 0);
-			if (namestart < arguments.len) {
-				namestart += 8;
-				if (namestart < arguments.len) {
-					nameend = str8index(arguments, namestart, str8lit("\""), 0);
-					if (nameend < arguments.len)
-						symbolname = str8substr(arguments, rng1u64(namestart, nameend));
-				}
-			}
+		if (argsobj.type == JSON_OBJECT) {
+			nameval = jsonget(argsobj, str8lit("name"));
+			if (nameval.type == JSON_STRING)
+				symbolname = nameval.string;
 		}
-		printf("{\"jsonrpc\":\"2.0\",\"id\":");
-		if (requestid.len > 0)
-			printjsonescaped(requestid);
-		else
-			printf("null");
-		printf(",\"result\":");
-		handlesymbolinfo(a, symbolname);
-		printf("}\n");
+		result = symbolinfo(a, symbolname);
+		printmcpresponse(a, requestid, result);
 	} else if (str8cmp(toolname, str8lit("file_symbols"), 0)) {
 		filepath = str8zero();
-		if (arguments.len > 8 && arguments.str != NULL) {
-			filestart = str8index(arguments, 0, str8lit("\"file\":\""), 0);
-			if (filestart < arguments.len) {
-				filestart += 8;
-				if (filestart < arguments.len) {
-					fileend = str8index(arguments, filestart, str8lit("\""), 0);
-					if (fileend < arguments.len)
-						filepath = str8substr(arguments, rng1u64(filestart, fileend));
-				}
-			}
+		if (argsobj.type == JSON_OBJECT) {
+			fileval = jsonget(argsobj, str8lit("file"));
+			if (fileval.type == JSON_STRING)
+				filepath = fileval.string;
 		}
-		printf("{\"jsonrpc\":\"2.0\",\"id\":");
-		if (requestid.len > 0)
-			printjsonescaped(requestid);
-		else
-			printf("null");
-		printf(",\"result\":");
-		handlefilesymbols(a, filepath);
-		printf("}\n");
-	} else {
-		printf("{\"jsonrpc\":\"2.0\",\"id\":");
-		if (requestid.len > 0)
-			printjsonescaped(requestid);
-		else
-			printf("null");
-		printf(",\"error\":{\"code\":-32601,\"message\":\"Unknown tool: %.*s\"}}\n", str8varg(toolname));
-	}
-	fflush(stdout);
+		result = filesymbols(a, filepath);
+		printmcpresponse(a, requestid, result);
+	} else
+		printmcperror(a, requestid, -32601, pushstr8f(a, "Unknown tool: %.*s", str8varg(toolname)));
 }
 
 static void
-handlemcprequest(Arena *a, String8 line)
+mcprequest(Arena *a, String8 line)
 {
 	String8 requestid, toolname, arguments;
 	u64 idstart, idend, namestart, nameend, argsstart, bracecount, argsend;
@@ -731,9 +874,9 @@ handlemcprequest(Arena *a, String8 line)
 		}
 	}
 	if (str8index(line, 0, str8lit("\"method\":\"initialize\""), 0) < line.len)
-		handleinitialize(requestid);
+		initialize(a, requestid);
 	else if (str8index(line, 0, str8lit("\"method\":\"tools/list\""), 0) < line.len)
-		handletoolslist(requestid);
+		toolslist(a, requestid);
 	else if (str8index(line, 0, str8lit("\"method\":\"tools/call\""), 0) < line.len) {
 		namestart = str8index(line, 0, str8lit("\"name\":\""), 0);
 		if (namestart < line.len) {
@@ -759,7 +902,7 @@ handlemcprequest(Arena *a, String8 line)
 							arguments = str8substr(line, rng1u64(argsstart, argsend - 1));
 					}
 				}
-				handletoolcall(a, requestid, toolname, arguments);
+				toolcall(a, requestid, toolname, arguments);
 			}
 		}
 	}
@@ -790,7 +933,7 @@ main(void)
 		}
 		input = str8((u8 *)line, len);
 		temp = tempbegin(arena);
-		handlemcprequest(arena, input);
+		mcprequest(arena, input);
 		tempend(temp);
 	}
 	arenarelease(arena);
