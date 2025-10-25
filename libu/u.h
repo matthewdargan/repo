@@ -53,26 +53,32 @@ typedef double f64;
 #endif
 
 typedef struct U64array U64array;
-struct U64array {
+struct U64array
+{
 	u64 *v;
 	u64 cnt;
 };
 
 typedef struct Datetime Datetime;
-struct Datetime {
-	u16 msec; /* [0,999] */
-	u16 sec;  /* [0,60] */
-	u16 min;  /* [0,59] */
-	u16 hour; /* [0,24] */
-	u16 day;  /* [0,30] */
+struct Datetime
+{
+	u16 msec;  // [0,999]
+	u16 sec;   // [0,60]
+	u16 min;   // [0,59]
+	u16 hour;  // [0,24]
+	u16 day;   // [0,30]
 	u32 mon;
-	u32 year; /* 1 = 1 CE, 0 = 1 BC */
+	u32 year;  // 1 = 1 CE, 0 = 1 BC
 };
 
-enum { ISDIR = 1 << 0 };
+enum
+{
+	ISDIR = 1 << 0,
+};
 
 typedef struct Fprops Fprops;
-struct Fprops {
+struct Fprops
+{
 	u64 size;
 	u64 modified;
 	u64 created;
@@ -87,4 +93,4 @@ static u64 min(u64 a, u64 b);
 static u64 datetimetodense(Datetime dt);
 static Datetime densetodatetime(u64 t);
 
-#endif /* U_H */
+#endif  // U_H

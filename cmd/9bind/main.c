@@ -26,37 +26,39 @@
 int
 main(int argc, char *argv[])
 {
-	Arenaparams ap;
-	Arena *arena;
-	String8list args;
-	Cmd parsed;
-	String8 old, new;
-	struct stat st;
-
-	sysinfo.nprocs = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo.pagesz = sysconf(_SC_PAGESIZE);
-	sysinfo.lpagesz = 0x200000;
-	ap.flags = arenaflags;
-	ap.ressz = arenaressz;
-	ap.cmtsz = arenacmtsz;
-	arena = arenaalloc(ap);
-	args = osargs(arena, argc, argv);
-	parsed = cmdparse(arena, args);
-	if (parsed.inputs.nnode != 2) {
+	sysinfo = (Sysinfo){
+	    .nprocs = sysconf(_SC_NPROCESSORS_ONLN),
+	    .pagesz = sysconf(_SC_PAGESIZE),
+	    .lpagesz = 0x200000,
+	};
+	Arenaparams ap = {
+	    .flags = arenaflags,
+	    .ressz = arenaressz,
+	    .cmtsz = arenacmtsz,
+	};
+	Arena *arena = arenaalloc(ap);
+	String8list args = osargs(arena, argc, argv);
+	Cmd parsed = cmdparse(arena, args);
+	if (parsed.inputs.nnode != 2)
+	{
 		fprintf(stderr, "usage: 9bind old new\n");
 		return 1;
 	}
-	old = parsed.inputs.start->str;
-	new = parsed.inputs.start->next->str;
-	if (stat((char *)new.str, &st) || access((char *)new.str, W_OK)) {
+	String8 old = parsed.inputs.start->str;
+	String8 new = parsed.inputs.start->next->str;
+	struct stat st = {0};
+	if (stat((char *)new.str, &st) || access((char *)new.str, W_OK))
+	{
 		fprintf(stderr, "9bind: %.*s: %s\n", str8varg(new), strerror(errno));
 		return 1;
 	}
-	if (st.st_mode & S_ISVTX) {
+	if (st.st_mode & S_ISVTX)
+	{
 		fprintf(stderr, "9bind: refusing to bind over sticky directory %.*s\n", str8varg(new));
 		return 1;
 	}
-	if (mount((char *)old.str, (char *)new.str, NULL, MS_BIND, NULL)) {
+	if (mount((char *)old.str, (char *)new.str, NULL, MS_BIND, NULL))
+	{
 		fprintf(stderr, "9bind: bind failed: %s\n", strerror(errno));
 		return 1;
 	}

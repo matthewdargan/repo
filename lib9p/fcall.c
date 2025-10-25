@@ -3,7 +3,8 @@ putstr(u8 *p, String8 s)
 {
 	putb2(p, s.len);
 	p += 2;
-	if (s.len > 0) {
+	if (s.len > 0)
+	{
 		memcpy(p, s.str, s.len);
 		p += s.len;
 	}
@@ -25,20 +26,26 @@ putqid(u8 *p, Qid qid)
 static u8 *
 getstr(u8 *p, u8 *end, String8 *s)
 {
-	u32 len;
-
 	if (p + 2 > end)
+	{
 		return NULL;
-	len = getb2(p);
+	}
+	u32 len = getb2(p);
 	p += 2;
 	if (p + len > end)
+	{
 		return NULL;
+	}
 	s->len = len;
-	if (len > 0) {
+	if (len > 0)
+	{
 		s->str = p;
 		p += len;
-	} else
+	}
+	else
+	{
 		s->str = NULL;
+	}
 	return p;
 }
 
@@ -46,7 +53,9 @@ static u8 *
 getqid(u8 *p, u8 *end, Qid *qid)
 {
 	if (p + 13 > end)
+	{
 		return NULL;
+	}
 	qid->type = getb1(p);
 	p += 1;
 	qid->vers = getb4(p);
@@ -59,105 +68,148 @@ getqid(u8 *p, u8 *end, Qid *qid)
 static u32
 fcallsize(Fcall fc)
 {
-	u32 size, i;
-
-	size = 4 + 1 + 2;
-	switch (fc.type) {
+	u32 size = 4 + 1 + 2;
+	switch (fc.type)
+	{
 		case Tversion:
 		case Rversion:
+		{
 			size += 4;
 			size += 2 + fc.version.len;
-			break;
+		}
+		break;
 		case Tauth:
+		{
 			size += 4;
 			size += 2 + fc.uname.len;
 			size += 2 + fc.aname.len;
-			break;
+		}
+		break;
 		case Rauth:
+		{
 			size += 13;
-			break;
+		}
+		break;
 		case Rerror:
+		{
 			size += 2 + fc.ename.len;
-			break;
+		}
+		break;
 		case Tflush:
+		{
 			size += 2;
-			break;
+		}
+		break;
 		case Rflush:
 			break;
 		case Tattach:
+		{
 			size += 4;
 			size += 4;
 			size += 2 + fc.uname.len;
 			size += 2 + fc.aname.len;
-			break;
+		}
+		break;
 		case Rattach:
+		{
 			size += 13;
-			break;
+		}
+		break;
 		case Twalk:
+		{
 			size += 4;
 			size += 4;
 			size += 2;
-			for (i = 0; i < fc.nwname; i++)
+			for (u32 i = 0; i < fc.nwname; i++)
+			{
 				size += 2 + fc.wname[i].len;
-			break;
+			}
+		}
+		break;
 		case Rwalk:
+		{
 			size += 2;
 			size += fc.nwqid * 13;
-			break;
+		}
+		break;
 		case Topen:
+		{
 			size += 4;
 			size++;
-			break;
+		}
+		break;
 		case Ropen:
 		case Rcreate:
+		{
 			size += 13;
 			size += 4;
-			break;
+		}
+		break;
 		case Tcreate:
+		{
 			size += 4;
 			size += 2 + fc.name.len;
 			size += 4;
 			size++;
-			break;
+		}
+		break;
 		case Tread:
+		{
 			size += 4;
 			size += 8;
 			size += 4;
-			break;
+		}
+		break;
 		case Rread:
+		{
 			size += 4;
 			size += fc.data.len;
-			break;
+		}
+		break;
 		case Twrite:
+		{
 			size += 4;
 			size += 8;
 			size += 4;
 			size += fc.data.len;
-			break;
+		}
+		break;
 		case Rwrite:
+		{
 			size += 4;
-			break;
+		}
+		break;
 		case Tclunk:
 		case Tremove:
+		{
 			size += 4;
-			break;
+		}
+		break;
 		case Rclunk:
 		case Rremove:
 			break;
 		case Tstat:
+		{
 			size += 4;
-			break;
+		}
+		break;
 		case Rstat:
+		{
 			size += 2 + fc.stat.len;
-			break;
+		}
+		break;
 		case Twstat:
+		{
 			size += 4;
 			size += 2 + fc.stat.len;
-			break;
+		}
+		break;
 		case Rwstat:
 			break;
 		default:
+		{
 			return 0;
+		}
 	}
 	return size;
 }
@@ -165,58 +217,75 @@ fcallsize(Fcall fc)
 static String8
 fcallencode(Arena *a, Fcall fc)
 {
-	String8 msg;
-	u8 *p;
-	u32 i;
-
-	msg.len = fcallsize(fc);
-	if (msg.len == 0)
+	u32 msglen = fcallsize(fc);
+	if (msglen == 0)
+	{
 		return str8zero();
-	msg.str = pusharrnoz(a, u8, msg.len);
-	p = msg.str;
+	}
+	String8 msg = {
+	    .str = pusharrnoz(a, u8, msglen),
+	    .len = msglen,
+	};
+	u8 *p = msg.str;
 	putb4(p, msg.len);
 	p += 4;
 	putb1(p, fc.type);
 	p++;
 	putb2(p, fc.tag);
 	p += 2;
-	switch (fc.type) {
+	switch (fc.type)
+	{
 		case Tversion:
 		case Rversion:
+		{
 			putb4(p, fc.msize);
 			p += 4;
 			p = putstr(p, fc.version);
-			break;
+		}
+		break;
 		case Tauth:
+		{
 			putb4(p, fc.afid);
 			p += 4;
 			p = putstr(p, fc.uname);
 			p = putstr(p, fc.aname);
-			break;
+		}
+		break;
 		case Rauth:
+		{
 			p = putqid(p, fc.aqid);
-			break;
+		}
+		break;
 		case Rerror:
+		{
 			p = putstr(p, fc.ename);
-			break;
+		}
+		break;
 		case Tflush:
+		{
 			putb2(p, fc.oldtag);
 			p += 2;
-			break;
+		}
+		break;
 		case Rflush:
 			break;
 		case Tattach:
+		{
 			putb4(p, fc.fid);
 			p += 4;
 			putb4(p, fc.afid);
 			p += 4;
 			p = putstr(p, fc.uname);
 			p = putstr(p, fc.aname);
-			break;
+		}
+		break;
 		case Rattach:
+		{
 			p = putqid(p, fc.qid);
-			break;
+		}
+		break;
 		case Twalk:
+		{
 			putb4(p, fc.fid);
 			p += 4;
 			putb4(p, fc.newfid);
@@ -224,31 +293,47 @@ fcallencode(Arena *a, Fcall fc)
 			putb2(p, fc.nwname);
 			p += 2;
 			if (fc.nwname > MAXWELEM)
+			{
 				return str8zero();
-			for (i = 0; i < fc.nwname; i++)
+			}
+			for (u32 i = 0; i < fc.nwname; i++)
+			{
 				p = putstr(p, fc.wname[i]);
-			break;
+			}
+		}
+		break;
 		case Rwalk:
+		{
 			putb2(p, fc.nwqid);
 			p += 2;
 			if (fc.nwqid > MAXWELEM)
+			{
 				return str8zero();
-			for (i = 0; i < fc.nwqid; i++)
+			}
+			for (u32 i = 0; i < fc.nwqid; i++)
+			{
 				p = putqid(p, fc.wqid[i]);
-			break;
+			}
+		}
+		break;
 		case Topen:
+		{
 			putb4(p, fc.fid);
 			p += 4;
 			putb1(p, fc.mode);
 			p++;
-			break;
+		}
+		break;
 		case Ropen:
 		case Rcreate:
+		{
 			p = putqid(p, fc.qid);
 			putb4(p, fc.iounit);
 			p += 4;
-			break;
+		}
+		break;
 		case Tcreate:
+		{
 			putb4(p, fc.fid);
 			p += 4;
 			p = putstr(p, fc.name);
@@ -256,163 +341,230 @@ fcallencode(Arena *a, Fcall fc)
 			p += 4;
 			putb1(p, fc.mode);
 			p++;
-			break;
+		}
+		break;
 		case Tread:
+		{
 			putb4(p, fc.fid);
 			p += 4;
 			putb8(p, fc.offset);
 			p += 8;
 			putb4(p, fc.count);
 			p += 4;
-			break;
+		}
+		break;
 		case Rread:
+		{
 			putb4(p, fc.data.len);
 			p += 4;
-			if (fc.data.len > 0) {
+			if (fc.data.len > 0)
+			{
 				memcpy(p, fc.data.str, fc.data.len);
 				p += fc.data.len;
 			}
-			break;
+		}
+		break;
 		case Twrite:
+		{
 			putb4(p, fc.fid);
 			p += 4;
 			putb8(p, fc.offset);
 			p += 8;
 			putb4(p, fc.data.len);
 			p += 4;
-			if (fc.data.len > 0) {
+			if (fc.data.len > 0)
+			{
 				memcpy(p, fc.data.str, fc.data.len);
 				p += fc.data.len;
 			}
-			break;
+		}
+		break;
 		case Rwrite:
+		{
 			putb4(p, fc.count);
 			p += 4;
-			break;
+		}
+		break;
 		case Tclunk:
 		case Tremove:
+		{
 			putb4(p, fc.fid);
 			p += 4;
-			break;
+		}
+		break;
 		case Rclunk:
 		case Rremove:
 			break;
 		case Tstat:
+		{
 			putb4(p, fc.fid);
 			p += 4;
-			break;
+		}
+		break;
 		case Rstat:
+		{
 			putb2(p, fc.stat.len);
 			p += 2;
-			if (fc.stat.len > 0) {
+			if (fc.stat.len > 0)
+			{
 				memcpy(p, fc.stat.str, fc.stat.len);
 				p += fc.stat.len;
 			}
-			break;
+		}
+		break;
 		case Twstat:
+		{
 			putb4(p, fc.fid);
 			p += 4;
 			putb2(p, fc.stat.len);
 			p += 2;
-			if (fc.stat.len > 0) {
+			if (fc.stat.len > 0)
+			{
 				memcpy(p, fc.stat.str, fc.stat.len);
 				p += fc.stat.len;
 			}
-			break;
+		}
+		break;
 		case Rwstat:
 			break;
 		default:
+		{
 			return str8zero();
+		}
 	}
 	if (msg.len != (u64)(p - msg.str))
+	{
 		return str8zero();
+	}
 	return msg;
 }
 
 static Fcall
 fcalldecode(String8 msg)
 {
-	Fcall fc, errfc;
-	u8 *p, *end;
-	u32 size, i;
-
-	memset(&fc, 0, sizeof fc);
-	memset(&errfc, 0, sizeof errfc);
+	Fcall fc = {0};
+	Fcall errfc = {0};
 	if (msg.len < 7)
+	{
 		return errfc;
-	p = msg.str;
-	end = msg.str + msg.len;
-	size = getb4(p);
+	}
+	u8 *p = msg.str;
+	u8 *end = msg.str + msg.len;
+	u32 size = getb4(p);
 	p += 4;
 	if (size != msg.len)
+	{
 		return errfc;
+	}
 	fc.type = getb1(p);
 	p++;
 	fc.tag = getb2(p);
 	p += 2;
-	switch (fc.type) {
+	switch (fc.type)
+	{
 		case Tversion:
 		case Rversion:
+		{
 			if (p + 4 > end)
+			{
 				return errfc;
+			}
 			fc.msize = getb4(p);
 			p += 4;
 			p = getstr(p, end, &fc.version);
 			if (p == NULL)
+			{
 				return errfc;
-			break;
+			}
+		}
+		break;
 		case Tauth:
+		{
 			if (p + 4 > end)
+			{
 				return errfc;
+			}
 			fc.afid = getb4(p);
 			p += 4;
 			p = getstr(p, end, &fc.uname);
 			if (p == NULL)
+			{
 				return errfc;
+			}
 			p = getstr(p, end, &fc.aname);
 			if (p == NULL)
+			{
 				return errfc;
-			break;
+			}
+		}
+		break;
 		case Rauth:
+		{
 			p = getqid(p, end, &fc.aqid);
 			if (p == NULL)
+			{
 				return errfc;
-			break;
+			}
+		}
+		break;
 		case Rerror:
+		{
 			p = getstr(p, end, &fc.ename);
 			if (p == NULL)
+			{
 				return errfc;
-			break;
+			}
+		}
+		break;
 		case Tflush:
+		{
 			if (p + 2 > end)
+			{
 				return errfc;
+			}
 			fc.oldtag = getb2(p);
 			p += 2;
-			break;
+		}
+		break;
 		case Rflush:
 			break;
 		case Tattach:
+		{
 			if (p + 8 > end)
+			{
 				return errfc;
+			}
 			fc.fid = getb4(p);
 			p += 4;
 			fc.afid = getb4(p);
 			p += 4;
 			p = getstr(p, end, &fc.uname);
 			if (p == NULL)
+			{
 				return errfc;
+			}
 			p = getstr(p, end, &fc.aname);
 			if (p == NULL)
+			{
 				return errfc;
-			break;
+			}
+		}
+		break;
 		case Rattach:
+		{
 			p = getqid(p, end, &fc.qid);
 			if (p == NULL)
+			{
 				return errfc;
-			break;
+			}
+		}
+		break;
 		case Twalk:
+		{
 			if (p + 10 > end)
+			{
 				return errfc;
+			}
 			fc.fid = getb4(p);
 			p += 4;
 			fc.newfid = getb4(p);
@@ -420,85 +572,135 @@ fcalldecode(String8 msg)
 			fc.nwname = getb2(p);
 			p += 2;
 			if (fc.nwname > MAXWELEM)
+			{
 				return errfc;
-			for (i = 0; i < fc.nwname; i++) {
+			}
+			for (u32 i = 0; i < fc.nwname; i++)
+			{
 				p = getstr(p, end, &fc.wname[i]);
 				if (p == NULL)
+				{
 					return errfc;
+				}
 			}
-			break;
+		}
+		break;
 		case Rwalk:
+		{
 			if (p + 2 > end)
+			{
 				return errfc;
+			}
 			fc.nwqid = getb2(p);
 			p += 2;
 			if (fc.nwqid > MAXWELEM)
+			{
 				return errfc;
-			for (i = 0; i < fc.nwqid; i++) {
+			}
+			for (u32 i = 0; i < fc.nwqid; i++)
+			{
 				p = getqid(p, end, &fc.wqid[i]);
 				if (p == NULL)
+				{
 					return errfc;
+				}
 			}
-			break;
+		}
+		break;
 		case Topen:
+		{
 			if (p + 5 > end)
+			{
 				return errfc;
+			}
 			fc.fid = getb4(p);
 			p += 4;
 			fc.mode = getb1(p);
 			p++;
-			break;
+		}
+		break;
 		case Ropen:
 		case Rcreate:
+		{
 			p = getqid(p, end, &fc.qid);
 			if (p == NULL)
+			{
 				return errfc;
+			}
 			if (p + 4 > end)
+			{
 				return errfc;
+			}
 			fc.iounit = getb4(p);
 			p += 4;
-			break;
+		}
+		break;
 		case Tcreate:
+		{
 			if (p + 4 > end)
+			{
 				return errfc;
+			}
 			fc.fid = getb4(p);
 			p += 4;
 			p = getstr(p, end, &fc.name);
 			if (p == NULL)
+			{
 				return errfc;
+			}
 			if (p + 5 > end)
+			{
 				return errfc;
+			}
 			fc.perm = getb4(p);
 			p += 4;
 			fc.mode = getb1(p);
 			p++;
-			break;
+		}
+		break;
 		case Tread:
+		{
 			if (p + 16 > end)
+			{
 				return errfc;
+			}
 			fc.fid = getb4(p);
 			p += 4;
 			fc.offset = getb8(p);
 			p += 8;
 			fc.count = getb4(p);
 			p += 4;
-			break;
+		}
+		break;
 		case Rread:
+		{
 			if (p + 4 > end)
+			{
 				return errfc;
+			}
 			fc.data.len = getb4(p);
 			p += 4;
 			if (p + fc.data.len > end)
+			{
 				return errfc;
-			if (fc.data.len > 0) {
+			}
+			if (fc.data.len > 0)
+			{
 				fc.data.str = p;
 				p += fc.data.len;
-			} else
+			}
+			else
+			{
 				fc.data.str = NULL;
-			break;
+			}
+		}
+		break;
 		case Twrite:
+		{
 			if (p + 16 > end)
+			{
 				return errfc;
+			}
 			fc.fid = getb4(p);
 			p += 4;
 			fc.offset = getb8(p);
@@ -506,79 +708,120 @@ fcalldecode(String8 msg)
 			fc.data.len = getb4(p);
 			p += 4;
 			if (p + fc.data.len > end)
+			{
 				return errfc;
-			if (fc.data.len > 0) {
+			}
+			if (fc.data.len > 0)
+			{
 				fc.data.str = p;
 				p += fc.data.len;
-			} else
+			}
+			else
+			{
 				fc.data.str = NULL;
-			break;
+			}
+		}
+		break;
 		case Rwrite:
+		{
 			if (p + 4 > end)
+			{
 				return errfc;
+			}
 			fc.count = getb4(p);
 			p += 4;
-			break;
+		}
+		break;
 		case Tclunk:
 		case Tremove:
+		{
 			if (p + 4 > end)
+			{
 				return errfc;
+			}
 			fc.fid = getb4(p);
 			p += 4;
-			break;
+		}
+		break;
 		case Rclunk:
 		case Rremove:
 			break;
 		case Tstat:
+		{
 			if (p + 4 > end)
+			{
 				return errfc;
+			}
 			fc.fid = getb4(p);
 			p += 4;
-			break;
+		}
+		break;
 		case Rstat:
+		{
 			if (p + 2 > end)
+			{
 				return errfc;
+			}
 			fc.stat.len = getb2(p);
 			p += 2;
 			if (p + fc.stat.len > end)
+			{
 				return errfc;
-			if (fc.stat.len > 0) {
+			}
+			if (fc.stat.len > 0)
+			{
 				fc.stat.str = p;
 				p += fc.stat.len;
-			} else
+			}
+			else
+			{
 				fc.stat.str = NULL;
-			break;
+			}
+		}
+		break;
 		case Twstat:
+		{
 			if (p + 6 > end)
+			{
 				return errfc;
+			}
 			fc.fid = getb4(p);
 			p += 4;
 			fc.stat.len = getb2(p);
 			p += 2;
 			if (p + fc.stat.len > end)
+			{
 				return errfc;
-			if (fc.stat.len > 0) {
+			}
+			if (fc.stat.len > 0)
+			{
 				fc.stat.str = p;
 				p += fc.stat.len;
-			} else
+			}
+			else
+			{
 				fc.stat.str = NULL;
-			break;
+			}
+		}
+		break;
 		case Rwstat:
 			break;
 		default:
+		{
 			return errfc;
+		}
 	}
 	if (p != end)
+	{
 		return errfc;
+	}
 	return fc;
 }
 
 static u32
 dirsize(Dir d)
 {
-	u32 size;
-
-	size = DIRFIXLEN;
+	u32 size = DIRFIXLEN;
 	size += 2 + d.name.len;
 	size += 2 + d.uid.len;
 	size += 2 + d.gid.len;
@@ -589,14 +832,16 @@ dirsize(Dir d)
 static String8
 direncode(Arena *a, Dir d)
 {
-	String8 msg;
-	u8 *p;
-
-	msg.len = dirsize(d);
-	if (msg.len == 0)
+	u32 msglen = dirsize(d);
+	if (msglen == 0)
+	{
 		return str8zero();
-	msg.str = pusharrnoz(a, u8, msg.len);
-	p = msg.str;
+	}
+	String8 msg = {
+	    .str = pusharrnoz(a, u8, msglen),
+	    .len = msglen,
+	};
+	u8 *p = msg.str;
 	putb2(p, msg.len - 2);
 	p += 2;
 	putb2(p, d.type);
@@ -622,25 +867,28 @@ direncode(Arena *a, Dir d)
 	p = putstr(p, d.gid);
 	p = putstr(p, d.muid);
 	if (msg.len != (u64)(p - msg.str))
+	{
 		return str8zero();
+	}
 	return msg;
 }
 
 static Dir
 dirdecode(String8 msg)
 {
-	Dir d, errd;
-	u8 *p, *end;
-
-	memset(&d, 0, sizeof d);
-	memset(&errd, 0, sizeof errd);
+	Dir d = {0};
+	Dir errd = {0};
 	if (msg.len < DIRFIXLEN)
+	{
 		return errd;
-	p = msg.str;
-	end = msg.str + msg.len;
+	}
+	u8 *p = msg.str;
+	u8 *end = msg.str + msg.len;
 	p += 2;
 	if (p + 39 > end)
+	{
 		return errd;
+	}
 	d.type = getb2(p);
 	p += 2;
 	d.dev = getb4(p);
@@ -661,18 +909,28 @@ dirdecode(String8 msg)
 	p += 8;
 	p = getstr(p, end, &d.name);
 	if (p == NULL)
+	{
 		return errd;
+	}
 	p = getstr(p, end, &d.uid);
 	if (p == NULL)
+	{
 		return errd;
+	}
 	p = getstr(p, end, &d.gid);
 	if (p == NULL)
+	{
 		return errd;
+	}
 	p = getstr(p, end, &d.muid);
 	if (p == NULL)
+	{
 		return errd;
+	}
 	if (p != end)
+	{
 		return errd;
+	}
 	return d;
 }
 
@@ -680,28 +938,33 @@ static String8
 read9pmsg(Arena *a, u64 fd)
 {
 	u8 lenbuf[4];
-	u32 nread, nleft;
-	ssize_t n;
-	String8 msg;
-
-	nread = 0;
-	nleft = 4;
-	while (nleft > 0) {
-		n = read(fd, lenbuf + nread, nleft);
+	u32 nread = 0;
+	u32 nleft = 4;
+	while (nleft > 0)
+	{
+		ssize_t n = read(fd, lenbuf + nread, nleft);
 		if (n <= 0)
+		{
 			return str8zero();
+		}
 		nread += n;
 		nleft -= n;
 	}
-	msg.len = getb4(lenbuf);
-	msg.str = pusharrnoz(a, u8, msg.len);
+	u32 msglen = getb4(lenbuf);
+	String8 msg = {
+	    .str = pusharrnoz(a, u8, msglen),
+	    .len = msglen,
+	};
 	memcpy(msg.str, lenbuf, sizeof lenbuf);
 	nread = 0;
 	nleft = msg.len - 4;
-	while (nleft > 0) {
-		n = read(fd, msg.str + 4 + nread, nleft);
+	while (nleft > 0)
+	{
+		ssize_t n = read(fd, msg.str + 4 + nread, nleft);
 		if (n <= 0)
+		{
 			return str8zero();
+		}
 		nread += n;
 		nleft -= n;
 	}
@@ -711,14 +974,15 @@ read9pmsg(Arena *a, u64 fd)
 static void
 dirlistpush(Arena *a, Dirlist *list, Dir d)
 {
-	Dirnode *node;
-
-	node = pusharrnoz(a, Dirnode, 1);
+	Dirnode *node = pusharrnoz(a, Dirnode, 1);
 	node->dir = d;
-	if (list->start == NULL) {
+	if (list->start == NULL)
+	{
 		list->start = node;
 		list->end = node;
-	} else {
+	}
+	else
+	{
 		list->end->next = node;
 		list->end = node;
 	}

@@ -3,7 +3,8 @@
 
 typedef struct Fid Fid;
 typedef struct Srv Srv;
-struct Fid {
+struct Fid
+{
 	u32 fid;
 	u32 omode;
 	Qid qid;
@@ -14,7 +15,8 @@ struct Fid {
 };
 
 typedef struct Req Req;
-struct Req {
+struct Req
+{
 	u32 tag;
 	u32 responded;
 	Fcall ifcall;
@@ -32,7 +34,8 @@ struct Req {
 	Srv *srv;
 };
 
-struct Srv {
+struct Srv
+{
 	Arena *arena;
 	u64 infd;
 	u64 outfd;
@@ -64,16 +67,17 @@ struct Srv {
 	void (*destroyreq)(Req *);
 };
 
-enum {
-	QTDIR = 0x80,     /* type bit for directories */
-	QTAPPEND = 0x40,  /* type bit for append only files */
-	QTEXCL = 0x20,    /* type bit for exclusive use files */
-	QTMOUNT = 0x10,   /* type bit for mounted channel */
-	QTAUTH = 0x08,    /* type bit for authentication file */
-	QTTMP = 0x04,     /* type bit for non-backed-up file */
-	QTSYMLINK = 0x02, /* type bit for symbolic link */
-	QTFILE = 0x00,    /* type bits for plain file */
-	MAXERRORLEN = 256 /* maximum error string length */
+enum
+{
+	QTDIR = 0x80,       // type bit for directories
+	QTAPPEND = 0x40,    // type bit for append only files
+	QTEXCL = 0x20,      // type bit for exclusive use files
+	QTMOUNT = 0x10,     // type bit for mounted channel
+	QTAUTH = 0x08,      // type bit for authentication file
+	QTTMP = 0x04,       // type bit for non-backed-up file
+	QTSYMLINK = 0x02,   // type bit for symbolic link
+	QTFILE = 0x00,      // type bits for plain file
+	MAXERRORLEN = 256,  // maximum error string length
 };
 
 readonly static b32 debug9psrv = 1;
@@ -105,4 +109,4 @@ static Req *lookupreq(Srv *srv, u32 tag);
 static Req *removereq(Srv *srv, u32 tag);
 static void closereq(Req *req);
 
-#endif /* SRV_H */
+#endif  // SRV_H

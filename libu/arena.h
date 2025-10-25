@@ -1,17 +1,23 @@
 #ifndef ARENA_H
 #define ARENA_H
 
-enum { ARENAHDRSZ = 128, LARGEPAGES = 1 << 0 };
+enum
+{
+	ARENAHDRSZ = 128,
+	LARGEPAGES = 1 << 0,
+};
 
 typedef struct Arenaparams Arenaparams;
-struct Arenaparams {
+struct Arenaparams
+{
 	u32 flags;
 	u64 ressz;
 	u64 cmtsz;
 };
 
 typedef struct Arena Arena;
-struct Arena {
+struct Arena
+{
 	u32 flags;
 	u64 ressz;
 	u64 cmtsz;
@@ -22,7 +28,8 @@ struct Arena {
 };
 
 typedef struct Temp Temp;
-struct Temp {
+struct Temp
+{
 	Arena *a;
 	u64 pos;
 };
@@ -46,4 +53,4 @@ static void arenapop(Arena *a, u64 size);
 static Temp tempbegin(Arena *a);
 static void tempend(Temp t);
 
-#endif /* ARENA_H */
+#endif  // ARENA_H

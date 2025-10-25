@@ -1,10 +1,19 @@
 #ifndef JSON_H
 #define JSON_H
 
-enum { JSON_NULL, JSON_BOOL, JSON_NUMBER, JSON_STRING, JSON_ARRAY, JSON_OBJECT };
+enum
+{
+	JSON_NULL,
+	JSON_BOOL,
+	JSON_NUMBER,
+	JSON_STRING,
+	JSON_ARRAY,
+	JSON_OBJECT,
+};
 
 typedef struct Jsonvalue Jsonvalue;
-struct Jsonvalue {
+struct Jsonvalue
+{
 	u32 type;
 	b32 bool;
 	f64 number;
@@ -17,7 +26,8 @@ struct Jsonvalue {
 };
 
 typedef struct Jsonbuilder Jsonbuilder;
-struct Jsonbuilder {
+struct Jsonbuilder
+{
 	u8 *data;
 	u64 pos;
 	u64 cap;
@@ -52,4 +62,4 @@ static Jsonvalue jsonparseobject(Arena *a, String8 text, u64 *pos);
 static void jsonwritevalue(Arena *a, String8list *parts, Jsonvalue val);
 static void jsonwritestringescaped(Arena *a, String8list *parts, String8 s);
 
-#endif /* JSON_H */
+#endif  // JSON_H

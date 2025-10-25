@@ -183,4 +183,6 @@ The complete implementation is 600 lines. It handles the common case efficiently
 
 ---
 
-*The full source code is available at the repository. Build with `clang -O3 main.c -lavformat -lavcodec -lavutil` and run with `./mediasrv -i /path/to/videos -o /cache/dir`.*
+**Note:** This implementation has been archived from the active codebase but remains available in git history. The complete source code is available at commit [`1a19980`](https://github.com/matthewdargan/repo/tree/1a19980563d73effdc69b8602eb59bff03cf27fa/cmd/mediasrv).
+
+*Build with `clang -O3 main.c -lavformat -lavcodec -lavutil` and run with `./mediasrv -i /path/to/videos -o /cache/dir`.*

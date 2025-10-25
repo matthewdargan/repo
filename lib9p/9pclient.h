@@ -3,7 +3,8 @@
 
 typedef struct Cfsys Cfsys;
 typedef struct Cfid Cfid;
-struct Cfsys {
+struct Cfsys
+{
 	u64 fd;
 	u32 msize;
 	u32 nexttag;
@@ -11,7 +12,8 @@ struct Cfsys {
 	Cfid *root;
 };
 
-struct Cfid {
+struct Cfid
+{
 	u32 fid;
 	u32 mode;
 	Qid qid;
@@ -50,4 +52,4 @@ static b32 fsdirwstat(Arena *a, Cfsys *fs, String8 name, Dir d);
 static b32 fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode);
 static s64 fsseek(Arena *a, Cfid *fid, s64 offset, u32 type);
 
-#endif /* _9PCLIENT_H */
+#endif  // _9PCLIENT_H

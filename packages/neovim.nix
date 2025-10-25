@@ -46,10 +46,10 @@
           number = true;
           relativenumber = true;
           scrolloff = 8;
-          shiftwidth = 4;
+          shiftwidth = 2;
           smartindent = true;
-          softtabstop = 4;
-          tabstop = 4;
+          softtabstop = 2;
+          tabstop = 2;
         };
         plugins = {
           mini = {

@@ -2,7 +2,8 @@
 #define OS_H
 
 typedef struct Sysinfo Sysinfo;
-struct Sysinfo {
+struct Sysinfo
+{
 	u32 nprocs;
 	u64 pagesz;
 	u64 lpagesz;
@@ -48,4 +49,4 @@ static Datetime localtoutc(Datetime dt);
 static Datetime utctolocal(Datetime dt);
 static void sleepms(u32 msec);
 
-#endif /* OS_H */
+#endif  // OS_H

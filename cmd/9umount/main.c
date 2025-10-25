@@ -28,15 +28,13 @@
 static b32
 mountedby(Arena *a, String8 mntopts, String8 user)
 {
-	String8list opts;
-	String8node *node;
-	String8 opt, uname;
-
-	opts = str8split(a, mntopts, (u8 *)",", 1, 0);
-	for (node = opts.start; node != NULL; node = node->next) {
-		opt = node->str;
-		if (str8index(opt, 0, str8lit("uname="), 0) == 0) {
-			uname = str8skip(opt, 6);
+	String8list opts = str8split(a, mntopts, (u8 *)",", 1, 0);
+	for (String8node *node = opts.start; node != NULL; node = node->next)
+	{
+		String8 opt = node->str;
+		if (str8index(opt, 0, str8lit("uname="), 0) == 0)
+		{
+			String8 uname = str8skip(opt, 6);
 			return str8cmp(uname, user, 0);
 		}
 	}
@@ -46,73 +44,70 @@ mountedby(Arena *a, String8 mntopts, String8 user)
 int
 main(int argc, char *argv[])
 {
-	Arenaparams ap;
-	Arena *arena;
-	String8list args;
-	Cmd parsed;
-	uid_t uid;
-	struct passwd *pw;
-	int ret;
-	String8node *node;
-	String8 mtpt, path, mntdir, mnttype, mntopts, homedir, user;
-	FILE *fp;
-	struct mntent *mnt;
-	b32 ok, inhome;
-
-	sysinfo.nprocs = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo.pagesz = sysconf(_SC_PAGESIZE);
-	sysinfo.lpagesz = 0x200000;
-	ap.flags = arenaflags;
-	ap.ressz = arenaressz;
-	ap.cmtsz = arenacmtsz;
-	arena = arenaalloc(ap);
-	args = osargs(arena, argc, argv);
-	parsed = cmdparse(arena, args);
-	if (parsed.inputs.nnode == 0) {
+	sysinfo = (Sysinfo){.nprocs = sysconf(_SC_NPROCESSORS_ONLN), .pagesz = sysconf(_SC_PAGESIZE), .lpagesz = 0x200000};
+	Arenaparams ap = {.flags = arenaflags, .ressz = arenaressz, .cmtsz = arenacmtsz};
+	Arena *arena = arenaalloc(ap);
+	String8list args = osargs(arena, argc, argv);
+	Cmd parsed = cmdparse(arena, args);
+	if (parsed.inputs.nnode == 0)
+	{
 		fprintf(stderr, "usage: 9umount mtpt...\n");
 		return 1;
 	}
-	uid = getuid();
-	pw = getpwuid(uid);
-	if (pw == NULL) {
+	uid_t uid = getuid();
+	struct passwd *pw = getpwuid(uid);
+	if (pw == NULL)
+	{
 		fprintf(stderr, "9umount: unknown uid %d\n", uid);
 		return 1;
 	}
-	ret = 0;
-	for (node = parsed.inputs.start; node != NULL; node = node->next) {
-		mtpt = node->str;
-		path = abspath(arena, mtpt);
-		if (path.len == 0) {
+	int ret = 0;
+	for (String8node *node = parsed.inputs.start; node != NULL; node = node->next)
+	{
+		String8 mtpt = node->str;
+		String8 path = abspath(arena, mtpt);
+		if (path.len == 0)
+		{
 			fprintf(stderr, "9umount: %.*s: %s\n", str8varg(mtpt), strerror(errno));
 			ret = 1;
 			continue;
 		}
-		fp = setmntent("/proc/mounts", "r");
-		if (fp == NULL) {
+		FILE *fp = setmntent("/proc/mounts", "r");
+		if (fp == NULL)
+		{
 			fprintf(stderr, "9umount: could not open /proc/mounts: %s\n", strerror(errno));
 			ret = 1;
 			break;
 		}
-		ok = 0;
-		for (;;) {
-			mnt = getmntent(fp);
+		b32 ok = 0;
+		for (;;)
+		{
+			struct mntent *mnt = getmntent(fp);
 			if (mnt == NULL)
+			{
 				break;
-			mntdir = str8cstr(mnt->mnt_dir);
-			if (str8cmp(path, mntdir, 0)) {
+			}
+			String8 mntdir = str8cstr(mnt->mnt_dir);
+			if (str8cmp(path, mntdir, 0))
+			{
 				ok = 1;
-				mnttype = str8cstr(mnt->mnt_type);
-				mntopts = str8cstr(mnt->mnt_opts);
-				homedir = str8cstr(pw->pw_dir);
-				user = str8cstr(pw->pw_name);
-				inhome = (str8index(mntdir, 0, homedir, 0) == 0);
-				if (!inhome && !str8cmp(mnttype, str8lit("9p"), 0)) {
+				String8 mnttype = str8cstr(mnt->mnt_type);
+				String8 mntopts = str8cstr(mnt->mnt_opts);
+				String8 homedir = str8cstr(pw->pw_dir);
+				String8 user = str8cstr(pw->pw_name);
+				b32 inhome = (str8index(mntdir, 0, homedir, 0) == 0);
+				if (!inhome && !str8cmp(mnttype, str8lit("9p"), 0))
+				{
 					fprintf(stderr, "9umount: %.*s: refusing to unmount non-9p fs\n", str8varg(path));
 					ret = 1;
-				} else if (!inhome && !mountedby(arena, mntopts, user)) {
+				}
+				else if (!inhome && !mountedby(arena, mntopts, user))
+				{
 					fprintf(stderr, "9umount: %.*s: not mounted by you\n", str8varg(path));
 					ret = 1;
-				} else if (umount(mnt->mnt_dir)) {
+				}
+				else if (umount(mnt->mnt_dir))
+				{
 					fprintf(stderr, "9umount: umount %.*s: %s\n", str8varg(mntdir), strerror(errno));
 					ret = 1;
 				}
@@ -120,7 +115,8 @@ main(int argc, char *argv[])
 			}
 		}
 		endmntent(fp);
-		if (!ok) {
+		if (!ok)
+		{
 			fprintf(stderr, "9umount: %.*s not found in /proc/mounts\n", str8varg(path));
 			ret = 1;
 		}

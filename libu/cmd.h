@@ -2,7 +2,8 @@
 #define CMD_H
 
 typedef struct Cmdopt Cmdopt;
-struct Cmdopt {
+struct Cmdopt
+{
 	Cmdopt *next;
 	Cmdopt *hash_next;
 	u64 hash;
@@ -12,14 +13,16 @@ struct Cmdopt {
 };
 
 typedef struct Cmdoptlist Cmdoptlist;
-struct Cmdoptlist {
+struct Cmdoptlist
+{
 	u64 cnt;
 	Cmdopt *start;
 	Cmdopt *end;
 };
 
 typedef struct Cmd Cmd;
-struct Cmd {
+struct Cmd
+{
 	String8 exe;
 	Cmdoptlist opts;
 	String8list inputs;
@@ -40,4 +43,4 @@ static String8 cmdstr(Cmd *c, String8 name);
 static b32 cmdhasflag(Cmd *c, String8 name);
 static b32 cmdhasarg(Cmd *c, String8 name);
 
-#endif /* CMD_H */
+#endif  // CMD_H

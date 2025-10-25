@@ -35,13 +35,15 @@
 /* clang-format on */
 
 typedef struct Ramfile Ramfile;
-struct Ramfile {
+struct Ramfile
+{
 	String8 data;
 	Arena *arena;
 };
 
 typedef struct Ramentry Ramentry;
-struct Ramentry {
+struct Ramentry
+{
 	String8 name;
 	u64 qid_path;
 	Ramfile *file;
@@ -54,11 +56,12 @@ static u64 next_qid_path = 1;
 static Ramentry *
 findfile(String8 name)
 {
-	Ramentry *e;
-
-	for (e = filelist; e != NULL; e = e->next) {
+	for (Ramentry *e = filelist; e != NULL; e = e->next)
+	{
 		if (str8cmp(e->name, name, 0))
+		{
 			return e;
+		}
 	}
 	return NULL;
 }
@@ -66,9 +69,7 @@ findfile(String8 name)
 static Ramentry *
 addfile(Arena *arena, String8 name)
 {
-	Ramentry *e;
-
-	e = pusharr(arena, Ramentry, 1);
+	Ramentry *e = pusharr(arena, Ramentry, 1);
 	e->name = pushstr8cpy(arena, name);
 	e->qid_path = next_qid_path++;
 	e->file = NULL;
@@ -80,25 +81,18 @@ addfile(Arena *arena, String8 name)
 static void
 ramfs_read(Req *r)
 {
-	Ramentry *e, *file;
-	Ramfile *rf;
-	u64 offset, count, pos, entrylen;
-	String8 dirdata, entry;
-	Dir d;
-	time_t now;
-	u8 *newdata;
-
-	e = r->fid->aux;
-	if (e == NULL && (r->fid->qid.type & QTDIR)) {
-		dirdata = str8zero();
-		pos = 0;
-		now = nowunix();
-		for (file = filelist; file != NULL; file = file->next) {
-			if (pos >= r->ifcall.offset) {
-				memset(&d, 0, sizeof(d));
-				d.qid.path = file->qid_path;
-				d.qid.vers = 0;
-				d.qid.type = QTFILE;
+	Ramentry *e = r->fid->aux;
+	if (e == NULL && (r->fid->qid.type & QTDIR))
+	{
+		String8 dirdata = str8zero();
+		u64 pos = 0;
+		time_t now = nowunix();
+		for (Ramentry *file = filelist; file != NULL; file = file->next)
+		{
+			if (pos >= r->ifcall.offset)
+			{
+				Dir d = {0};
+				d.qid = (Qid){.path = file->qid_path, .vers = 0, .type = QTFILE};
 				d.mode = 0644;
 				d.name = file->name;
 				d.uid = str8lit("ramfs");
@@ -107,14 +101,19 @@ ramfs_read(Req *r)
 				d.atime = now;
 				d.mtime = now;
 				d.len = file->file ? file->file->data.len : 0;
-				entry = direncode(r->srv->arena, d);
-				entrylen = entry.len;
+				String8 entry = direncode(r->srv->arena, d);
+				u64 entrylen = entry.len;
 				if (dirdata.len + entrylen > r->ifcall.count)
+				{
 					break;
+				}
 				if (dirdata.len == 0)
+				{
 					dirdata = entry;
-				else {
-					newdata = pusharr(r->srv->arena, u8, dirdata.len + entrylen);
+				}
+				else
+				{
+					u8 *newdata = pusharr(r->srv->arena, u8, dirdata.len + entrylen);
 					memcpy(newdata, dirdata.str, dirdata.len);
 					memcpy(newdata + dirdata.len, entry.str, entrylen);
 					dirdata.str = newdata;
@@ -127,21 +126,25 @@ ramfs_read(Req *r)
 		respond(r, str8zero());
 		return;
 	}
-	if (e == NULL || e->file == NULL) {
+	if (e == NULL || e->file == NULL)
+	{
 		r->ofcall.data = str8zero();
 		respond(r, str8zero());
 		return;
 	}
-	rf = e->file;
-	offset = r->ifcall.offset;
-	count = r->ifcall.count;
-	if (offset >= rf->data.len) {
+	Ramfile *rf = e->file;
+	u64 offset = r->ifcall.offset;
+	u64 count = r->ifcall.count;
+	if (offset >= rf->data.len)
+	{
 		r->ofcall.data = str8zero();
 		respond(r, str8zero());
 		return;
 	}
 	if (offset + count > rf->data.len)
+	{
 		count = rf->data.len - offset;
+	}
 	r->rbuf = pusharr(r->srv->arena, u8, count);
 	memcpy(r->rbuf, rf->data.str + offset, count);
 	r->ofcall.data = str8(r->rbuf, count);
@@ -151,24 +154,23 @@ ramfs_read(Req *r)
 static void
 ramfs_write(Req *r)
 {
-	Ramentry *e;
-	Ramfile *rf;
-	u64 offset, count, newsize;
-	u8 *newdata;
-
-	e = r->fid->aux;
-	if (e == NULL || e->file == NULL) {
+	Ramentry *e = r->fid->aux;
+	if (e == NULL || e->file == NULL)
+	{
 		respond(r, str8lit("no file data"));
 		return;
 	}
-	rf = e->file;
-	offset = r->ifcall.offset;
-	count = r->ifcall.data.len;
-	if (offset + count > rf->data.len) {
-		newsize = offset + count;
-		newdata = pusharr(rf->arena, u8, newsize);
+	Ramfile *rf = e->file;
+	u64 offset = r->ifcall.offset;
+	u64 count = r->ifcall.data.len;
+	if (offset + count > rf->data.len)
+	{
+		u64 newsize = offset + count;
+		u8 *newdata = pusharr(rf->arena, u8, newsize);
 		if (rf->data.len > 0)
+		{
 			memcpy(newdata, rf->data.str, rf->data.len);
+		}
 		rf->data.str = newdata;
 		rf->data.len = newsize;
 	}
@@ -180,15 +182,13 @@ ramfs_write(Req *r)
 static void
 ramfs_create(Req *r)
 {
-	Ramfile *rf;
-	Ramentry *e;
-
-	e = findfile(r->ifcall.name);
-	if (e != NULL) {
+	Ramentry *e = findfile(r->ifcall.name);
+	if (e != NULL)
+	{
 		respond(r, str8lit("file exists"));
 		return;
 	}
-	rf = pusharr(r->srv->arena, Ramfile, 1);
+	Ramfile *rf = pusharr(r->srv->arena, Ramfile, 1);
 	rf->arena = r->srv->arena;
 	rf->data = str8zero();
 	e = addfile(r->srv->arena, r->ifcall.name);
@@ -214,24 +214,24 @@ ramfs_attach(Req *r)
 static void
 ramfs_walk(Req *r)
 {
-	u64 i;
-	Ramentry *e;
-	String8 name;
-
-	if (r->ifcall.nwname == 0) {
+	if (r->ifcall.nwname == 0)
+	{
 		r->newfid->qid = r->fid->qid;
 		r->ofcall.nwqid = 0;
 		respond(r, str8zero());
 		return;
 	}
-	for (i = 0; i < r->ifcall.nwname; i++) {
-		if (!(r->fid->qid.type & QTDIR)) {
+	for (u64 i = 0; i < r->ifcall.nwname; i++)
+	{
+		if (!(r->fid->qid.type & QTDIR))
+		{
 			respond(r, str8lit("not a directory"));
 			return;
 		}
-		name = r->ifcall.wname[i];
-		e = findfile(name);
-		if (e == NULL) {
+		String8 name = r->ifcall.wname[i];
+		Ramentry *e = findfile(name);
+		if (e == NULL)
+		{
 			respond(r, str8lit("file not found"));
 			return;
 		}
@@ -248,55 +248,58 @@ ramfs_walk(Req *r)
 static void
 ramfs_stat(Req *r)
 {
-	Ramentry *e;
-	Dir d;
-	time_t now;
-
-	e = r->fid->aux;
-	if (e == NULL) {
-		memset(&d, 0, sizeof(d));
+	Ramentry *e = r->fid->aux;
+	if (e == NULL)
+	{
+		time_t now = nowunix();
+		Dir d = {0};
 		d.qid = r->fid->qid;
 		d.mode = DMDIR | 0755;
 		d.name = pushstr8cpy(r->srv->arena, str8lit("."));
 		d.uid = pushstr8cpy(r->srv->arena, str8lit("ramfs"));
 		d.gid = pushstr8cpy(r->srv->arena, str8lit("ramfs"));
 		d.muid = pushstr8cpy(r->srv->arena, str8lit("ramfs"));
-		now = nowunix();
 		d.atime = now;
 		d.mtime = now;
-		d.len = 0;
-	} else {
-		memset(&d, 0, sizeof(d));
+		r->ofcall.stat = direncode(r->srv->arena, d);
+	}
+	else
+	{
+		time_t now = nowunix();
+		Dir d = {0};
 		d.qid = r->fid->qid;
 		d.mode = 0644;
 		d.name = pushstr8cpy(r->srv->arena, e->name);
 		d.uid = pushstr8cpy(r->srv->arena, str8lit("ramfs"));
 		d.gid = pushstr8cpy(r->srv->arena, str8lit("ramfs"));
 		d.muid = pushstr8cpy(r->srv->arena, str8lit("ramfs"));
-		now = nowunix();
 		d.atime = now;
 		d.mtime = now;
 		d.len = e->file ? e->file->data.len : 0;
+		r->ofcall.stat = direncode(r->srv->arena, d);
 	}
-	r->ofcall.stat = direncode(r->srv->arena, d);
 	respond(r, str8zero());
 }
 
 static void
 ramfs_remove(Req *r)
 {
-	Ramentry *e, *prev;
-
-	e = r->fid->aux;
-	if (e == NULL) {
+	Ramentry *e = r->fid->aux;
+	if (e == NULL)
+	{
 		respond(r, str8lit("cannot remove root directory"));
 		return;
 	}
 	if (filelist == e)
+	{
 		filelist = e->next;
-	else {
-		for (prev = filelist; prev != NULL; prev = prev->next) {
-			if (prev->next == e) {
+	}
+	else
+	{
+		for (Ramentry *prev = filelist; prev != NULL; prev = prev->next)
+		{
+			if (prev->next == e)
+			{
 				prev->next = e->next;
 				break;
 			}
@@ -308,96 +311,92 @@ ramfs_remove(Req *r)
 static void
 ramfs_open(Req *r)
 {
-	Ramentry *e;
-	Ramfile *rf;
-
-	e = r->fid->aux;
-	if (e == NULL) {
-		if ((r->ifcall.mode & 3) == OREAD) {
+	Ramentry *e = r->fid->aux;
+	if (e == NULL)
+	{
+		if ((r->ifcall.mode & 3) == OREAD)
+		{
 			r->ofcall.qid = r->fid->qid;
 			respond(r, str8zero());
 			return;
-		} else {
+		}
+		else
+		{
 			respond(r, str8lit("cannot write to root directory"));
 			return;
 		}
 	}
-	rf = e->file;
-	if (rf == NULL) {
+	Ramfile *rf = e->file;
+	if (rf == NULL)
+	{
 		rf = pusharr(r->srv->arena, Ramfile, 1);
 		rf->arena = r->srv->arena;
 		rf->data = str8zero();
 		e->file = rf;
 	}
 	if ((r->ifcall.mode & OTRUNC) && rf->data.len > 0)
+	{
 		rf->data = str8zero();
+	}
 	r->ofcall.qid = r->fid->qid;
 	respond(r, str8zero());
-}
-
-static void
-usage(void)
-{
-	fprintf(stderr, "usage: ramfs [-s srvname] [-a address]\n");
 }
 
 int
 main(int argc, char *argv[])
 {
-	Arenaparams ap;
-	Arena *arena;
-	String8list args;
-	Cmd parsed;
-	String8 srvname, address, portstr;
-	Srv *srv;
-	u64 infd, outfd, listenfd, connfd;
-	Netaddr na;
-
-	sysinfo.nprocs = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo.pagesz = sysconf(_SC_PAGESIZE);
-	sysinfo.lpagesz = 0x200000;
-	ap.flags = arenaflags;
-	ap.ressz = arenaressz;
-	ap.cmtsz = arenacmtsz;
-	arena = arenaalloc(ap);
-	args = osargs(arena, argc, argv);
-	parsed = cmdparse(arena, args);
-	srvname = str8zero();
-	address = str8zero();
+	sysinfo = (Sysinfo){.nprocs = sysconf(_SC_NPROCESSORS_ONLN), .pagesz = sysconf(_SC_PAGESIZE), .lpagesz = 0x200000};
+	Arenaparams ap = {.flags = arenaflags, .ressz = arenaressz, .cmtsz = arenacmtsz};
+	Arena *arena = arenaalloc(ap);
+	String8list args = osargs(arena, argc, argv);
+	Cmd parsed = cmdparse(arena, args);
+	String8 srvname = str8zero();
+	String8 address = str8zero();
 	if (cmdhasarg(&parsed, str8lit("s")))
+	{
 		srvname = cmdstr(&parsed, str8lit("s"));
+	}
 	if (cmdhasarg(&parsed, str8lit("a")))
+	{
 		address = cmdstr(&parsed, str8lit("a"));
-	if (srvname.len == 0 && address.len == 0) {
-		usage();
+	}
+	if (srvname.len == 0 && address.len == 0)
+	{
+		fprintf(stderr, "usage: ramfs [-s srvname] [-a address]\n");
 		return 1;
 	}
-	if (address.len > 0) {
-		na = netaddr(arena, address, str8lit("tcp"), str8lit("9pfs"));
-		if (na.net.len == 0) {
+	if (address.len > 0)
+	{
+		Netaddr na = netaddr(arena, address, str8lit("tcp"), str8lit("9pfs"));
+		if (na.net.len == 0)
+		{
 			fprintf(stderr, "ramfs: failed to parse address '%.*s'\n", str8varg(address));
 			arenarelease(arena);
 			return 1;
 		}
-		portstr = pushstr8f(arena, "%llu", na.port);
-		listenfd = socketlisten(portstr, NULL);
-		if (listenfd == 0) {
+		String8 portstr = pushstr8f(arena, "%llu", na.port);
+		u64 listenfd = socketlisten(portstr, NULL);
+		if (listenfd == 0)
+		{
 			fprintf(stderr, "ramfs: failed to listen on port %.*s\n", str8varg(portstr));
 			arenarelease(arena);
 			return 1;
 		}
 		printf("ramfs: listening on %.*s (port %.*s)\n", str8varg(address), str8varg(portstr));
-		for (;;) {
-			connfd = socketaccept(listenfd);
-			if (connfd == 0) {
+		for (;;)
+		{
+			u64 connfd = socketaccept(listenfd);
+			if (connfd == 0)
+			{
 				fprintf(stderr, "ramfs: failed to accept connection\n");
 				continue;
 			}
 			printf("ramfs: accepted connection\n");
-			infd = connfd;
-			outfd = connfd;
-			srv = srvalloc(arena, infd, outfd);
-			if (srv == NULL) {
+			u64 infd = connfd;
+			u64 outfd = connfd;
+			Srv *srv = srvalloc(arena, infd, outfd);
+			if (srv == NULL)
+			{
 				fprintf(stderr, "ramfs: failed to allocate server\n");
 				close(connfd);
 				continue;
@@ -415,11 +414,14 @@ main(int argc, char *argv[])
 			close(connfd);
 			printf("ramfs: connection closed\n");
 		}
-	} else {
-		infd = STDIN_FILENO;
-		outfd = STDOUT_FILENO;
-		srv = srvalloc(arena, infd, outfd);
-		if (srv == NULL) {
+	}
+	else
+	{
+		u64 infd = STDIN_FILENO;
+		u64 outfd = STDOUT_FILENO;
+		Srv *srv = srvalloc(arena, infd, outfd);
+		if (srv == NULL)
+		{
 			fprintf(stderr, "ramfs: failed to allocate server\n");
 			arenarelease(arena);
 			return 1;
