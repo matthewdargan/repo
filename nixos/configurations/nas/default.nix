@@ -36,7 +36,6 @@
     hostName = "nas";
     firewall = {
       allowedTCPPorts = [4500];
-      checkReversePath = "loose";
       interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
         22
         7246

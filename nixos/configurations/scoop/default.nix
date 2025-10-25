@@ -24,6 +24,7 @@
     };
   };
   networking = {
+    firewall.checkReversePath = "loose";
     hostName = "scoop";
     networkmanager.enable = true;
   };
