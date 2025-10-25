@@ -34,9 +34,7 @@ min(u64 a, u64 b)
 static u64
 datetimetodense(Datetime dt)
 {
-	u64 t;
-
-	t = dt.year;
+	u64 t = dt.year;
 	t *= 12;
 	t += dt.mon;
 	t *= 31;
@@ -55,8 +53,7 @@ datetimetodense(Datetime dt)
 static Datetime
 densetodatetime(u64 t)
 {
-	Datetime dt;
-
+	Datetime dt = {0};
 	dt.msec = t % 1000;
 	t /= 1000;
 	dt.sec = t % 61;

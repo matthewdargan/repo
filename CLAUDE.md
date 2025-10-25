@@ -1,10 +1,10 @@
 # Project Information
 
-C89 monorepo with Nix/NixOS for all code and configuration.
+C99 monorepo with Nix/NixOS for all code and configuration.
 
 ## Overview
 
-This is a systems programming monorepo implemented in strict C89 with modern tooling via Nix/NixOS. The project emphasizes zero-dependency, portable code with custom abstractions that prioritize safety and clarity over standard C conventions. The codebase prioritizes correctness, portability, and security through careful abstraction design while maintaining the simplicity and performance characteristics of C.
+This is a systems programming monorepo implemented in C99 (ISO/IEC 9899:1999) with modern tooling via Nix/NixOS. The project emphasizes zero-dependency, portable code with custom abstractions that prioritize safety and clarity over standard C conventions. The codebase prioritizes correctness, portability, and security through careful abstraction design while maintaining the simplicity and performance characteristics of C.
 
 **Core Philosophy:**
 
@@ -18,7 +18,7 @@ This is a systems programming monorepo implemented in strict C89 with modern too
 - Custom memory management via arena allocators (no malloc/free)
 - Length-prefixed strings (no null termination vulnerabilities)
 - Network and file system utilities built on custom abstractions
-- Consistent C89 codebase with modern tooling (clang-format, pre-commit hooks, gdb/valgrind)
+- Consistent C99 codebase with modern tooling (clang-format, pre-commit hooks, gdb/valgrind)
 - Full system configuration management through NixOS and Home Manager
 
 ## Project Structure
@@ -58,11 +58,14 @@ Device-specific configs (desktop, server, router).
 
 ## Coding Standards
 
-**Always use libu abstractions instead of standard C:**
+**Always use libu abstractions and conservative C99:**
 - Arena allocators over malloc/free
 - Length-based strings over null-terminated
 - Custom types (u8, u64, s64) over standard int types
 - Unity builds - include .c files directly instead of separate compilation
+- Trust compiler optimization over explicit hints - use static functions in headers and let the compiler decide inlining
+- Use helpful C99 features like single-line comments, mixed declarations, and designated initializers for clarity
+- Always use braces around control statements (if, for, while, etc.) - no single-statement exceptions
 
 ## Key Commands
 

@@ -46,4 +46,4 @@ static void arenapop(Arena *a, u64 size);
 static Temp tempbegin(Arena *a);
 static void tempend(Temp t);
 
-#endif /* ARENA_H */
+#endif  // ARENA_H
