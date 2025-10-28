@@ -20,18 +20,6 @@ bswapu64(u64 x)
 }
 
 static u64
-max(u64 a, u64 b)
-{
-	return a < b ? b : a;
-}
-
-static u64
-min(u64 a, u64 b)
-{
-	return a > b ? b : a;
-}
-
-static u64
 datetimetodense(Datetime dt)
 {
 	u64 t = dt.year;

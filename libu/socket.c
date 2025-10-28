@@ -306,20 +306,20 @@ socketlisten(String8 port, struct addrinfo *hints)
 	int opt = 1;
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt) < 0)
 	{
-		closefd(fd);
+		close_fd(fd);
 		freeaddrinfo(res);
 		return 0;
 	}
 	if (bind(fd, res->ai_addr, res->ai_addrlen) < 0)
 	{
-		closefd(fd);
+		close_fd(fd);
 		freeaddrinfo(res);
 		return 0;
 	}
 	freeaddrinfo(res);
 	if (listen(fd, 1) < 0)
 	{
-		closefd(fd);
+		close_fd(fd);
 		return 0;
 	}
 	return (u64)fd;
@@ -336,7 +336,7 @@ socketaccept(u64 fd)
 	int opt = 1;
 	if (setsockopt(connfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt) < 0)
 	{
-		closefd(connfd);
+		close_fd(connfd);
 		return 0;
 	}
 	return (u64)connfd;
@@ -377,13 +377,13 @@ socketconnect(String8 host, String8 port, struct addrinfo *hints)
 	int opt = 1;
 	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt) < 0)
 	{
-		closefd(fd);
+		close_fd(fd);
 		freeaddrinfo(res);
 		return 0;
 	}
 	if (connect(fd, res->ai_addr, res->ai_addrlen) < 0)
 	{
-		closefd(fd);
+		close_fd(fd);
 		freeaddrinfo(res);
 		return 0;
 	}
@@ -427,7 +427,7 @@ socketreadmsg(Arena *a, u64 fd)
 		return str8zero();
 	}
 	String8 data = str8zero();
-	data.str = pusharr(a, u8, size);
+	data.str = push_array(a, u8, size);
 	nread = socketread(fd, data.str, size);
 	if (nread != size)
 	{
@@ -486,7 +486,7 @@ socketreadhttp(Arena *a, u64 fd)
 		}
 	}
 	String8 data = {
-	    .str = pusharrnoz(a, u8, hdrend + bodylen),
+	    .str = push_array_no_zero(a, u8, hdrend + bodylen),
 	    .len = hdrend + bodylen,
 	};
 	memcpy(data.str, buf, hdrend);

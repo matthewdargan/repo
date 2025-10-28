@@ -53,10 +53,10 @@ struct Stringjoin
 	String8 post;
 };
 
-readonly static u8 hexdigits[16] = {
+read_only static u8 hexdigits[16] = {
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F',
 };
-readonly static u8 hexdigitvals[128] = {
+read_only static u8 hexdigitvals[128] = {
     [0 ... 47] = 0xff, ['0'] = 0x00, ['1'] = 0x01, ['2'] = 0x02, ['3'] = 0x03,         ['4'] = 0x04, ['5'] = 0x05,
     ['6'] = 0x06,      ['7'] = 0x07, ['8'] = 0x08, ['9'] = 0x09, [58 ... 64] = 0xff,   ['A'] = 0x0a, ['B'] = 0x0b,
     ['C'] = 0x0c,      ['D'] = 0x0d, ['E'] = 0x0e, ['F'] = 0x0f, [71 ... 96] = 0xff,   ['a'] = 0x0a, ['b'] = 0x0b,

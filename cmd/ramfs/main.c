@@ -69,7 +69,7 @@ findfile(String8 name)
 static Ramentry *
 addfile(Arena *arena, String8 name)
 {
-	Ramentry *e = pusharr(arena, Ramentry, 1);
+	Ramentry *e = push_array(arena, Ramentry, 1);
 	e->name = pushstr8cpy(arena, name);
 	e->qid_path = next_qid_path++;
 	e->file = NULL;
@@ -113,7 +113,7 @@ ramfs_read(Req *r)
 				}
 				else
 				{
-					u8 *newdata = pusharr(r->srv->arena, u8, dirdata.len + entrylen);
+					u8 *newdata = push_array(r->srv->arena, u8, dirdata.len + entrylen);
 					memcpy(newdata, dirdata.str, dirdata.len);
 					memcpy(newdata + dirdata.len, entry.str, entrylen);
 					dirdata.str = newdata;
@@ -145,7 +145,7 @@ ramfs_read(Req *r)
 	{
 		count = rf->data.len - offset;
 	}
-	r->rbuf = pusharr(r->srv->arena, u8, count);
+	r->rbuf = push_array(r->srv->arena, u8, count);
 	memcpy(r->rbuf, rf->data.str + offset, count);
 	r->ofcall.data = str8(r->rbuf, count);
 	respond(r, str8zero());
@@ -166,7 +166,7 @@ ramfs_write(Req *r)
 	if (offset + count > rf->data.len)
 	{
 		u64 newsize = offset + count;
-		u8 *newdata = pusharr(rf->arena, u8, newsize);
+		u8 *newdata = push_array(rf->arena, u8, newsize);
 		if (rf->data.len > 0)
 		{
 			memcpy(newdata, rf->data.str, rf->data.len);
@@ -188,7 +188,7 @@ ramfs_create(Req *r)
 		respond(r, str8lit("file exists"));
 		return;
 	}
-	Ramfile *rf = pusharr(r->srv->arena, Ramfile, 1);
+	Ramfile *rf = push_array(r->srv->arena, Ramfile, 1);
 	rf->arena = r->srv->arena;
 	rf->data = str8zero();
 	e = addfile(r->srv->arena, r->ifcall.name);
@@ -329,7 +329,7 @@ ramfs_open(Req *r)
 	Ramfile *rf = e->file;
 	if (rf == NULL)
 	{
-		rf = pusharr(r->srv->arena, Ramfile, 1);
+		rf = push_array(r->srv->arena, Ramfile, 1);
 		rf->arena = r->srv->arena;
 		rf->data = str8zero();
 		e->file = rf;
@@ -346,9 +346,8 @@ int
 main(int argc, char *argv[])
 {
 	sysinfo = (Sysinfo){.nprocs = sysconf(_SC_NPROCESSORS_ONLN), .pagesz = sysconf(_SC_PAGESIZE), .lpagesz = 0x200000};
-	Arenaparams ap = {.flags = arenaflags, .ressz = arenaressz, .cmtsz = arenacmtsz};
-	Arena *arena = arenaalloc(ap);
-	String8list args = osargs(arena, argc, argv);
+	Arena *arena = arena_alloc();
+	String8list args = os_args(arena, argc, argv);
 	Cmd parsed = cmdparse(arena, args);
 	String8 srvname = str8zero();
 	String8 address = str8zero();
@@ -371,7 +370,7 @@ main(int argc, char *argv[])
 		if (na.net.len == 0)
 		{
 			fprintf(stderr, "ramfs: failed to parse address '%.*s'\n", str8varg(address));
-			arenarelease(arena);
+			arena_release(arena);
 			return 1;
 		}
 		String8 portstr = pushstr8f(arena, "%llu", na.port);
@@ -379,7 +378,7 @@ main(int argc, char *argv[])
 		if (listenfd == 0)
 		{
 			fprintf(stderr, "ramfs: failed to listen on port %.*s\n", str8varg(portstr));
-			arenarelease(arena);
+			arena_release(arena);
 			return 1;
 		}
 		printf("ramfs: listening on %.*s (port %.*s)\n", str8varg(address), str8varg(portstr));
@@ -423,7 +422,7 @@ main(int argc, char *argv[])
 		if (srv == NULL)
 		{
 			fprintf(stderr, "ramfs: failed to allocate server\n");
-			arenarelease(arena);
+			arena_release(arena);
 			return 1;
 		}
 		srv->attach = ramfs_attach;
@@ -437,6 +436,6 @@ main(int argc, char *argv[])
 		srvrun(srv);
 		srvfree(srv);
 	}
-	arenarelease(arena);
+	arena_release(arena);
 	return 0;
 }

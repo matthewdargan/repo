@@ -45,9 +45,8 @@ int
 main(int argc, char *argv[])
 {
 	sysinfo = (Sysinfo){.nprocs = sysconf(_SC_NPROCESSORS_ONLN), .pagesz = sysconf(_SC_PAGESIZE), .lpagesz = 0x200000};
-	Arenaparams ap = {.flags = arenaflags, .ressz = arenaressz, .cmtsz = arenacmtsz};
-	Arena *arena = arenaalloc(ap);
-	String8list args = osargs(arena, argc, argv);
+	Arena *arena = arena_alloc();
+	String8list args = os_args(arena, argc, argv);
 	Cmd parsed = cmdparse(arena, args);
 	if (parsed.inputs.nnode == 0)
 	{
@@ -121,6 +120,6 @@ main(int argc, char *argv[])
 			ret = 1;
 		}
 	}
-	arenarelease(arena);
+	arena_release(arena);
 	return ret;
 }

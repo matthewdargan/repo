@@ -53,7 +53,7 @@ struct Symbollist
 	u64 count;
 };
 
-readonly static String8 directories[] = {str8litc("libu"), str8litc("lib9p"), str8litc("cmd")};
+read_only static String8 directories[] = {str8litc("libu"), str8litc("lib9p"), str8litc("cmd")};
 
 static String8
 cleansignature(Arena *a, String8 signature)
@@ -119,7 +119,7 @@ symbollistpush(Arena *a, Symbollist *list, Symbol symbol)
 	{
 		return;
 	}
-	Symbolnode *node = pusharr(a, Symbolnode, 1);
+	Symbolnode *node = push_array(a, Symbolnode, 1);
 	*node = (Symbolnode){.symbol = symbol, .next = NULL};
 	if (list->end == NULL)
 	{
@@ -165,7 +165,7 @@ listcfiles(Arena *a, String8 dirpath)
 	{
 		return result;
 	}
-	result.v = pusharr(a, String8, files.nnode);
+	result.v = push_array(a, String8, files.nnode);
 	u64 i = 0;
 	for (String8node *node = files.start; node != NULL; node = node->next)
 	{
@@ -560,7 +560,7 @@ parsecfiletreesitter(Arena *a, String8 filepath, String8 source)
 		ts_parser_delete(parser);
 		return symbols;
 	}
-	char *sourcecstr = (char *)pusharr(a, u8, source.len + 1);
+	char *sourcecstr = (char *)push_array(a, u8, source.len + 1);
 	memcpy(sourcecstr, source.str, source.len);
 	sourcecstr[source.len] = '\0';
 	TSTree *tree = ts_parser_parse_string(parser, NULL, sourcecstr, source.len);
@@ -582,7 +582,7 @@ symbolsearch(Arena *a, String8 pattern)
 {
 	Symbollist allsymbols = {0};
 	Symbollist filtered = {0};
-	for (u64 d = 0; d < nelem(directories); d++)
+	for (u64 d = 0; d < ArrayCount(directories); d++)
 	{
 		String8array files = listcfiles(a, directories[d]);
 		for (u64 i = 0; i < files.cnt; i++)
@@ -775,7 +775,7 @@ symbolinfo(Arena *a, String8 symbolname)
 {
 	Symbollist allsymbols = {0};
 	Symbollist filtered = {0};
-	for (u64 d = 0; d < nelem(directories); d++)
+	for (u64 d = 0; d < ArrayCount(directories); d++)
 	{
 		String8array files = listcfiles(a, directories[d]);
 		for (u64 i = 0; i < files.cnt; i++)
@@ -983,8 +983,7 @@ int
 main(void)
 {
 	sysinfo = (Sysinfo){.nprocs = sysconf(_SC_NPROCESSORS_ONLN), .pagesz = sysconf(_SC_PAGESIZE), .lpagesz = 0x200000};
-	Arenaparams ap = {.flags = arenaflags, .ressz = arenaressz, .cmtsz = arenacmtsz};
-	Arena *arena = arenaalloc(ap);
+	Arena *arena = arena_alloc();
 	char line[8192] = {0};
 	while (fgets(line, sizeof(line), stdin))
 	{
@@ -995,10 +994,10 @@ main(void)
 			len--;
 		}
 		String8 input = str8((u8 *)line, len);
-		Temp temp = tempbegin(arena);
+		Temp temp = temp_begin(arena);
 		mcprequest(arena, input);
-		tempend(temp);
+		temp_end(temp);
 	}
-	arenarelease(arena);
+	arena_release(arena);
 	return 0;
 }

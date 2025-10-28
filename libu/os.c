@@ -1,5 +1,5 @@
 static String8list
-osargs(Arena *a, int argc, char **argv)
+os_args(Arena *a, int argc, char **argv)
 {
 	String8list list = {0};
 	for (int i = 0; i < argc; i++)
@@ -13,10 +13,10 @@ osargs(Arena *a, int argc, char **argv)
 static String8
 readfile(Arena *a, String8 path)
 {
-	u64 fd = openfd(a, path, O_RDONLY);
-	Fprops props = osfstat(fd);
-	String8 data = readfilerng(a, fd, rng1u64(0, props.size));
-	closefd(fd);
+	u64 fd = open_fd(a, path, O_RDONLY);
+	Fprops props = os_fstat(fd);
+	String8 data = read_file_rng(a, fd, rng1u64(0, props.size));
+	close_fd(fd);
 	return data;
 }
 
@@ -24,12 +24,12 @@ static b32
 writefile(Arena *a, String8 path, String8 data)
 {
 	b32 ok = 0;
-	u64 fd = openfd(a, path, O_WRONLY);
+	u64 fd = open_fd(a, path, O_WRONLY);
 	if (fd != 0)
 	{
 		ok = 1;
-		writerng(fd, rng1u64(0, data.len), data.str);
-		closefd(fd);
+		write_rng(fd, rng1u64(0, data.len), data.str);
+		close_fd(fd);
 	}
 	return ok;
 }
@@ -40,31 +40,31 @@ appendfile(Arena *a, String8 path, String8 data)
 	b32 ok = 0;
 	if (data.len != 0)
 	{
-		u64 fd = openfd(a, path, O_WRONLY | O_APPEND | O_CREAT);
+		u64 fd = open_fd(a, path, O_WRONLY | O_APPEND | O_CREAT);
 		if (fd != 0)
 		{
 			ok = 1;
-			u64 pos = osfstat(fd).size;
-			writerng(fd, rng1u64(pos, pos + data.len), data.str);
-			closefd(fd);
+			u64 pos = os_fstat(fd).size;
+			write_rng(fd, rng1u64(pos, pos + data.len), data.str);
+			close_fd(fd);
 		}
 	}
 	return ok;
 }
 
 static String8
-readfilerng(Arena *a, u64 fd, Rng1u64 r)
+read_file_rng(Arena *a, u64 fd, Rng1u64 r)
 {
-	u64 pre = arenapos(a);
+	u64 pre = arena_pos(a);
 	u64 len = dim1u64(r);
 	String8 s = {
-	    .str = pusharrnoz(a, u8, len),
+	    .str = push_array_no_zero(a, u8, len),
 	    .len = len,
 	};
-	u64 nread = readrng(fd, r, s.str);
+	u64 nread = read_rng(fd, r, s.str);
 	if (nread < s.len)
 	{
-		arenapopto(a, pre + nread);
+		arena_pop_to(a, pre + nread);
 		s.len = nread;
 	}
 	return s;
@@ -141,7 +141,7 @@ cwd(Arena *a)
 }
 
 static void *
-osreserve(u64 size)
+os_reserve(u64 size)
 {
 	void *p = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (p == MAP_FAILED)
@@ -152,27 +152,27 @@ osreserve(u64 size)
 }
 
 static b32
-oscommit(void *p, u64 size)
+os_commit(void *p, u64 size)
 {
 	mprotect(p, size, PROT_READ | PROT_WRITE);
 	return 1;
 }
 
 static void
-osdecommit(void *p, u64 size)
+os_decommit(void *p, u64 size)
 {
 	madvise(p, size, MADV_DONTNEED);
 	mprotect(p, size, PROT_NONE);
 }
 
 static void
-osrelease(void *p, u64 size)
+os_release(void *p, u64 size)
 {
 	munmap(p, size);
 }
 
 static void *
-osreservelarge(u64 size)
+os_reserve_large(u64 size)
 {
 	void *p = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
 	if (p == MAP_FAILED)
@@ -183,12 +183,12 @@ osreservelarge(u64 size)
 }
 
 static u64
-openfd(Arena *a, String8 path, int flags)
+open_fd(Arena *a, String8 path, int flags)
 {
-	Temp scratch = tempbegin(a);
-	String8 p = pushstr8cpy(scratch.a, path);
+	Temp scratch = temp_begin(a);
+	String8 p = pushstr8cpy(scratch.arena, path);
 	int fd = open((char *)p.str, flags, 0755);
-	tempend(scratch);
+	temp_end(scratch);
 	if (fd == -1)
 	{
 		return 0;
@@ -197,7 +197,7 @@ openfd(Arena *a, String8 path, int flags)
 }
 
 static void
-closefd(u64 fd)
+close_fd(u64 fd)
 {
 	if (fd == 0)
 	{
@@ -207,7 +207,7 @@ closefd(u64 fd)
 }
 
 static u64
-readrng(u64 fd, Rng1u64 r, void *out)
+read_rng(u64 fd, Rng1u64 r, void *out)
 {
 	if (fd == 0)
 	{
@@ -233,7 +233,7 @@ readrng(u64 fd, Rng1u64 r, void *out)
 }
 
 static u64
-writerng(u64 fd, Rng1u64 r, void *data)
+write_rng(u64 fd, Rng1u64 r, void *data)
 {
 	if (fd == 0)
 	{
@@ -271,7 +271,7 @@ settimes(u64 fd, Datetime dt)
 }
 
 static Fprops
-osfstat(u64 fd)
+os_fstat(u64 fd)
 {
 	Fprops props = {0};
 	if (fd == 0)
@@ -289,52 +289,52 @@ osfstat(u64 fd)
 static b32
 osremove(Arena *a, String8 path)
 {
-	Temp scratch = tempbegin(a);
+	Temp scratch = temp_begin(a);
 	b32 ok = 0;
-	String8 p = pushstr8cpy(scratch.a, path);
+	String8 p = pushstr8cpy(scratch.arena, path);
 	if (remove((char *)p.str) != -1)
 	{
 		ok = 1;
 	}
-	tempend(scratch);
+	temp_end(scratch);
 	return ok;
 }
 
 static String8
 abspath(Arena *a, String8 path)
 {
-	Temp scratch = tempbegin(a);
-	String8 p = pushstr8cpy(scratch.a, path);
+	Temp scratch = temp_begin(a);
+	String8 p = pushstr8cpy(scratch.arena, path);
 	char buf[PATH_MAX];
 	if (realpath((char *)p.str, buf) == NULL)
 	{
-		tempend(scratch);
+		temp_end(scratch);
 		return str8zero();
 	}
-	String8 s = pushstr8cpy(scratch.a, str8cstr(buf));
-	tempend(scratch);
+	String8 s = pushstr8cpy(scratch.arena, str8cstr(buf));
+	temp_end(scratch);
 	return s;
 }
 
 static b32
 fileexists(Arena *a, String8 path)
 {
-	Temp scratch = tempbegin(a);
-	String8 p = pushstr8cpy(scratch.a, path);
+	Temp scratch = temp_begin(a);
+	String8 p = pushstr8cpy(scratch.arena, path);
 	b32 ok = 0;
 	if (access((char *)p.str, F_OK) == 0)
 	{
 		ok = 1;
 	}
-	tempend(scratch);
+	temp_end(scratch);
 	return ok;
 }
 
 static b32
 direxists(Arena *a, String8 path)
 {
-	Temp scratch = tempbegin(a);
-	String8 p = pushstr8cpy(scratch.a, path);
+	Temp scratch = temp_begin(a);
+	String8 p = pushstr8cpy(scratch.arena, path);
 	b32 ok = 0;
 	DIR *d = opendir((char *)p.str);
 	if (d != NULL)
@@ -342,36 +342,36 @@ direxists(Arena *a, String8 path)
 		closedir(d);
 		ok = 1;
 	}
-	tempend(scratch);
+	temp_end(scratch);
 	return ok;
 }
 
 static Fprops
 osstat(Arena *a, String8 path)
 {
-	Temp scratch = tempbegin(a);
-	String8 p = pushstr8cpy(scratch.a, path);
+	Temp scratch = temp_begin(a);
+	String8 p = pushstr8cpy(scratch.arena, path);
 	Fprops props = {0};
 	struct stat st = {0};
 	if (stat((char *)p.str, &st) != -1)
 	{
 		props = stattoprops(&st);
 	}
-	tempend(scratch);
+	temp_end(scratch);
 	return props;
 }
 
 static b32
 osmkdir(Arena *a, String8 path)
 {
-	Temp scratch = tempbegin(a);
-	String8 p = pushstr8cpy(scratch.a, path);
+	Temp scratch = temp_begin(a);
+	String8 p = pushstr8cpy(scratch.arena, path);
 	b32 ok = 0;
 	if (mkdir((char *)p.str, 0755) != -1)
 	{
 		ok = 1;
 	}
-	tempend(scratch);
+	temp_end(scratch);
 	return ok;
 }
 

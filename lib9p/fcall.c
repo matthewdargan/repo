@@ -223,7 +223,7 @@ fcallencode(Arena *a, Fcall fc)
 		return str8zero();
 	}
 	String8 msg = {
-	    .str = pusharrnoz(a, u8, msglen),
+	    .str = push_array_no_zero(a, u8, msglen),
 	    .len = msglen,
 	};
 	u8 *p = msg.str;
@@ -838,7 +838,7 @@ direncode(Arena *a, Dir d)
 		return str8zero();
 	}
 	String8 msg = {
-	    .str = pusharrnoz(a, u8, msglen),
+	    .str = push_array_no_zero(a, u8, msglen),
 	    .len = msglen,
 	};
 	u8 *p = msg.str;
@@ -952,7 +952,7 @@ read9pmsg(Arena *a, u64 fd)
 	}
 	u32 msglen = getb4(lenbuf);
 	String8 msg = {
-	    .str = pusharrnoz(a, u8, msglen),
+	    .str = push_array_no_zero(a, u8, msglen),
 	    .len = msglen,
 	};
 	memcpy(msg.str, lenbuf, sizeof lenbuf);
@@ -974,7 +974,7 @@ read9pmsg(Arena *a, u64 fd)
 static void
 dirlistpush(Arena *a, Dirlist *list, Dir d)
 {
-	Dirnode *node = pusharrnoz(a, Dirnode, 1);
+	Dirnode *node = push_array_no_zero(a, Dirnode, 1);
 	node->dir = d;
 	if (list->start == NULL)
 	{

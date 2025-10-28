@@ -135,7 +135,7 @@ jsonparsestring(Arena *a, String8 text, u64 *pos)
 	u64 end = *pos;
 	(*pos)++;
 	String8 unescaped = str8substr(text, rng1u64(start, end));
-	u8 *dst = pusharr(a, u8, unescaped.len);
+	u8 *dst = push_array(a, u8, unescaped.len);
 	u64 dstpos = 0;
 	for (u64 i = 0; i < unescaped.len; i++)
 	{
@@ -236,7 +236,7 @@ jsonparsenumber(Arena *a, String8 text, u64 *pos)
 	}
 	u64 end = *pos;
 	String8 numstr = str8substr(text, rng1u64(start, end));
-	char *numcstr = (char *)pusharr(a, u8, numstr.len + 1);
+	char *numcstr = (char *)push_array(a, u8, numstr.len + 1);
 	memcpy(numcstr, numstr.str, numstr.len);
 	numcstr[numstr.len] = '\0';
 	char *endptr = NULL;
@@ -266,7 +266,7 @@ jsonparsearray(Arena *a, String8 text, u64 *pos)
 		return result;
 	}
 	u64 capacity = 16;
-	Jsonvalue *vals = pusharr(a, Jsonvalue, capacity);
+	Jsonvalue *vals = push_array(a, Jsonvalue, capacity);
 	u64 count = 0;
 	while (*pos < text.len)
 	{
@@ -278,7 +278,7 @@ jsonparsearray(Arena *a, String8 text, u64 *pos)
 		if (count >= capacity)
 		{
 			capacity *= 2;
-			vals = pusharr(a, Jsonvalue, capacity);
+			vals = push_array(a, Jsonvalue, capacity);
 			memcpy(vals, result.arrvals, count * sizeof(Jsonvalue));
 		}
 		vals[count++] = elem;
@@ -325,8 +325,8 @@ jsonparseobject(Arena *a, String8 text, u64 *pos)
 		return result;
 	}
 	u64 capacity = 16;
-	String8 *keys = pusharr(a, String8, capacity);
-	Jsonvalue *vals = pusharr(a, Jsonvalue, capacity);
+	String8 *keys = push_array(a, String8, capacity);
+	Jsonvalue *vals = push_array(a, Jsonvalue, capacity);
 	u64 count = 0;
 	while (*pos < text.len)
 	{
@@ -346,8 +346,8 @@ jsonparseobject(Arena *a, String8 text, u64 *pos)
 		if (count >= capacity)
 		{
 			capacity *= 2;
-			keys = pusharr(a, String8, capacity);
-			vals = pusharr(a, Jsonvalue, capacity);
+			keys = push_array(a, String8, capacity);
+			vals = push_array(a, Jsonvalue, capacity);
 			memcpy(keys, result.objkeys, count * sizeof(String8));
 			memcpy(vals, result.objvals, count * sizeof(Jsonvalue));
 		}
@@ -418,7 +418,7 @@ jsonbuilder(Arena *a, u64 estsize)
 		estsize = 1024;
 	}
 	Jsonbuilder b = {
-	    .data = pusharr(a, u8, estsize),
+	    .data = push_array(a, u8, estsize),
 	    .pos = 0,
 	    .cap = estsize,
 	};

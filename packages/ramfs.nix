@@ -28,7 +28,7 @@
         buildPhase = ''
           clang -O0 -g -fsanitize=address -fno-omit-frame-pointer \
              -I. -fdiagnostics-absolute-paths -Wall -Wextra \
-             cmd/ramfs/main.c -o ramfs
+             -DBUILD_DEBUG cmd/ramfs/main.c -o ramfs
         '';
         dontStrip = true;
         installPhase = ''

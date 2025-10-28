@@ -1,7 +1,7 @@
 static Cfsys *
 fsinit(Arena *a, u64 fd)
 {
-	Cfsys *fs = pusharr(a, Cfsys, 1);
+	Cfsys *fs = push_array(a, Cfsys, 1);
 	fs->fd = fd;
 	fs->nexttag = 1;
 	fs->nextfid = 1;
@@ -277,7 +277,7 @@ fsversion(Arena *a, Cfsys *fs, u32 msize)
 static Cfid *
 fsauth(Arena *a, Cfsys *fs, String8 uname, String8 aname)
 {
-	Cfid *afid = pusharr(a, Cfid, 1);
+	Cfid *afid = push_array(a, Cfid, 1);
 	afid->fid = fs->nextfid++;
 	afid->fs = fs;
 	Fcall tx = {0};
@@ -297,7 +297,7 @@ fsauth(Arena *a, Cfsys *fs, String8 uname, String8 aname)
 static Cfid *
 fsattach(Arena *a, Cfsys *fs, u32 afid, String8 uname, String8 aname)
 {
-	Cfid *fid = pusharr(a, Cfid, 1);
+	Cfid *fid = push_array(a, Cfid, 1);
 	fid->fid = fs->nextfid++;
 	fid->fs = fs;
 	Fcall tx = {0};
@@ -335,13 +335,13 @@ fswalk(Arena *a, Cfid *fid, String8 path)
 	{
 		return NULL;
 	}
-	Cfid *wfid = pusharr(a, Cfid, 1);
-	Temp scratch = tempbegin(a);
+	Cfid *wfid = push_array(a, Cfid, 1);
+	Temp scratch = temp_begin(a);
 	wfid->fid = fid->fs->nextfid++;
 	wfid->qid = fid->qid;
 	wfid->fs = fid->fs;
 	b32 firstwalk = 1;
-	String8list parts = str8split(scratch.a, path, (u8 *)"/", 1, 0);
+	String8list parts = str8split(scratch.arena, path, (u8 *)"/", 1, 0);
 	String8node *node = parts.start;
 	Fcall tx = {0};
 	tx.type = Twalk;
@@ -678,14 +678,14 @@ fsdirread(Arena *a, Cfid *fid, Dirlist *list)
 	{
 		return -1;
 	}
-	Temp scratch = tempbegin(a);
-	u8 *buf = pusharrnoz(a, u8, DIRMAX);
+	Temp scratch = temp_begin(a);
+	u8 *buf = push_array_no_zero(a, u8, DIRMAX);
 	s64 ts = fsread(a, fid, buf, DIRMAX);
 	if (ts >= 0)
 	{
 		ts = dirpackage(a, buf, ts, list);
 	}
-	tempend(scratch);
+	temp_end(scratch);
 	return ts;
 }
 
@@ -696,7 +696,7 @@ fsdirreadall(Arena *a, Cfid *fid, Dirlist *list)
 	{
 		return -1;
 	}
-	u8 *buf = pusharrnoz(a, u8, DIRBUFMAX);
+	u8 *buf = push_array_no_zero(a, u8, DIRBUFMAX);
 	s64 ts = 0;
 	u64 nleft = DIRBUFMAX;
 	s64 n = 0;
@@ -766,8 +766,8 @@ fsdirfwstat(Arena *a, Cfid *fid, Dir d)
 	{
 		return 0;
 	}
-	Temp scratch = tempbegin(a);
-	String8 stat = direncode(scratch.a, d);
+	Temp scratch = temp_begin(a);
+	String8 stat = direncode(scratch.arena, d);
 	if (stat.len == 0)
 	{
 		return 0;

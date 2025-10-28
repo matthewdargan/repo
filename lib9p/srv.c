@@ -13,8 +13,8 @@ changemsize(Srv *srv, u32 msize)
 		return;
 	}
 	srv->msize = msize;
-	srv->rbuf = pusharr(srv->arena, u8, msize);
-	srv->wbuf = pusharr(srv->arena, u8, msize);
+	srv->rbuf = push_array(srv->arena, u8, msize);
+	srv->wbuf = push_array(srv->arena, u8, msize);
 }
 
 static Req *
@@ -33,7 +33,7 @@ getreq(Srv *srv)
 	Req *r = allocreq(srv, f.tag);
 	if (r == NULL)
 	{
-		r = pusharr(srv->arena, Req, 1);
+		r = push_array(srv->arena, Req, 1);
 		r->tag = f.tag;
 		r->ifcall = f;
 		r->error = Eduptag;
@@ -174,7 +174,7 @@ rflush(Req *r, String8 err)
 	{
 		if (or->responded == 0)
 		{
-			or->flush = pusharr(r->srv->arena, Req *, or->nflush + 1);
+			or->flush = push_array(r->srv->arena, Req *, or->nflush + 1);
 			or->flush[or->nflush++] = r;
 			return 1;
 		}
@@ -405,7 +405,7 @@ sread(Srv *srv, Req *r)
 	{
 		r->ifcall.count = srv->msize - IOHDRSZ;
 	}
-	r->rbuf = pusharr(srv->arena, u8, r->ifcall.count);
+	r->rbuf = push_array(srv->arena, u8, r->ifcall.count);
 	r->ofcall.data = str8(r->rbuf, 0);
 	u32 o = r->fid->omode & 3;
 	if (o != OREAD && o != ORDWR && o != OEXEC)
@@ -581,15 +581,15 @@ rwstat(Req *r, String8 err)
 Srv *
 srvalloc(Arena *a, u64 infd, u64 outfd)
 {
-	Srv *srv = pusharr(a, Srv, 1);
+	Srv *srv = push_array(a, Srv, 1);
 	srv->arena = a;
 	srv->infd = infd;
 	srv->outfd = outfd;
 	srv->msize = 8192 + IOHDRSZ;
 	srv->maxfid = 256;
 	srv->maxreq = 256;
-	srv->fidtab = pusharr(a, Fid *, srv->maxfid);
-	srv->reqtab = pusharr(a, Req *, srv->maxreq);
+	srv->fidtab = push_array(a, Fid *, srv->maxfid);
+	srv->reqtab = push_array(a, Req *, srv->maxreq);
 	srv->nexttag = 1;
 	changemsize(srv, srv->msize);
 	return srv;
@@ -834,7 +834,7 @@ allocfid(Srv *srv, u32 fid)
 	{
 		return NULL;
 	}
-	Fid *f = pusharr(srv->arena, Fid, 1);
+	Fid *f = push_array(srv->arena, Fid, 1);
 	f->fid = fid;
 	f->omode = ~0U;
 	f->srv = srv;
@@ -886,7 +886,7 @@ allocreq(Srv *srv, u32 tag)
 	{
 		return NULL;
 	}
-	Req *r = pusharr(srv->arena, Req, 1);
+	Req *r = push_array(srv->arena, Req, 1);
 	r->tag = tag;
 	r->srv = srv;
 	srv->reqtab[hash] = r;

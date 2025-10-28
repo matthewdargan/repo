@@ -31,13 +31,8 @@ main(int argc, char *argv[])
 	    .pagesz = sysconf(_SC_PAGESIZE),
 	    .lpagesz = 0x200000,
 	};
-	Arenaparams ap = {
-	    .flags = arenaflags,
-	    .ressz = arenaressz,
-	    .cmtsz = arenacmtsz,
-	};
-	Arena *arena = arenaalloc(ap);
-	String8list args = osargs(arena, argc, argv);
+	Arena *arena = arena_alloc();
+	String8list args = os_args(arena, argc, argv);
 	Cmd parsed = cmdparse(arena, args);
 	if (parsed.inputs.nnode != 2)
 	{
@@ -62,6 +57,6 @@ main(int argc, char *argv[])
 		fprintf(stderr, "9bind: bind failed: %s\n", strerror(errno));
 		return 1;
 	}
-	arenarelease(arena);
+	arena_release(arena);
 	return 0;
 }

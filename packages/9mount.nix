@@ -28,7 +28,7 @@
         buildPhase = ''
           clang -O0 -g -fsanitize=address -fno-omit-frame-pointer \
              -I. -fdiagnostics-absolute-paths -Wall -Wextra \
-             cmd/9mount/main.c -o 9mount
+             -DBUILD_DEBUG cmd/9mount/main.c -o 9mount
         '';
         dontStrip = true;
         installPhase = ''

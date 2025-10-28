@@ -66,7 +66,7 @@ cmdinsertopt(Arena *a, Cmd *c, String8 s, String8list vals)
 	}
 	else
 	{
-		v = pusharr(a, Cmdopt, 1);
+		v = push_array(a, Cmdopt, 1);
 		v->hash_next = *slot;
 		v->hash = cmdhash(s);
 		v->str = pushstr8cpy(a, s);
@@ -89,7 +89,7 @@ cmdparse(Arena *a, String8list args)
 	Cmd parsed = {0};
 	parsed.exe = args.start->str;
 	parsed.optabsz = 4096;
-	parsed.optab = pusharr(a, Cmdopt *, parsed.optabsz);
+	parsed.optab = push_array(a, Cmdopt *, parsed.optabsz);
 	b32 afterdash = 0;
 	b32 firstarg = 1;
 	for (String8node *node = args.start->next, *next = NULL; node != NULL; node = next)
@@ -151,7 +151,7 @@ cmdparse(Arena *a, String8list args)
 		}
 	}
 	parsed.argc = args.nnode;
-	parsed.argv = pusharr(a, char *, parsed.argc);
+	parsed.argv = push_array(a, char *, parsed.argc);
 	u64 i = 0;
 	for (String8node *node = args.start; node != NULL; node = node->next, i++)
 	{

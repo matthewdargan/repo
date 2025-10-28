@@ -82,52 +82,52 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 static void
 cmd9pcreate(Arena *a, String8 addr, String8 aname, Cmd parsed)
 {
-	Temp scratch = tempbegin(a);
-	Cfsys *fs = fsconnect(scratch.a, addr, aname);
+	Temp scratch = temp_begin(a);
+	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
-		tempend(scratch);
+		temp_end(scratch);
 		return;
 	}
 	for (String8node *node = parsed.inputs.start->next; node != NULL; node = node->next)
 	{
 		String8 name = node->str;
-		Cfid *fid = fscreate(scratch.a, fs, name, OREAD, 0666);
+		Cfid *fid = fscreate(scratch.arena, fs, name, OREAD, 0666);
 		if (fid == NULL)
 		{
 			fprintf(stderr, "9p: failed to create '%.*s'\n", str8varg(name));
 		}
 		else
 		{
-			fsclose(scratch.a, fid);
+			fsclose(scratch.arena, fid);
 		}
 	}
-	fs9unmount(scratch.a, fs);
-	tempend(scratch);
+	fs9unmount(scratch.arena, fs);
+	temp_end(scratch);
 }
 
 static void
 cmd9pread(Arena *a, String8 addr, String8 aname, String8 name)
 {
-	Temp scratch = tempbegin(a);
-	Cfsys *fs = fsconnect(scratch.a, addr, aname);
+	Temp scratch = temp_begin(a);
+	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
-		tempend(scratch);
+		temp_end(scratch);
 		return;
 	}
-	Cfid *fid = fs9open(scratch.a, fs, name, OREAD);
+	Cfid *fid = fs9open(scratch.arena, fs, name, OREAD);
 	if (fid == NULL)
 	{
 		fprintf(stderr, "9p: failed to open '%.*s'\n", str8varg(name));
-		fs9unmount(scratch.a, fs);
-		tempend(scratch);
+		fs9unmount(scratch.arena, fs);
+		temp_end(scratch);
 		return;
 	}
-	u8 *buf = pusharrnoz(scratch.a, u8, DIRMAX);
+	u8 *buf = push_array_no_zero(scratch.arena, u8, DIRMAX);
 	for (;;)
 	{
-		s64 n = fsread(scratch.a, fid, buf, DIRMAX);
+		s64 n = fsread(scratch.arena, fid, buf, DIRMAX);
 		if (n <= 0)
 		{
 			if (n < 0)
@@ -142,30 +142,30 @@ cmd9pread(Arena *a, String8 addr, String8 aname, String8 name)
 			break;
 		}
 	}
-	fsclose(scratch.a, fid);
-	fs9unmount(scratch.a, fs);
-	tempend(scratch);
+	fsclose(scratch.arena, fid);
+	fs9unmount(scratch.arena, fs);
+	temp_end(scratch);
 }
 
 static void
 cmd9pwrite(Arena *a, String8 addr, String8 aname, String8 name)
 {
-	Temp scratch = tempbegin(a);
-	Cfsys *fs = fsconnect(scratch.a, addr, aname);
+	Temp scratch = temp_begin(a);
+	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
-		tempend(scratch);
+		temp_end(scratch);
 		return;
 	}
-	Cfid *fid = fs9open(scratch.a, fs, name, OWRITE | OTRUNC);
+	Cfid *fid = fs9open(scratch.arena, fs, name, OWRITE | OTRUNC);
 	if (fid == NULL)
 	{
 		fprintf(stderr, "9p: failed to open '%.*s'\n", str8varg(name));
-		fs9unmount(scratch.a, fs);
-		tempend(scratch);
+		fs9unmount(scratch.arena, fs);
+		temp_end(scratch);
 		return;
 	}
-	u8 *buf = pusharrnoz(scratch.a, u8, DIRMAX);
+	u8 *buf = push_array_no_zero(scratch.arena, u8, DIRMAX);
 	for (;;)
 	{
 		s64 n = read(STDIN_FILENO, buf, DIRMAX);
@@ -177,105 +177,105 @@ cmd9pwrite(Arena *a, String8 addr, String8 aname, String8 name)
 			}
 			break;
 		}
-		s64 nwrite = fswrite(scratch.a, fid, buf, n);
+		s64 nwrite = fswrite(scratch.arena, fid, buf, n);
 		if (nwrite != n)
 		{
 			fprintf(stderr, "9p: write error\n");
 			break;
 		}
 	}
-	fsclose(scratch.a, fid);
-	fs9unmount(scratch.a, fs);
-	tempend(scratch);
+	fsclose(scratch.arena, fid);
+	fs9unmount(scratch.arena, fs);
+	temp_end(scratch);
 }
 
 static void
 cmd9premove(Arena *a, String8 addr, String8 aname, Cmd parsed)
 {
-	Temp scratch = tempbegin(a);
-	Cfsys *fs = fsconnect(scratch.a, addr, aname);
+	Temp scratch = temp_begin(a);
+	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
-		tempend(scratch);
+		temp_end(scratch);
 		return;
 	}
 	for (String8node *node = parsed.inputs.start->next; node != NULL; node = node->next)
 	{
 		String8 name = node->str;
-		if (fsremove(scratch.a, fs, name) < 0)
+		if (fsremove(scratch.arena, fs, name) < 0)
 		{
 			fprintf(stderr, "9p: failed to remove '%.*s'\n", str8varg(name));
 		}
 	}
-	fs9unmount(scratch.a, fs);
-	tempend(scratch);
+	fs9unmount(scratch.arena, fs);
+	temp_end(scratch);
 }
 
 static void
 cmd9pstat(Arena *a, String8 addr, String8 aname, String8 name)
 {
-	Temp scratch = tempbegin(a);
-	Cfsys *fs = fsconnect(scratch.a, addr, aname);
+	Temp scratch = temp_begin(a);
+	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
-		tempend(scratch);
+		temp_end(scratch);
 		return;
 	}
-	Dir d = fsdirstat(scratch.a, fs, name);
+	Dir d = fsdirstat(scratch.arena, fs, name);
 	if (d.name.len == 0)
 	{
 		fprintf(stderr, "9p: failed to stat '%.*s'\n", str8varg(name));
-		fs9unmount(scratch.a, fs);
-		tempend(scratch);
+		fs9unmount(scratch.arena, fs);
+		temp_end(scratch);
 		return;
 	}
 	printf("%.*s %lu %d %.*s %.*s\n", str8varg(d.name), d.len, d.mtime, str8varg(d.uid), str8varg(d.gid));
-	fs9unmount(scratch.a, fs);
-	tempend(scratch);
+	fs9unmount(scratch.arena, fs);
+	temp_end(scratch);
 }
 
 static void
 cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 {
-	Temp scratch = tempbegin(a);
-	Cfsys *fs = fsconnect(scratch.a, addr, aname);
+	Temp scratch = temp_begin(a);
+	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
-		tempend(scratch);
+		temp_end(scratch);
 		return;
 	}
 	String8node *namenode = parsed.inputs.start->next;
 	if (namenode == NULL)
 	{
 		String8 name = str8lit(".");
-		Dir d = fsdirstat(scratch.a, fs, name);
+		Dir d = fsdirstat(scratch.arena, fs, name);
 		if (d.name.len == 0)
 		{
 			fprintf(stderr, "9p: failed to stat '%.*s'\n", str8varg(name));
-			fs9unmount(scratch.a, fs);
-			tempend(scratch);
+			fs9unmount(scratch.arena, fs);
+			temp_end(scratch);
 			return;
 		}
 		if (d.mode & DMDIR)
 		{
-			Cfid *fid = fs9open(scratch.a, fs, name, OREAD);
+			Cfid *fid = fs9open(scratch.arena, fs, name, OREAD);
 			if (fid == NULL)
 			{
 				fprintf(stderr, "9p: failed to open directory '%.*s'\n", str8varg(name));
-				fs9unmount(scratch.a, fs);
-				tempend(scratch);
+				fs9unmount(scratch.arena, fs);
+				temp_end(scratch);
 				return;
 			}
 			Dirlist list = {0};
-			if (fsdirreadall(scratch.a, fid, &list) < 0)
+			if (fsdirreadall(scratch.arena, fid, &list) < 0)
 			{
 				fprintf(stderr, "9p: failed to read directory '%.*s'\n", str8varg(name));
-				fsclose(scratch.a, fid);
-				fs9unmount(scratch.a, fs);
-				tempend(scratch);
+				fsclose(scratch.arena, fid);
+				fs9unmount(scratch.arena, fs);
+				temp_end(scratch);
 				return;
 			}
-			fsclose(scratch.a, fid);
+			fsclose(scratch.arena, fid);
 			for (Dirnode *node = list.start; node != NULL; node = node->next)
 			{
 				printf("%.*s\n", str8varg(node->dir.name));
@@ -291,7 +291,7 @@ cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 		for (; namenode != NULL; namenode = namenode->next)
 		{
 			String8 name = namenode->str;
-			Dir d = fsdirstat(scratch.a, fs, name);
+			Dir d = fsdirstat(scratch.arena, fs, name);
 			if (d.name.len == 0)
 			{
 				fprintf(stderr, "9p: failed to stat '%.*s'\n", str8varg(name));
@@ -299,20 +299,20 @@ cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 			}
 			if (d.mode & DMDIR)
 			{
-				Cfid *fid = fs9open(scratch.a, fs, name, OREAD);
+				Cfid *fid = fs9open(scratch.arena, fs, name, OREAD);
 				if (fid == NULL)
 				{
 					fprintf(stderr, "9p: failed to open '%.*s'\n", str8varg(name));
 					continue;
 				}
 				Dirlist list = {0};
-				if (fsdirreadall(scratch.a, fid, &list) < 0)
+				if (fsdirreadall(scratch.arena, fid, &list) < 0)
 				{
 					fprintf(stderr, "9p: failed to read directory '%.*s'\n", str8varg(name));
-					fsclose(scratch.a, fid);
+					fsclose(scratch.arena, fid);
 					continue;
 				}
-				fsclose(scratch.a, fid);
+				fsclose(scratch.arena, fid);
 				for (Dirnode *node = list.start; node != NULL; node = node->next)
 				{
 					printf("%.*s\n", str8varg(node->dir.name));
@@ -324,17 +324,16 @@ cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 			}
 		}
 	}
-	fs9unmount(scratch.a, fs);
-	tempend(scratch);
+	fs9unmount(scratch.arena, fs);
+	temp_end(scratch);
 }
 
 int
 main(int argc, char *argv[])
 {
 	sysinfo = (Sysinfo){.nprocs = sysconf(_SC_NPROCESSORS_ONLN), .pagesz = sysconf(_SC_PAGESIZE), .lpagesz = 0x200000};
-	Arenaparams ap = {.flags = arenaflags, .ressz = arenaressz, .cmtsz = arenacmtsz};
-	Arena *arena = arenaalloc(ap);
-	String8list args = osargs(arena, argc, argv);
+	Arena *arena = arena_alloc();
+	String8list args = os_args(arena, argc, argv);
 	Cmd parsed = cmdparse(arena, args);
 	String8 addr = str8zero();
 	String8 aname = str8zero();
@@ -349,7 +348,7 @@ main(int argc, char *argv[])
 	if (parsed.inputs.nnode < 2)
 	{
 		usage();
-		arenarelease(arena);
+		arena_release(arena);
 		return 1;
 	}
 	String8 cmd = parsed.inputs.start->str;
@@ -383,9 +382,9 @@ main(int argc, char *argv[])
 	else
 	{
 		fprintf(stderr, "9p: unsupported command '%.*s'\n", str8varg(cmd));
-		arenarelease(arena);
+		arena_release(arena);
 		return 1;
 	}
-	arenarelease(arena);
+	arena_release(arena);
 	return 0;
 }

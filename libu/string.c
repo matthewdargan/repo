@@ -99,7 +99,7 @@ str8cmp(String8 a, String8 b, u32 flags)
 	}
 	else if (a.len == b.len || (flags & RSIDETOL))
 	{
-		u64 len = min(a.len, b.len);
+		u64 len = Min(a.len, b.len);
 		ok = 1;
 		for (u64 i = 0; i < len; i++)
 		{
@@ -178,8 +178,8 @@ str8rindex(String8 s, u64 pos, String8 needle, u32 flags)
 static String8
 str8substr(String8 s, Rng1u64 r)
 {
-	r.min = min(r.min, s.len);
-	r.max = min(r.max, s.len);
+	r.min = Min(r.min, s.len);
+	r.max = Min(r.max, s.len);
 	s.str += r.min;
 	s.len = dim1u64(r);
 	return s;
@@ -188,14 +188,14 @@ str8substr(String8 s, Rng1u64 r)
 static String8
 str8prefix(String8 s, u64 len)
 {
-	s.len = min(len, s.len);
+	s.len = Min(len, s.len);
 	return s;
 }
 
 static String8
 str8suffix(String8 s, u64 len)
 {
-	len = min(len, s.len);
+	len = Min(len, s.len);
 	s.str = s.str + s.len - len;
 	s.len = len;
 	return s;
@@ -204,7 +204,7 @@ str8suffix(String8 s, u64 len)
 static String8
 str8skip(String8 s, u64 len)
 {
-	len = min(len, s.len);
+	len = Min(len, s.len);
 	s.str += len;
 	s.len -= len;
 	return s;
@@ -214,7 +214,7 @@ static String8
 pushstr8cat(Arena *a, String8 s1, String8 s2)
 {
 	String8 str = {
-	    .str = pusharrnoz(a, u8, s1.len + s2.len + 1),
+	    .str = push_array_no_zero(a, u8, s1.len + s2.len + 1),
 	    .len = s1.len + s2.len,
 	};
 	memmove(str.str, s1.str, s1.len);
@@ -227,7 +227,7 @@ static String8
 pushstr8cpy(Arena *a, String8 s)
 {
 	String8 str = {
-	    .str = pusharrnoz(a, u8, s.len + 1),
+	    .str = push_array_no_zero(a, u8, s.len + 1),
 	    .len = s.len,
 	};
 	memcpy(str.str, s.str, s.len);
@@ -241,7 +241,7 @@ pushstr8fv(Arena *a, char *fmt, va_list args)
 	va_list args2;
 	va_copy(args2, args);
 	u32 nbytes = vsnprintf(0, 0, fmt, args) + 1;
-	u8 *str = pusharrnoz(a, u8, nbytes);
+	u8 *str = push_array_no_zero(a, u8, nbytes);
 	String8 s = {
 	    .str = str,
 	    .len = vsnprintf((char *)str, nbytes, fmt, args2),
@@ -397,7 +397,7 @@ u64tostr8(Arena *a, u64 v, u32 radix, u8 mindig, u8 sep)
 		}
 	}
 	String8 s = {
-	    .str = pusharrnoz(a, u8, pre.len + nleadz + nseps + ndigits + 1),
+	    .str = push_array_no_zero(a, u8, pre.len + nleadz + nseps + ndigits + 1),
 	    .len = pre.len + nleadz + nseps + ndigits,
 	};
 	s.str[s.len] = 0;
@@ -455,7 +455,7 @@ str8listpushnode(String8list *list, String8node *node, String8 s)
 static String8node *
 str8listpush(Arena *a, String8list *list, String8 s)
 {
-	String8node *node = pusharrnoz(a, String8node, 1);
+	String8node *node = push_array_no_zero(a, String8node, 1);
 	str8listpushnode(list, node, s);
 	return node;
 }
@@ -509,7 +509,7 @@ str8listjoin(Arena *a, String8list *list, Stringjoin *opts)
 		nsep = list->nnode - 1;
 	}
 	String8 s = {
-	    .str = pusharrnoz(a, u8, join.pre.len + join.post.len + nsep * join.sep.len + list->tlen + 1),
+	    .str = push_array_no_zero(a, u8, join.pre.len + join.post.len + nsep * join.sep.len + list->tlen + 1),
 	    .len = join.pre.len + join.post.len + nsep * join.sep.len + list->tlen,
 	};
 	u8 *p = s.str;
@@ -535,7 +535,7 @@ static String8array
 str8listtoarray(Arena *a, String8list *list)
 {
 	String8array array = {
-	    .v = pusharrnoz(a, String8, list->nnode),
+	    .v = push_array_no_zero(a, String8, list->nnode),
 	    .cnt = list->nnode,
 	};
 	u64 i = 0;
@@ -550,7 +550,7 @@ static String8array
 str8arrayreserve(Arena *a, u64 cnt)
 {
 	String8array array = {
-	    .v = pusharr(a, String8, cnt),
+	    .v = push_array(a, String8, cnt),
 	    .cnt = 0,
 	};
 	return array;

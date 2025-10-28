@@ -36,7 +36,7 @@
           cp ${pkgs.tree-sitter-grammars.tree-sitter-c.src}/src/tree_sitter/parser.h treesitter/tree_sitter/parser.h
           clang -O0 -g -fsanitize=address -fno-omit-frame-pointer \
              -I. -Itreesitter -fdiagnostics-absolute-paths -Wall -Wextra \
-             -ltree-sitter cmd/mcpsrv/main.c -o mcpsrv
+             -DBUILD_DEBUG -ltree-sitter cmd/mcpsrv/main.c -o mcpsrv
         '';
         dontStrip = true;
         installPhase = ''

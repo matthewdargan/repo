@@ -68,13 +68,8 @@ main(int argc, char *argv[])
 	    .pagesz = sysconf(_SC_PAGESIZE),
 	    .lpagesz = 0x200000,
 	};
-	Arenaparams ap = {
-	    .flags = arenaflags,
-	    .ressz = arenaressz,
-	    .cmtsz = arenacmtsz,
-	};
-	Arena *arena = arenaalloc(ap);
-	String8list args = osargs(arena, argc, argv);
+	Arena *arena = arena_alloc();
+	String8list args = os_args(arena, argc, argv);
 	Cmd parsed = cmdparse(arena, args);
 	b32 dryrun = cmdhasflag(&parsed, str8lit("n"));
 	b32 singleattach = cmdhasflag(&parsed, str8lit("s"));
@@ -197,6 +192,6 @@ main(int argc, char *argv[])
 		fprintf(stderr, "9mount: mount failed: %s\n", strerror(errno));
 		return 1;
 	}
-	arenarelease(arena);
+	arena_release(arena);
 	return 0;
 }

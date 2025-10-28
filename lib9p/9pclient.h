@@ -21,8 +21,8 @@ struct Cfid
 	Cfsys *fs;
 };
 
-readonly static b32 debug9pclient = 1;
-readonly static u32 omodetab[8] = {0, OEXEC, OWRITE, ORDWR, OREAD, OEXEC, ORDWR, ORDWR};
+read_only static b32 debug9pclient = 1;
+read_only static u32 omodetab[8] = {0, OEXEC, OWRITE, ORDWR, OREAD, OEXEC, ORDWR, ORDWR};
 
 static Cfsys *fsinit(Arena *a, u64 fd);
 static Cfsys *fs9mount(Arena *a, u64 fd, String8 aname);

@@ -1,9 +1,56 @@
 #ifndef U_H
 #define U_H
 
-#define readonly __attribute__((section(".rodata")))
-#define nelem(a) (sizeof(a) / sizeof((a)[0]))
-#define roundup(x, n) (((x) + (n) - 1) & ~((n) - 1))
+#define read_only __attribute__((section(".rodata")))
+#define KB(n) (((u64)(n)) << 10)
+#define MB(n) (((u64)(n)) << 20)
+#define GB(n) (((u64)(n)) << 30)
+#define TB(n) (((u64)(n)) << 40)
+#define Min(A, B) (((A) < (B)) ? (A) : (B))
+#define Max(A, B) (((A) > (B)) ? (A) : (B))
+#define MemoryCopy(dst, src, size) memmove((dst), (src), (size))
+#define MemoryZero(s, z) memset((s), 0, (z))
+#define AlignOf(T) __alignof(T)
+#define SLLStackPush_N(f, n, next) ((n)->next = (f), (f) = (n))
+#define SLLStackPop_N(f, next) ((f) = (f)->next)
+#define SLLStackPush(f, n) SLLStackPush_N(f, n, next)
+#define SLLStackPop(f) SLLStackPop_N(f, next)
+#define ArrayCount(a) (sizeof(a) / sizeof((a)[0]))
+#define AlignPow2(x, b) (((x) + (b) - 1) & (~((b) - 1)))
+#define Glue_(A, B) A##B
+#define Glue(A, B) Glue_(A, B)
+#define StaticAssert(C, ID) static u8 Glue(ID, __LINE__)[(C) ? 1 : -1]
+
+#define Trap() __builtin_trap()
+#define AssertAlways(x) \
+	do                    \
+	{                     \
+		if (!(x))           \
+		{                   \
+			Trap();           \
+		}                   \
+	} while (0)
+#if BUILD_DEBUG
+#define Assert(x) AssertAlways(x)
+#else
+#define Assert(x) (void)(x)
+#endif
+
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+#define ASAN_ENABLED 1
+#endif
+#endif
+
+#if ASAN_ENABLED
+void __asan_poison_memory_region(void const volatile *addr, size_t size);
+void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
+#define AsanPoisonMemoryRegion(addr, size) __asan_poison_memory_region((addr), (size))
+#define AsanUnpoisonMemoryRegion(addr, size) __asan_unpoison_memory_region((addr), (size))
+#else
+#define AsanPoisonMemoryRegion(addr, size) ((void)(addr), (void)(size))
+#define AsanUnpoisonMemoryRegion(addr, size) ((void)(addr), (void)(size))
+#endif
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -88,8 +135,6 @@ struct Fprops
 static u16 bswapu16(u16 x);
 static u32 bswapu32(u32 x);
 static u64 bswapu64(u64 x);
-static u64 max(u64 a, u64 b);
-static u64 min(u64 a, u64 b);
 static u64 datetimetodense(Datetime dt);
 static Datetime densetodatetime(u64 t);
 
