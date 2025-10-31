@@ -16,18 +16,18 @@
 #include <unistd.h>
 
 /* clang-format off */
-#include "libu/u.h"
-#include "libu/arena.h"
-#include "libu/string.h"
-#include "libu/cmd.h"
-#include "libu/os.h"
-#include "libu/socket.h"
-#include "libu/u.c"
-#include "libu/arena.c"
-#include "libu/string.c"
-#include "libu/cmd.c"
-#include "libu/os.c"
-#include "libu/socket.c"
+#include "base/core.h"
+#include "base/arena.h"
+#include "base/string.h"
+#include "base/cmd.h"
+#include "base/os.h"
+#include "base/socket.h"
+#include "base/core.c"
+#include "base/arena.c"
+#include "base/string.c"
+#include "base/cmd.c"
+#include "base/os.c"
+#include "base/socket.c"
 /* clang-format on */
 
 static String8

@@ -1,5 +1,5 @@
-#ifndef U_H
-#define U_H
+#ifndef CORE_H
+#define CORE_H
 
 #define read_only __attribute__((section(".rodata")))
 #define KB(n) (((u64)(n)) << 10)
@@ -138,4 +138,4 @@ static u64 bswapu64(u64 x);
 static u64 datetimetodense(Datetime dt);
 static Datetime densetodatetime(u64 t);
 
-#endif  // U_H
+#endif  // CORE_H

@@ -12,16 +12,16 @@
 #include <unistd.h>
 
 /* clang-format off */
-#include "libu/u.h"
-#include "libu/arena.h"
-#include "libu/string.h"
-#include "libu/os.h"
-#include "libu/json.h"
-#include "libu/u.c"
-#include "libu/arena.c"
-#include "libu/string.c"
-#include "libu/os.c"
-#include "libu/json.c"
+#include "base/core.h"
+#include "base/arena.h"
+#include "base/string.h"
+#include "base/os.h"
+#include "base/json.h"
+#include "base/core.c"
+#include "base/arena.c"
+#include "base/string.c"
+#include "base/os.c"
+#include "base/json.c"
 #include <tree_sitter/api.h>
 #include "parser_c.c"
 /* clang-format on */
@@ -53,7 +53,7 @@ struct Symbollist
 	u64 count;
 };
 
-read_only static String8 directories[] = {str8litc("libu"), str8litc("lib9p"), str8litc("cmd")};
+read_only static String8 directories[] = {str8litc("base"), str8litc("9p"), str8litc("cmd")};
 
 static String8
 cleansignature(Arena *a, String8 signature)
