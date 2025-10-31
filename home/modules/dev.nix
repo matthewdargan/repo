@@ -6,6 +6,10 @@
   };
   nixpkgs.config.allowUnfree = true;
   programs = {
+    delta = {
+      enable = true;
+      enableGitIntegration = true;
+    };
     direnv = {
       enable = true;
       nix-direnv.enable = true;
@@ -57,13 +61,14 @@
     };
     git = {
       enable = true;
-      delta.enable = true;
-      extraConfig = {
+      settings = {
         init.defaultBranch = "main";
         push.autoSetupRemote = true;
+        user = {
+          email = "matthewdargan57@gmail.com";
+          name = "Matthew Dargan";
+        };
       };
-      userEmail = "matthewdargan57@gmail.com";
-      userName = "Matthew Dargan";
     };
   };
   xdg.enable = true;
