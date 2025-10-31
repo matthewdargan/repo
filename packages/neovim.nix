@@ -6,17 +6,6 @@
   }: {
     packages.neovim = inputs'.nixvim.legacyPackages.makeNixvimWithModule {
       module = {helpers, ...}: {
-        autoCmd = [
-          {
-            callback = helpers.mkRaw ''
-              function()
-                vim.fn.system("ctags -R --fields=+iaS --extra=+q --exclude=.direnv --exclude=.git --exclude=result .")
-              end
-            '';
-            event = ["BufWritePost"];
-            pattern = ["*.c" "*.h"];
-          }
-        ];
         clipboard = {
           providers.wl-copy.enable = true;
           register = "unnamedplus";
@@ -39,6 +28,16 @@
           {
             action = ":bprev<CR>";
             key = "H";
+            mode = ["n"];
+          }
+          {
+            action = helpers.mkRaw ''
+              function()
+                vim.fn.system("ctags -R --fields=+iaS --extra=+q --exclude=.direnv --exclude=.git --exclude=result .")
+                print("ctags: done")
+              end
+            '';
+            key = "<leader>ct";
             mode = ["n"];
           }
         ];
