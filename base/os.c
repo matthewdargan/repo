@@ -1,17 +1,17 @@
-static String8list
-os_args(Arena *a, int argc, char **argv)
+static String8List
+os_args(Arena* a, int argc, char** argv)
 {
-	String8list list = {0};
+	String8List list = {0};
 	for (int i = 0; i < argc; i++)
 	{
-		String8 s = str8cstr(argv[i]);
-		str8listpush(a, &list, s);
+		String8 s = str8_cstring(argv[i]);
+		str8_list_push(a, &list, s);
 	}
 	return list;
 }
 
 static String8
-readfile(Arena *a, String8 path)
+readfile(Arena* a, String8 path)
 {
 	u64 fd = open_fd(a, path, O_RDONLY);
 	Fprops props = os_fstat(fd);
@@ -21,31 +21,31 @@ readfile(Arena *a, String8 path)
 }
 
 static b32
-writefile(Arena *a, String8 path, String8 data)
+writefile(Arena* a, String8 path, String8 data)
 {
 	b32 ok = 0;
 	u64 fd = open_fd(a, path, O_WRONLY);
 	if (fd != 0)
 	{
 		ok = 1;
-		write_rng(fd, rng1u64(0, data.len), data.str);
+		write_rng(fd, rng1u64(0, data.size), data.str);
 		close_fd(fd);
 	}
 	return ok;
 }
 
 static b32
-appendfile(Arena *a, String8 path, String8 data)
+appendfile(Arena* a, String8 path, String8 data)
 {
 	b32 ok = 0;
-	if (data.len != 0)
+	if (data.size != 0)
 	{
 		u64 fd = open_fd(a, path, O_WRONLY | O_APPEND | O_CREAT);
 		if (fd != 0)
 		{
 			ok = 1;
 			u64 pos = os_fstat(fd).size;
-			write_rng(fd, rng1u64(pos, pos + data.len), data.str);
+			write_rng(fd, rng1u64(pos, pos + data.size), data.str);
 			close_fd(fd);
 		}
 	}
@@ -53,19 +53,19 @@ appendfile(Arena *a, String8 path, String8 data)
 }
 
 static String8
-read_file_rng(Arena *a, u64 fd, Rng1u64 r)
+read_file_rng(Arena* a, u64 fd, Rng1U64 r)
 {
 	u64 pre = arena_pos(a);
 	u64 len = dim1u64(r);
 	String8 s = {
 	    .str = push_array_no_zero(a, u8, len),
-	    .len = len,
+	    .size = len,
 	};
 	u64 nread = read_rng(fd, r, s.str);
-	if (nread < s.len)
+	if (nread < s.size)
 	{
 		arena_pop_to(a, pre + nread);
-		s.len = nread;
+		s.size = nread;
 	}
 	return s;
 }
@@ -118,7 +118,7 @@ timespectodense(timespec ts)
 }
 
 static Fprops
-stattoprops(struct stat *st)
+stattoprops(struct stat* st)
 {
 	Fprops props = {0};
 	props.size = st->st_size;
@@ -132,18 +132,18 @@ stattoprops(struct stat *st)
 }
 
 static String8
-cwd(Arena *a)
+cwd(Arena* a)
 {
-	char *cwd = getcwd(0, 0);
-	String8 s = pushstr8cpy(a, str8cstr(cwd));
+	char* cwd = getcwd(0, 0);
+	String8 s = str8_copy(a, str8_cstring(cwd));
 	free(cwd);
 	return s;
 }
 
-static void *
+static void*
 os_reserve(u64 size)
 {
-	void *p = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	void* p = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (p == MAP_FAILED)
 	{
 		p = NULL;
@@ -152,29 +152,29 @@ os_reserve(u64 size)
 }
 
 static b32
-os_commit(void *p, u64 size)
+os_commit(void* p, u64 size)
 {
 	mprotect(p, size, PROT_READ | PROT_WRITE);
 	return 1;
 }
 
 static void
-os_decommit(void *p, u64 size)
+os_decommit(void* p, u64 size)
 {
 	madvise(p, size, MADV_DONTNEED);
 	mprotect(p, size, PROT_NONE);
 }
 
 static void
-os_release(void *p, u64 size)
+os_release(void* p, u64 size)
 {
 	munmap(p, size);
 }
 
-static void *
+static void*
 os_reserve_large(u64 size)
 {
-	void *p = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+	void* p = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
 	if (p == MAP_FAILED)
 	{
 		p = NULL;
@@ -183,11 +183,11 @@ os_reserve_large(u64 size)
 }
 
 static u64
-open_fd(Arena *a, String8 path, int flags)
+open_fd(Arena* a, String8 path, int flags)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
-	int fd = open((char *)p.str, flags, 0755);
+	String8 p = str8_copy(scratch.arena, path);
+	int fd = open((char*)p.str, flags, 0755);
 	temp_end(scratch);
 	if (fd == -1)
 	{
@@ -207,7 +207,7 @@ close_fd(u64 fd)
 }
 
 static u64
-read_rng(u64 fd, Rng1u64 r, void *out)
+read_rng(u64 fd, Rng1U64 r, void* out)
 {
 	if (fd == 0)
 	{
@@ -218,7 +218,7 @@ read_rng(u64 fd, Rng1u64 r, void *out)
 	u64 nleft = size;
 	while (nleft > 0)
 	{
-		int n = pread(fd, (u8 *)out + nread, nleft, r.min + nread);
+		int n = pread(fd, (u8*)out + nread, nleft, r.min + nread);
 		if (n >= 0)
 		{
 			nread += n;
@@ -233,7 +233,7 @@ read_rng(u64 fd, Rng1u64 r, void *out)
 }
 
 static u64
-write_rng(u64 fd, Rng1u64 r, void *data)
+write_rng(u64 fd, Rng1U64 r, void* data)
 {
 	if (fd == 0)
 	{
@@ -244,7 +244,7 @@ write_rng(u64 fd, Rng1u64 r, void *data)
 	u64 nleft = size;
 	while (nleft > 0)
 	{
-		int n = pwrite(fd, (u8 *)data + nwrite, nleft, r.min + nwrite);
+		int n = pwrite(fd, (u8*)data + nwrite, nleft, r.min + nwrite);
 		if (n >= 0)
 		{
 			nwrite += n;
@@ -287,12 +287,12 @@ os_fstat(u64 fd)
 }
 
 static b32
-osremove(Arena *a, String8 path)
+osremove(Arena* a, String8 path)
 {
 	Temp scratch = temp_begin(a);
 	b32 ok = 0;
-	String8 p = pushstr8cpy(scratch.arena, path);
-	if (remove((char *)p.str) != -1)
+	String8 p = str8_copy(scratch.arena, path);
+	if (remove((char*)p.str) != -1)
 	{
 		ok = 1;
 	}
@@ -301,28 +301,28 @@ osremove(Arena *a, String8 path)
 }
 
 static String8
-abspath(Arena *a, String8 path)
+abspath(Arena* a, String8 path)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	char buf[PATH_MAX];
-	if (realpath((char *)p.str, buf) == NULL)
+	if (realpath((char*)p.str, buf) == NULL)
 	{
 		temp_end(scratch);
-		return str8zero();
+		return str8_zero();
 	}
-	String8 s = pushstr8cpy(scratch.arena, str8cstr(buf));
+	String8 s = str8_copy(scratch.arena, str8_cstring(buf));
 	temp_end(scratch);
 	return s;
 }
 
 static b32
-fileexists(Arena *a, String8 path)
+fileexists(Arena* a, String8 path)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	b32 ok = 0;
-	if (access((char *)p.str, F_OK) == 0)
+	if (access((char*)p.str, F_OK) == 0)
 	{
 		ok = 1;
 	}
@@ -331,12 +331,12 @@ fileexists(Arena *a, String8 path)
 }
 
 static b32
-direxists(Arena *a, String8 path)
+direxists(Arena* a, String8 path)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	b32 ok = 0;
-	DIR *d = opendir((char *)p.str);
+	DIR* d = opendir((char*)p.str);
 	if (d != NULL)
 	{
 		closedir(d);
@@ -347,13 +347,13 @@ direxists(Arena *a, String8 path)
 }
 
 static Fprops
-osstat(Arena *a, String8 path)
+osstat(Arena* a, String8 path)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	Fprops props = {0};
 	struct stat st = {0};
-	if (stat((char *)p.str, &st) != -1)
+	if (stat((char*)p.str, &st) != -1)
 	{
 		props = stattoprops(&st);
 	}
@@ -362,12 +362,12 @@ osstat(Arena *a, String8 path)
 }
 
 static b32
-osmkdir(Arena *a, String8 path)
+osmkdir(Arena* a, String8 path)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	b32 ok = 0;
-	if (mkdir((char *)p.str, 0755) != -1)
+	if (mkdir((char*)p.str, 0755) != -1)
 	{
 		ok = 1;
 	}

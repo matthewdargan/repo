@@ -1,7 +1,7 @@
 #ifndef FCALL_H
 #define FCALL_H
 
-read_only static String8 version9p = str8litc("9P2000");
+read_only static String8 version9p = str8_lit_comp("9P2000");
 
 #define MAXWELEM 16
 
@@ -62,7 +62,7 @@ struct Dir
 typedef struct Dirnode Dirnode;
 struct Dirnode
 {
-	Dirnode *next;
+	Dirnode* next;
 	Dir dir;
 };
 
@@ -70,8 +70,8 @@ typedef struct Dirlist Dirlist;
 struct Dirlist
 {
 	u64 cnt;
-	Dirnode *start;
-	Dirnode *end;
+	Dirnode* start;
+	Dirnode* end;
 };
 
 enum
@@ -106,13 +106,13 @@ enum
 };
 
 #define putb1(p, v) ((p)[0] = (u8)(v))
-#define putb2(p, v) (*(u16 *)(p) = fromleu16(v))
-#define putb4(p, v) (*(u32 *)(p) = fromleu32(v))
-#define putb8(p, v) (*(u64 *)(p) = fromleu64(v))
+#define putb2(p, v) (*(u16*)(p) = fromleu16(v))
+#define putb4(p, v) (*(u32*)(p) = fromleu32(v))
+#define putb8(p, v) (*(u64*)(p) = fromleu64(v))
 #define getb1(p) ((u32)(p)[0])
-#define getb2(p) ((u32)fromleu16(*(u16 *)(p)))
-#define getb4(p) ((u32)fromleu32(*(u32 *)(p)))
-#define getb8(p) ((u64)fromleu64(*(u64 *)(p)))
+#define getb2(p) ((u32)fromleu16(*(u16*)(p)))
+#define getb4(p) ((u32)fromleu32(*(u32*)(p)))
+#define getb8(p) ((u64)fromleu64(*(u64*)(p)))
 #define DIRFIXLEN (2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4 + 8)
 #define NOTAG 0xffff
 #define NOFID 0xffffffff
@@ -134,12 +134,12 @@ enum
 #define SEEKEND 2         // seek from end of file
 
 static u32 fcallsize(Fcall fc);
-static String8 fcallencode(Arena *a, Fcall fc);
+static String8 fcallencode(Arena* a, Fcall fc);
 static Fcall fcalldecode(String8 msg);
 static u32 dirsize(Dir d);
-static String8 direncode(Arena *a, Dir d);
+static String8 direncode(Arena* a, Dir d);
 static Dir dirdecode(String8 msg);
-static String8 read9pmsg(Arena *a, u64 fd);
-static void dirlistpush(Arena *a, Dirlist *list, Dir d);
+static String8 read9pmsg(Arena* a, u64 fd);
+static void dirlistpush(Arena* a, Dirlist* list, Dir d);
 
 #endif  // FCALL_H

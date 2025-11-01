@@ -1,7 +1,7 @@
-static Cfsys *
-fsinit(Arena *a, u64 fd)
+static Cfsys*
+fsinit(Arena* a, u64 fd)
 {
-	Cfsys *fs = push_array(a, Cfsys, 1);
+	Cfsys* fs = push_array(a, Cfsys, 1);
 	fs->fd = fd;
 	fs->nexttag = 1;
 	fs->nextfid = 1;
@@ -17,24 +17,24 @@ static String8
 getuser()
 {
 	uid_t uid = getuid();
-	struct passwd *pw = getpwuid(uid);
+	struct passwd* pw = getpwuid(uid);
 	if (pw == NULL)
 	{
-		return str8lit("none");
+		return str8_lit("none");
 	}
-	return str8cstr(pw->pw_name);
+	return str8_cstring(pw->pw_name);
 }
 
-static Cfsys *
-fs9mount(Arena *a, u64 fd, String8 aname)
+static Cfsys*
+fs9mount(Arena* a, u64 fd, String8 aname)
 {
-	Cfsys *fs = fsinit(a, fd);
+	Cfsys* fs = fsinit(a, fd);
 	if (fs == NULL)
 	{
 		return NULL;
 	}
 	String8 user = getuser();
-	Cfid *fid = fsattach(a, fs, NOFID, user, aname);
+	Cfid* fid = fsattach(a, fs, NOFID, user, aname);
 	if (fid == NULL)
 	{
 		fs9unmount(a, fs);
@@ -45,7 +45,7 @@ fs9mount(Arena *a, u64 fd, String8 aname)
 }
 
 static void
-fs9unmount(Arena *a, Cfsys *fs)
+fs9unmount(Arena* a, Cfsys* fs)
 {
 	fsclose(a, fs->root);
 	fs->root = NULL;
@@ -60,23 +60,23 @@ debug9pprint(String8 dir, Fcall fc)
 	{
 		return;
 	}
-	fprintf(stderr, "%.*s ", str8varg(dir));
+	fprintf(stderr, "%.*s ", str8_varg(dir));
 	switch (fc.type)
 	{
 		case Tversion:
 		{
-			fprintf(stderr, "Tversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, str8varg(fc.version));
+			fprintf(stderr, "Tversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, str8_varg(fc.version));
 		}
 		break;
 		case Rversion:
 		{
-			fprintf(stderr, "Rversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, str8varg(fc.version));
+			fprintf(stderr, "Rversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, str8_varg(fc.version));
 		}
 		break;
 		case Tauth:
 		{
-			fprintf(stderr, "Tauth tag=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.afid, str8varg(fc.uname),
-			        str8varg(fc.aname));
+			fprintf(stderr, "Tauth tag=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.afid, str8_varg(fc.uname),
+			        str8_varg(fc.aname));
 		}
 		break;
 		case Rauth:
@@ -87,13 +87,13 @@ debug9pprint(String8 dir, Fcall fc)
 		break;
 		case Rerror:
 		{
-			fprintf(stderr, "Rerror tag=%u ename='%.*s'\n", fc.tag, str8varg(fc.ename));
+			fprintf(stderr, "Rerror tag=%u ename='%.*s'\n", fc.tag, str8_varg(fc.ename));
 		}
 		break;
 		case Tattach:
 		{
 			fprintf(stderr, "Tattach tag=%u fid=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.fid, fc.afid,
-			        str8varg(fc.uname), str8varg(fc.aname));
+			        str8_varg(fc.uname), str8_varg(fc.aname));
 		}
 		break;
 		case Rattach:
@@ -106,7 +106,7 @@ debug9pprint(String8 dir, Fcall fc)
 			fprintf(stderr, "Twalk tag=%u fid=%u newfid=%u nwname=%u", fc.tag, fc.fid, fc.newfid, fc.nwname);
 			for (u32 i = 0; i < fc.nwname; i++)
 			{
-				fprintf(stderr, " '%.*s'", str8varg(fc.wname[i]));
+				fprintf(stderr, " '%.*s'", str8_varg(fc.wname[i]));
 			}
 			fprintf(stderr, "\n");
 		}
@@ -134,8 +134,8 @@ debug9pprint(String8 dir, Fcall fc)
 		break;
 		case Tcreate:
 		{
-			fprintf(stderr, "Tcreate tag=%u fid=%u name='%.*s' perm=%u mode=%u\n", fc.tag, fc.fid, str8varg(fc.name), fc.perm,
-			        fc.mode);
+			fprintf(stderr, "Tcreate tag=%u fid=%u name='%.*s' perm=%u mode=%u\n", fc.tag, fc.fid, str8_varg(fc.name),
+			        fc.perm, fc.mode);
 		}
 		break;
 		case Rcreate:
@@ -151,12 +151,12 @@ debug9pprint(String8 dir, Fcall fc)
 		break;
 		case Rread:
 		{
-			fprintf(stderr, "Rread tag=%u count=%lu\n", fc.tag, fc.data.len);
+			fprintf(stderr, "Rread tag=%u count=%lu\n", fc.tag, fc.data.size);
 		}
 		break;
 		case Twrite:
 		{
-			fprintf(stderr, "Twrite tag=%u fid=%u offset=%lu count=%lu\n", fc.tag, fc.fid, fc.offset, fc.data.len);
+			fprintf(stderr, "Twrite tag=%u fid=%u offset=%lu count=%lu\n", fc.tag, fc.fid, fc.offset, fc.data.size);
 		}
 		break;
 		case Rwrite:
@@ -191,12 +191,12 @@ debug9pprint(String8 dir, Fcall fc)
 		break;
 		case Rstat:
 		{
-			fprintf(stderr, "Rstat tag=%u stat.len=%lu\n", fc.tag, fc.stat.len);
+			fprintf(stderr, "Rstat tag=%u stat.size=%lu\n", fc.tag, fc.stat.size);
 		}
 		break;
 		case Twstat:
 		{
-			fprintf(stderr, "Twstat tag=%u fid=%u stat.len=%lu\n", fc.tag, fc.fid, fc.stat.len);
+			fprintf(stderr, "Twstat tag=%u fid=%u stat.size=%lu\n", fc.tag, fc.fid, fc.stat.size);
 		}
 		break;
 		case Rwstat:
@@ -213,7 +213,7 @@ debug9pprint(String8 dir, Fcall fc)
 }
 
 static Fcall
-fsrpc(Arena *a, Cfsys *fs, Fcall tx)
+fsrpc(Arena* a, Cfsys* fs, Fcall tx)
 {
 	Fcall errfc = {0};
 	if (tx.type != Tversion)
@@ -224,24 +224,24 @@ fsrpc(Arena *a, Cfsys *fs, Fcall tx)
 			fs->nexttag = 1;
 		}
 	}
-	debug9pprint(str8lit("<-"), tx);
+	debug9pprint(str8_lit("<-"), tx);
 	String8 txmsg = fcallencode(a, tx);
-	if (txmsg.len == 0)
+	if (txmsg.size == 0)
 	{
 		return errfc;
 	}
-	ssize_t n = write(fs->fd, txmsg.str, txmsg.len);
-	if (n < 0 || (u64)n != txmsg.len)
+	ssize_t n = write(fs->fd, txmsg.str, txmsg.size);
+	if (n < 0 || (u64)n != txmsg.size)
 	{
 		return errfc;
 	}
 	String8 rxmsg = read9pmsg(a, fs->fd);
-	if (rxmsg.len == 0)
+	if (rxmsg.size == 0)
 	{
 		return errfc;
 	}
 	Fcall rx = fcalldecode(rxmsg);
-	debug9pprint(str8lit("->"), rx);
+	debug9pprint(str8_lit("->"), rx);
 	if (rx.type == 0 || rx.type == Rerror || rx.type != tx.type + 1)
 	{
 		return errfc;
@@ -254,7 +254,7 @@ fsrpc(Arena *a, Cfsys *fs, Fcall tx)
 }
 
 static b32
-fsversion(Arena *a, Cfsys *fs, u32 msize)
+fsversion(Arena* a, Cfsys* fs, u32 msize)
 {
 	Fcall tx = {0};
 	tx.type = Tversion;
@@ -267,17 +267,17 @@ fsversion(Arena *a, Cfsys *fs, u32 msize)
 		return 0;
 	}
 	fs->msize = rx.msize;
-	if (!str8cmp(rx.version, version9p, 0))
+	if (!str8_match(rx.version, version9p, 0))
 	{
 		return 0;
 	}
 	return 1;
 }
 
-static Cfid *
-fsauth(Arena *a, Cfsys *fs, String8 uname, String8 aname)
+static Cfid*
+fsauth(Arena* a, Cfsys* fs, String8 uname, String8 aname)
 {
-	Cfid *afid = push_array(a, Cfid, 1);
+	Cfid* afid = push_array(a, Cfid, 1);
 	afid->fid = fs->nextfid++;
 	afid->fs = fs;
 	Fcall tx = {0};
@@ -294,10 +294,10 @@ fsauth(Arena *a, Cfsys *fs, String8 uname, String8 aname)
 	return afid;
 }
 
-static Cfid *
-fsattach(Arena *a, Cfsys *fs, u32 afid, String8 uname, String8 aname)
+static Cfid*
+fsattach(Arena* a, Cfsys* fs, u32 afid, String8 uname, String8 aname)
 {
-	Cfid *fid = push_array(a, Cfid, 1);
+	Cfid* fid = push_array(a, Cfid, 1);
 	fid->fid = fs->nextfid++;
 	fid->fs = fs;
 	Fcall tx = {0};
@@ -316,7 +316,7 @@ fsattach(Arena *a, Cfsys *fs, u32 afid, String8 uname, String8 aname)
 }
 
 static void
-fsclose(Arena *a, Cfid *fid)
+fsclose(Arena* a, Cfid* fid)
 {
 	if (fid == NULL)
 	{
@@ -328,21 +328,21 @@ fsclose(Arena *a, Cfid *fid)
 	fsrpc(a, fid->fs, tx);
 }
 
-static Cfid *
-fswalk(Arena *a, Cfid *fid, String8 path)
+static Cfid*
+fswalk(Arena* a, Cfid* fid, String8 path)
 {
 	if (fid == NULL)
 	{
 		return NULL;
 	}
-	Cfid *wfid = push_array(a, Cfid, 1);
+	Cfid* wfid = push_array(a, Cfid, 1);
 	Temp scratch = temp_begin(a);
 	wfid->fid = fid->fs->nextfid++;
 	wfid->qid = fid->qid;
 	wfid->fs = fid->fs;
 	b32 firstwalk = 1;
-	String8list parts = str8split(scratch.arena, path, (u8 *)"/", 1, 0);
-	String8node *node = parts.start;
+	String8List parts = str8_split(scratch.arena, path, (u8*)"/", 1, 0);
+	String8Node* node = parts.first;
 	Fcall tx = {0};
 	tx.type = Twalk;
 	tx.fid = fid->fid;
@@ -362,8 +362,8 @@ fswalk(Arena *a, Cfid *fid, String8 path)
 		u64 i = 0;
 		while (node != NULL && i < MAXWELEM)
 		{
-			String8 part = node->str;
-			if (part.str[0] == '.' && part.len == 1)
+			String8 part = node->string;
+			if (part.str[0] == '.' && part.size == 1)
 			{
 				node = node->next;
 				continue;
@@ -392,7 +392,7 @@ fswalk(Arena *a, Cfid *fid, String8 path)
 }
 
 static b32
-fsfcreate(Arena *a, Cfid *fid, String8 name, u32 mode, u32 perm)
+fsfcreate(Arena* a, Cfid* fid, String8 name, u32 mode, u32 perm)
 {
 	if (fid == NULL)
 	{
@@ -413,16 +413,16 @@ fsfcreate(Arena *a, Cfid *fid, String8 name, u32 mode, u32 perm)
 	return 1;
 }
 
-static Cfid *
-fscreate(Arena *a, Cfsys *fs, String8 name, u32 mode, u32 perm)
+static Cfid*
+fscreate(Arena* a, Cfsys* fs, String8 name, u32 mode, u32 perm)
 {
 	if (fs == NULL || fs->root == NULL)
 	{
 		return NULL;
 	}
-	String8 dir = str8dirname(name);
-	String8 elem = str8basename(name);
-	Cfid *fid = fswalk(a, fs->root, dir);
+	String8 dir = str8_chop_last_slash(name);
+	String8 elem = str8_skip_last_slash(name);
+	Cfid* fid = fswalk(a, fs->root, dir);
 	if (fid == NULL)
 	{
 		return NULL;
@@ -436,7 +436,7 @@ fscreate(Arena *a, Cfsys *fs, String8 name, u32 mode, u32 perm)
 }
 
 static b32
-fsfremove(Arena *a, Cfid *fid)
+fsfremove(Arena* a, Cfid* fid)
 {
 	if (fid == NULL)
 	{
@@ -454,13 +454,13 @@ fsfremove(Arena *a, Cfid *fid)
 }
 
 static b32
-fsremove(Arena *a, Cfsys *fs, String8 name)
+fsremove(Arena* a, Cfsys* fs, String8 name)
 {
 	if (fs == NULL || fs->root == NULL)
 	{
 		return 0;
 	}
-	Cfid *fid = fswalk(a, fs->root, name);
+	Cfid* fid = fswalk(a, fs->root, name);
 	if (fid == NULL)
 	{
 		return 0;
@@ -473,7 +473,7 @@ fsremove(Arena *a, Cfsys *fs, String8 name)
 }
 
 static b32
-fsfopen(Arena *a, Cfid *fid, u32 mode)
+fsfopen(Arena* a, Cfid* fid, u32 mode)
 {
 	if (fid == NULL)
 	{
@@ -492,14 +492,14 @@ fsfopen(Arena *a, Cfid *fid, u32 mode)
 	return 1;
 }
 
-static Cfid *
-fs9open(Arena *a, Cfsys *fs, String8 name, u32 mode)
+static Cfid*
+fs9open(Arena* a, Cfsys* fs, String8 name, u32 mode)
 {
 	if (fs == NULL || fs->root == NULL)
 	{
 		return NULL;
 	}
-	Cfid *fid = fswalk(a, fs->root, name);
+	Cfid* fid = fswalk(a, fs->root, name);
 	if (fid == NULL)
 	{
 		return NULL;
@@ -513,7 +513,7 @@ fs9open(Arena *a, Cfsys *fs, String8 name, u32 mode)
 }
 
 static s64
-fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
+fspread(Arena* a, Cfid* fid, void* buf, u64 n, s64 offset)
 {
 	if (fid == NULL || buf == NULL)
 	{
@@ -534,7 +534,7 @@ fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 	{
 		return -1;
 	}
-	s64 nr = rx.data.len;
+	s64 nr = rx.data.size;
 	if (nr > (s64)n)
 	{
 		nr = n;
@@ -551,17 +551,17 @@ fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 }
 
 static s64
-fsread(Arena *a, Cfid *fid, void *buf, u64 n)
+fsread(Arena* a, Cfid* fid, void* buf, u64 n)
 {
 	return fspread(a, fid, buf, n, -1);
 }
 
 static s64
-fsreadn(Arena *a, Cfid *fid, void *buf, u64 n)
+fsreadn(Arena* a, Cfid* fid, void* buf, u64 n)
 {
 	u64 nread = 0;
 	u64 nleft = n;
-	u8 *p = buf;
+	u8* p = buf;
 	while (nleft > 0)
 	{
 		s64 nr = fsread(a, fid, p + nread, nleft);
@@ -580,7 +580,7 @@ fsreadn(Arena *a, Cfid *fid, void *buf, u64 n)
 }
 
 static s64
-fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
+fspwrite(Arena* a, Cfid* fid, void* buf, u64 n, s64 offset)
 {
 	if (fid == NULL || buf == NULL)
 	{
@@ -589,7 +589,7 @@ fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 	u32 msize = fid->fs->msize - IOHDRSZ;
 	u64 nwrite = 0;
 	u64 nleft = n;
-	u8 *p = buf;
+	u8* p = buf;
 	while (nleft > 0)
 	{
 		u64 want = nleft;
@@ -601,7 +601,7 @@ fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 		tx.type = Twrite;
 		tx.fid = fid->fid;
 		tx.offset = (offset == -1) ? fid->offset : offset + nwrite;
-		tx.data.len = want;
+		tx.data.size = want;
 		tx.data.str = p + nwrite;
 		Fcall rx = fsrpc(a, fid->fs, tx);
 		if (rx.type != Rwrite)
@@ -636,13 +636,13 @@ fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 }
 
 static s64
-fswrite(Arena *a, Cfid *fid, void *buf, u64 n)
+fswrite(Arena* a, Cfid* fid, void* buf, u64 n)
 {
 	return fspwrite(a, fid, buf, n, -1);
 }
 
 static s64
-dirpackage(Arena *a, u8 *buf, s64 ts, Dirlist *list)
+dirpackage(Arena* a, u8* buf, s64 ts, Dirlist* list)
 {
 	*list = (Dirlist){0};
 	s64 n = 0;
@@ -658,9 +658,9 @@ dirpackage(Arena *a, u8 *buf, s64 ts, Dirlist *list)
 		{
 			return -1;
 		}
-		String8 dirmsg = {.str = &buf[i], .len = m};
+		String8 dirmsg = {.str = &buf[i], .size = m};
 		Dir d = dirdecode(dirmsg);
-		if (d.name.len == 0 && m > 2)
+		if (d.name.size == 0 && m > 2)
 		{
 			return -1;
 		}
@@ -672,14 +672,14 @@ dirpackage(Arena *a, u8 *buf, s64 ts, Dirlist *list)
 }
 
 static s64
-fsdirread(Arena *a, Cfid *fid, Dirlist *list)
+fsdirread(Arena* a, Cfid* fid, Dirlist* list)
 {
 	if (fid == NULL || list == NULL)
 	{
 		return -1;
 	}
 	Temp scratch = temp_begin(a);
-	u8 *buf = push_array_no_zero(a, u8, DIRMAX);
+	u8* buf = push_array_no_zero(a, u8, DIRMAX);
 	s64 ts = fsread(a, fid, buf, DIRMAX);
 	if (ts >= 0)
 	{
@@ -690,13 +690,13 @@ fsdirread(Arena *a, Cfid *fid, Dirlist *list)
 }
 
 static s64
-fsdirreadall(Arena *a, Cfid *fid, Dirlist *list)
+fsdirreadall(Arena* a, Cfid* fid, Dirlist* list)
 {
 	if (fid == NULL || list == NULL)
 	{
 		return -1;
 	}
-	u8 *buf = push_array_no_zero(a, u8, DIRBUFMAX);
+	u8* buf = push_array_no_zero(a, u8, DIRBUFMAX);
 	s64 ts = 0;
 	u64 nleft = DIRBUFMAX;
 	s64 n = 0;
@@ -722,7 +722,7 @@ fsdirreadall(Arena *a, Cfid *fid, Dirlist *list)
 }
 
 static Dir
-fsdirfstat(Arena *a, Cfid *fid)
+fsdirfstat(Arena* a, Cfid* fid)
 {
 	Dir errd = {0};
 	if (fid == NULL)
@@ -742,14 +742,14 @@ fsdirfstat(Arena *a, Cfid *fid)
 }
 
 static Dir
-fsdirstat(Arena *a, Cfsys *fs, String8 name)
+fsdirstat(Arena* a, Cfsys* fs, String8 name)
 {
 	Dir errd = {0};
 	if (fs == NULL || fs->root == NULL)
 	{
 		return errd;
 	}
-	Cfid *fid = fswalk(a, fs->root, name);
+	Cfid* fid = fswalk(a, fs->root, name);
 	if (fid == NULL)
 	{
 		return errd;
@@ -760,7 +760,7 @@ fsdirstat(Arena *a, Cfsys *fs, String8 name)
 }
 
 static b32
-fsdirfwstat(Arena *a, Cfid *fid, Dir d)
+fsdirfwstat(Arena* a, Cfid* fid, Dir d)
 {
 	if (fid == NULL)
 	{
@@ -768,7 +768,7 @@ fsdirfwstat(Arena *a, Cfid *fid, Dir d)
 	}
 	Temp scratch = temp_begin(a);
 	String8 stat = direncode(scratch.arena, d);
-	if (stat.len == 0)
+	if (stat.size == 0)
 	{
 		return 0;
 	}
@@ -785,13 +785,13 @@ fsdirfwstat(Arena *a, Cfid *fid, Dir d)
 }
 
 static b32
-fsdirwstat(Arena *a, Cfsys *fs, String8 name, Dir d)
+fsdirwstat(Arena* a, Cfsys* fs, String8 name, Dir d)
 {
 	if (fs == NULL || fs->root == NULL)
 	{
 		return 0;
 	}
-	Cfid *fid = fswalk(a, fs->root, name);
+	Cfid* fid = fswalk(a, fs->root, name);
 	if (fid == NULL)
 	{
 		return 0;
@@ -802,7 +802,7 @@ fsdirwstat(Arena *a, Cfsys *fs, String8 name, Dir d)
 }
 
 static b32
-fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode)
+fsaccess(Arena* a, Cfsys* fs, String8 name, u32 mode)
 {
 	if (fs == NULL || fs->root == NULL)
 	{
@@ -811,13 +811,13 @@ fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode)
 	if (mode == AEXIST)
 	{
 		Dir d = fsdirstat(a, fs, name);
-		if (d.name.len == 0)
+		if (d.name.size == 0)
 		{
 			return 0;
 		}
 		return 1;
 	}
-	Cfid *fid = fs9open(a, fs, name, omodetab[mode & 7]);
+	Cfid* fid = fs9open(a, fs, name, omodetab[mode & 7]);
 	if (fid == NULL)
 	{
 		return 0;
@@ -827,7 +827,7 @@ fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode)
 }
 
 static s64
-fsseek(Arena *a, Cfid *fid, s64 offset, u32 type)
+fsseek(Arena* a, Cfid* fid, s64 offset, u32 type)
 {
 	if (fid == NULL)
 	{
@@ -855,7 +855,7 @@ fsseek(Arena *a, Cfid *fid, s64 offset, u32 type)
 		case SEEKEND:
 		{
 			Dir d = fsdirfstat(a, fid);
-			if (d.name.len == 0)
+			if (d.name.size == 0)
 			{
 				return -1;
 			}
