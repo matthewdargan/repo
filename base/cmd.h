@@ -8,7 +8,7 @@ struct Cmdopt
 	Cmdopt *hash_next;
 	u64 hash;
 	String8 str;
-	String8list vals;
+	String8List vals;
 	String8 val;
 };
 
@@ -25,7 +25,7 @@ struct Cmd
 {
 	String8 exe;
 	Cmdoptlist opts;
-	String8list inputs;
+	String8List inputs;
 	u64 optabsz;
 	Cmdopt **optab;
 	u64 argc;
@@ -36,8 +36,8 @@ static u64 cmdhash(String8 s);
 static Cmdopt **cmdslot(Cmd *c, String8 s);
 static Cmdopt *cmdslottoopt(Cmdopt **slot, String8 s);
 static void cmdpushopt(Cmdoptlist *list, Cmdopt *v);
-static Cmdopt *cmdinsertopt(Arena *a, Cmd *c, String8 s, String8list vals);
-static Cmd cmdparse(Arena *a, String8list args);
+static Cmdopt *cmdinsertopt(Arena *a, Cmd *c, String8 s, String8List vals);
+static Cmd cmdparse(Arena *a, String8List args);
 static Cmdopt *cmdopt(Cmd *c, String8 name);
 static String8 cmdstr(Cmd *c, String8 name);
 static b32 cmdhasflag(Cmd *c, String8 name);

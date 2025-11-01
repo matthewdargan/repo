@@ -14,11 +14,11 @@ typedef struct timespec timespec;
 
 static Sysinfo sysinfo;
 
-static String8list os_args(Arena *a, int argc, char **argv);
+static String8List os_args(Arena *a, int argc, char **argv);
 static String8 readfile(Arena *a, String8 path);
 static b32 writefile(Arena *a, String8 path, String8 data);
 static b32 appendfile(Arena *a, String8 path, String8 data);
-static String8 read_file_rng(Arena *a, u64 fd, Rng1u64 r);
+static String8 read_file_rng(Arena *a, u64 fd, Rng1U64 r);
 static Datetime tmtodatetime(tm t, u32 msec);
 static tm datetimetotm(Datetime dt);
 static timespec datetimetotimespec(Datetime dt);
@@ -32,8 +32,8 @@ static void os_release(void *p, u64 size);
 static void *os_reserve_large(u64 size);
 static u64 open_fd(Arena *a, String8 path, int flags);
 static void close_fd(u64 fd);
-static u64 read_rng(u64 fd, Rng1u64 r, void *out);
-static u64 write_rng(u64 fd, Rng1u64 r, void *data);
+static u64 read_rng(u64 fd, Rng1U64 r, void *out);
+static u64 write_rng(u64 fd, Rng1U64 r, void *data);
 static b32 set_times(u64 fd, Datetime dt);
 static Fprops os_fstat(u64 fd);
 static b32 os_remove(Arena *a, String8 path);

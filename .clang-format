@@ -7,5 +7,6 @@ BreakBeforeBraces: Allman
 ColumnLimit: 120
 IndentWidth: 2
 InsertBraces: true
+PointerAlignment: Right
 TabWidth: 2
 UseTab: ForIndentation

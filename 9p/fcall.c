@@ -1,12 +1,12 @@
 static u8 *
 putstr(u8 *p, String8 s)
 {
-	putb2(p, s.len);
+	putb2(p, s.size);
 	p += 2;
-	if (s.len > 0)
+	if (s.size > 0)
 	{
-		memcpy(p, s.str, s.len);
-		p += s.len;
+		memcpy(p, s.str, s.size);
+		p += s.size;
 	}
 	return p;
 }
@@ -36,7 +36,7 @@ getstr(u8 *p, u8 *end, String8 *s)
 	{
 		return NULL;
 	}
-	s->len = len;
+	s->size = len;
 	if (len > 0)
 	{
 		s->str = p;
@@ -75,14 +75,14 @@ fcallsize(Fcall fc)
 		case Rversion:
 		{
 			size += 4;
-			size += 2 + fc.version.len;
+			size += 2 + fc.version.size;
 		}
 		break;
 		case Tauth:
 		{
 			size += 4;
-			size += 2 + fc.uname.len;
-			size += 2 + fc.aname.len;
+			size += 2 + fc.uname.size;
+			size += 2 + fc.aname.size;
 		}
 		break;
 		case Rauth:
@@ -92,7 +92,7 @@ fcallsize(Fcall fc)
 		break;
 		case Rerror:
 		{
-			size += 2 + fc.ename.len;
+			size += 2 + fc.ename.size;
 		}
 		break;
 		case Tflush:
@@ -106,8 +106,8 @@ fcallsize(Fcall fc)
 		{
 			size += 4;
 			size += 4;
-			size += 2 + fc.uname.len;
-			size += 2 + fc.aname.len;
+			size += 2 + fc.uname.size;
+			size += 2 + fc.aname.size;
 		}
 		break;
 		case Rattach:
@@ -122,7 +122,7 @@ fcallsize(Fcall fc)
 			size += 2;
 			for (u32 i = 0; i < fc.nwname; i++)
 			{
-				size += 2 + fc.wname[i].len;
+				size += 2 + fc.wname[i].size;
 			}
 		}
 		break;
@@ -148,7 +148,7 @@ fcallsize(Fcall fc)
 		case Tcreate:
 		{
 			size += 4;
-			size += 2 + fc.name.len;
+			size += 2 + fc.name.size;
 			size += 4;
 			size++;
 		}
@@ -163,7 +163,7 @@ fcallsize(Fcall fc)
 		case Rread:
 		{
 			size += 4;
-			size += fc.data.len;
+			size += fc.data.size;
 		}
 		break;
 		case Twrite:
@@ -171,7 +171,7 @@ fcallsize(Fcall fc)
 			size += 4;
 			size += 8;
 			size += 4;
-			size += fc.data.len;
+			size += fc.data.size;
 		}
 		break;
 		case Rwrite:
@@ -195,13 +195,13 @@ fcallsize(Fcall fc)
 		break;
 		case Rstat:
 		{
-			size += 2 + fc.stat.len;
+			size += 2 + fc.stat.size;
 		}
 		break;
 		case Twstat:
 		{
 			size += 4;
-			size += 2 + fc.stat.len;
+			size += 2 + fc.stat.size;
 		}
 		break;
 		case Rwstat:
@@ -220,14 +220,14 @@ fcallencode(Arena *a, Fcall fc)
 	u32 msglen = fcallsize(fc);
 	if (msglen == 0)
 	{
-		return str8zero();
+		return str8_zero();
 	}
 	String8 msg = {
 	    .str = push_array_no_zero(a, u8, msglen),
-	    .len = msglen,
+	    .size = msglen,
 	};
 	u8 *p = msg.str;
-	putb4(p, msg.len);
+	putb4(p, msg.size);
 	p += 4;
 	putb1(p, fc.type);
 	p++;
@@ -294,7 +294,7 @@ fcallencode(Arena *a, Fcall fc)
 			p += 2;
 			if (fc.nwname > MAXWELEM)
 			{
-				return str8zero();
+				return str8_zero();
 			}
 			for (u32 i = 0; i < fc.nwname; i++)
 			{
@@ -308,7 +308,7 @@ fcallencode(Arena *a, Fcall fc)
 			p += 2;
 			if (fc.nwqid > MAXWELEM)
 			{
-				return str8zero();
+				return str8_zero();
 			}
 			for (u32 i = 0; i < fc.nwqid; i++)
 			{
@@ -355,12 +355,12 @@ fcallencode(Arena *a, Fcall fc)
 		break;
 		case Rread:
 		{
-			putb4(p, fc.data.len);
+			putb4(p, fc.data.size);
 			p += 4;
-			if (fc.data.len > 0)
+			if (fc.data.size > 0)
 			{
-				memcpy(p, fc.data.str, fc.data.len);
-				p += fc.data.len;
+				memcpy(p, fc.data.str, fc.data.size);
+				p += fc.data.size;
 			}
 		}
 		break;
@@ -370,12 +370,12 @@ fcallencode(Arena *a, Fcall fc)
 			p += 4;
 			putb8(p, fc.offset);
 			p += 8;
-			putb4(p, fc.data.len);
+			putb4(p, fc.data.size);
 			p += 4;
-			if (fc.data.len > 0)
+			if (fc.data.size > 0)
 			{
-				memcpy(p, fc.data.str, fc.data.len);
-				p += fc.data.len;
+				memcpy(p, fc.data.str, fc.data.size);
+				p += fc.data.size;
 			}
 		}
 		break;
@@ -403,12 +403,12 @@ fcallencode(Arena *a, Fcall fc)
 		break;
 		case Rstat:
 		{
-			putb2(p, fc.stat.len);
+			putb2(p, fc.stat.size);
 			p += 2;
-			if (fc.stat.len > 0)
+			if (fc.stat.size > 0)
 			{
-				memcpy(p, fc.stat.str, fc.stat.len);
-				p += fc.stat.len;
+				memcpy(p, fc.stat.str, fc.stat.size);
+				p += fc.stat.size;
 			}
 		}
 		break;
@@ -416,12 +416,12 @@ fcallencode(Arena *a, Fcall fc)
 		{
 			putb4(p, fc.fid);
 			p += 4;
-			putb2(p, fc.stat.len);
+			putb2(p, fc.stat.size);
 			p += 2;
-			if (fc.stat.len > 0)
+			if (fc.stat.size > 0)
 			{
-				memcpy(p, fc.stat.str, fc.stat.len);
-				p += fc.stat.len;
+				memcpy(p, fc.stat.str, fc.stat.size);
+				p += fc.stat.size;
 			}
 		}
 		break;
@@ -429,12 +429,12 @@ fcallencode(Arena *a, Fcall fc)
 			break;
 		default:
 		{
-			return str8zero();
+			return str8_zero();
 		}
 	}
-	if (msg.len != (u64)(p - msg.str))
+	if (msg.size != (u64)(p - msg.str))
 	{
-		return str8zero();
+		return str8_zero();
 	}
 	return msg;
 }
@@ -444,15 +444,15 @@ fcalldecode(String8 msg)
 {
 	Fcall fc = {0};
 	Fcall errfc = {0};
-	if (msg.len < 7)
+	if (msg.size < 7)
 	{
 		return errfc;
 	}
 	u8 *p = msg.str;
-	u8 *end = msg.str + msg.len;
+	u8 *end = msg.str + msg.size;
 	u32 size = getb4(p);
 	p += 4;
-	if (size != msg.len)
+	if (size != msg.size)
 	{
 		return errfc;
 	}
@@ -678,16 +678,16 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.data.len = getb4(p);
+			fc.data.size = getb4(p);
 			p += 4;
-			if (p + fc.data.len > end)
+			if (p + fc.data.size > end)
 			{
 				return errfc;
 			}
-			if (fc.data.len > 0)
+			if (fc.data.size > 0)
 			{
 				fc.data.str = p;
-				p += fc.data.len;
+				p += fc.data.size;
 			}
 			else
 			{
@@ -705,16 +705,16 @@ fcalldecode(String8 msg)
 			p += 4;
 			fc.offset = getb8(p);
 			p += 8;
-			fc.data.len = getb4(p);
+			fc.data.size = getb4(p);
 			p += 4;
-			if (p + fc.data.len > end)
+			if (p + fc.data.size > end)
 			{
 				return errfc;
 			}
-			if (fc.data.len > 0)
+			if (fc.data.size > 0)
 			{
 				fc.data.str = p;
-				p += fc.data.len;
+				p += fc.data.size;
 			}
 			else
 			{
@@ -762,16 +762,16 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.stat.len = getb2(p);
+			fc.stat.size = getb2(p);
 			p += 2;
-			if (p + fc.stat.len > end)
+			if (p + fc.stat.size > end)
 			{
 				return errfc;
 			}
-			if (fc.stat.len > 0)
+			if (fc.stat.size > 0)
 			{
 				fc.stat.str = p;
-				p += fc.stat.len;
+				p += fc.stat.size;
 			}
 			else
 			{
@@ -787,16 +787,16 @@ fcalldecode(String8 msg)
 			}
 			fc.fid = getb4(p);
 			p += 4;
-			fc.stat.len = getb2(p);
+			fc.stat.size = getb2(p);
 			p += 2;
-			if (p + fc.stat.len > end)
+			if (p + fc.stat.size > end)
 			{
 				return errfc;
 			}
-			if (fc.stat.len > 0)
+			if (fc.stat.size > 0)
 			{
 				fc.stat.str = p;
-				p += fc.stat.len;
+				p += fc.stat.size;
 			}
 			else
 			{
@@ -822,10 +822,10 @@ static u32
 dirsize(Dir d)
 {
 	u32 size = DIRFIXLEN;
-	size += 2 + d.name.len;
-	size += 2 + d.uid.len;
-	size += 2 + d.gid.len;
-	size += 2 + d.muid.len;
+	size += 2 + d.name.size;
+	size += 2 + d.uid.size;
+	size += 2 + d.gid.size;
+	size += 2 + d.muid.size;
 	return size;
 }
 
@@ -835,14 +835,14 @@ direncode(Arena *a, Dir d)
 	u32 msglen = dirsize(d);
 	if (msglen == 0)
 	{
-		return str8zero();
+		return str8_zero();
 	}
 	String8 msg = {
 	    .str = push_array_no_zero(a, u8, msglen),
-	    .len = msglen,
+	    .size = msglen,
 	};
 	u8 *p = msg.str;
-	putb2(p, msg.len - 2);
+	putb2(p, msg.size - 2);
 	p += 2;
 	putb2(p, d.type);
 	p += 2;
@@ -866,9 +866,9 @@ direncode(Arena *a, Dir d)
 	p = putstr(p, d.uid);
 	p = putstr(p, d.gid);
 	p = putstr(p, d.muid);
-	if (msg.len != (u64)(p - msg.str))
+	if (msg.size != (u64)(p - msg.str))
 	{
-		return str8zero();
+		return str8_zero();
 	}
 	return msg;
 }
@@ -878,12 +878,12 @@ dirdecode(String8 msg)
 {
 	Dir d = {0};
 	Dir errd = {0};
-	if (msg.len < DIRFIXLEN)
+	if (msg.size < DIRFIXLEN)
 	{
 		return errd;
 	}
 	u8 *p = msg.str;
-	u8 *end = msg.str + msg.len;
+	u8 *end = msg.str + msg.size;
 	p += 2;
 	if (p + 39 > end)
 	{
@@ -945,7 +945,7 @@ read9pmsg(Arena *a, u64 fd)
 		ssize_t n = read(fd, lenbuf + nread, nleft);
 		if (n <= 0)
 		{
-			return str8zero();
+			return str8_zero();
 		}
 		nread += n;
 		nleft -= n;
@@ -953,17 +953,17 @@ read9pmsg(Arena *a, u64 fd)
 	u32 msglen = getb4(lenbuf);
 	String8 msg = {
 	    .str = push_array_no_zero(a, u8, msglen),
-	    .len = msglen,
+	    .size = msglen,
 	};
 	memcpy(msg.str, lenbuf, sizeof lenbuf);
 	nread = 0;
-	nleft = msg.len - 4;
+	nleft = msg.size - 4;
 	while (nleft > 0)
 	{
 		ssize_t n = read(fd, msg.str + 4 + nread, nleft);
 		if (n <= 0)
 		{
-			return str8zero();
+			return str8_zero();
 		}
 		nread += n;
 		nleft -= n;

@@ -81,20 +81,20 @@ enum
 };
 
 read_only static b32 debug9psrv = 1;
-read_only static String8 Ebadoffset = str8litc("bad offset");
-read_only static String8 Ebotch = str8litc("9P protocol botch");
-read_only static String8 Ecreatenondir = str8litc("create in non-directory");
-read_only static String8 Edupfid = str8litc("duplicate fid");
-read_only static String8 Eduptag = str8litc("duplicate tag");
-read_only static String8 Eisdir = str8litc("is a directory");
-read_only static String8 Enocreate = str8litc("create prohibited");
-read_only static String8 Enoremove = str8litc("remove prohibited");
-read_only static String8 Enostat = str8litc("stat prohibited");
-read_only static String8 Enotfound = str8litc("file not found");
-read_only static String8 Enowstat = str8litc("wstat prohibited");
-read_only static String8 Eperm = str8litc("permission denied");
-read_only static String8 Eunknownfid = str8litc("unknown fid");
-read_only static String8 Ewalknodir = str8litc("walk in non-directory");
+read_only static String8 Ebadoffset = str8_lit_comp("bad offset");
+read_only static String8 Ebotch = str8_lit_comp("9P protocol botch");
+read_only static String8 Ecreatenondir = str8_lit_comp("create in non-directory");
+read_only static String8 Edupfid = str8_lit_comp("duplicate fid");
+read_only static String8 Eduptag = str8_lit_comp("duplicate tag");
+read_only static String8 Eisdir = str8_lit_comp("is a directory");
+read_only static String8 Enocreate = str8_lit_comp("create prohibited");
+read_only static String8 Enoremove = str8_lit_comp("remove prohibited");
+read_only static String8 Enostat = str8_lit_comp("stat prohibited");
+read_only static String8 Enotfound = str8_lit_comp("file not found");
+read_only static String8 Enowstat = str8_lit_comp("wstat prohibited");
+read_only static String8 Eperm = str8_lit_comp("permission denied");
+read_only static String8 Eunknownfid = str8_lit_comp("unknown fid");
+read_only static String8 Ewalknodir = str8_lit_comp("walk in non-directory");
 
 static Srv *srvalloc(Arena *a, u64 infd, u64 outfd);
 static void srvfree(Srv *srv);

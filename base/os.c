@@ -1,11 +1,11 @@
-static String8list
+static String8List
 os_args(Arena *a, int argc, char **argv)
 {
-	String8list list = {0};
+	String8List list = {0};
 	for (int i = 0; i < argc; i++)
 	{
-		String8 s = str8cstr(argv[i]);
-		str8listpush(a, &list, s);
+		String8 s = str8_cstring(argv[i]);
+		str8_list_push(a, &list, s);
 	}
 	return list;
 }
@@ -28,7 +28,7 @@ writefile(Arena *a, String8 path, String8 data)
 	if (fd != 0)
 	{
 		ok = 1;
-		write_rng(fd, rng1u64(0, data.len), data.str);
+		write_rng(fd, rng1u64(0, data.size), data.str);
 		close_fd(fd);
 	}
 	return ok;
@@ -38,14 +38,14 @@ static b32
 appendfile(Arena *a, String8 path, String8 data)
 {
 	b32 ok = 0;
-	if (data.len != 0)
+	if (data.size != 0)
 	{
 		u64 fd = open_fd(a, path, O_WRONLY | O_APPEND | O_CREAT);
 		if (fd != 0)
 		{
 			ok = 1;
 			u64 pos = os_fstat(fd).size;
-			write_rng(fd, rng1u64(pos, pos + data.len), data.str);
+			write_rng(fd, rng1u64(pos, pos + data.size), data.str);
 			close_fd(fd);
 		}
 	}
@@ -53,19 +53,19 @@ appendfile(Arena *a, String8 path, String8 data)
 }
 
 static String8
-read_file_rng(Arena *a, u64 fd, Rng1u64 r)
+read_file_rng(Arena *a, u64 fd, Rng1U64 r)
 {
 	u64 pre = arena_pos(a);
 	u64 len = dim1u64(r);
 	String8 s = {
 	    .str = push_array_no_zero(a, u8, len),
-	    .len = len,
+	    .size = len,
 	};
 	u64 nread = read_rng(fd, r, s.str);
-	if (nread < s.len)
+	if (nread < s.size)
 	{
 		arena_pop_to(a, pre + nread);
-		s.len = nread;
+		s.size = nread;
 	}
 	return s;
 }
@@ -135,7 +135,7 @@ static String8
 cwd(Arena *a)
 {
 	char *cwd = getcwd(0, 0);
-	String8 s = pushstr8cpy(a, str8cstr(cwd));
+	String8 s = str8_copy(a, str8_cstring(cwd));
 	free(cwd);
 	return s;
 }
@@ -186,7 +186,7 @@ static u64
 open_fd(Arena *a, String8 path, int flags)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	int fd = open((char *)p.str, flags, 0755);
 	temp_end(scratch);
 	if (fd == -1)
@@ -207,7 +207,7 @@ close_fd(u64 fd)
 }
 
 static u64
-read_rng(u64 fd, Rng1u64 r, void *out)
+read_rng(u64 fd, Rng1U64 r, void *out)
 {
 	if (fd == 0)
 	{
@@ -233,7 +233,7 @@ read_rng(u64 fd, Rng1u64 r, void *out)
 }
 
 static u64
-write_rng(u64 fd, Rng1u64 r, void *data)
+write_rng(u64 fd, Rng1U64 r, void *data)
 {
 	if (fd == 0)
 	{
@@ -291,7 +291,7 @@ osremove(Arena *a, String8 path)
 {
 	Temp scratch = temp_begin(a);
 	b32 ok = 0;
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	if (remove((char *)p.str) != -1)
 	{
 		ok = 1;
@@ -304,14 +304,14 @@ static String8
 abspath(Arena *a, String8 path)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	char buf[PATH_MAX];
 	if (realpath((char *)p.str, buf) == NULL)
 	{
 		temp_end(scratch);
-		return str8zero();
+		return str8_zero();
 	}
-	String8 s = pushstr8cpy(scratch.arena, str8cstr(buf));
+	String8 s = str8_copy(scratch.arena, str8_cstring(buf));
 	temp_end(scratch);
 	return s;
 }
@@ -320,7 +320,7 @@ static b32
 fileexists(Arena *a, String8 path)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	b32 ok = 0;
 	if (access((char *)p.str, F_OK) == 0)
 	{
@@ -334,7 +334,7 @@ static b32
 direxists(Arena *a, String8 path)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	b32 ok = 0;
 	DIR *d = opendir((char *)p.str);
 	if (d != NULL)
@@ -350,7 +350,7 @@ static Fprops
 osstat(Arena *a, String8 path)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	Fprops props = {0};
 	struct stat st = {0};
 	if (stat((char *)p.str, &st) != -1)
@@ -365,7 +365,7 @@ static b32
 osmkdir(Arena *a, String8 path)
 {
 	Temp scratch = temp_begin(a);
-	String8 p = pushstr8cpy(scratch.arena, path);
+	String8 p = str8_copy(scratch.arena, path);
 	b32 ok = 0;
 	if (mkdir((char *)p.str, 0755) != -1)
 	{

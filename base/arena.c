@@ -187,13 +187,13 @@ arena_clear(Arena *arena)
 }
 
 static void
-arena_pop(Arena *arena, u64 size)
+arena_pop(Arena *arena, u64 amt)
 {
 	u64 pos_old = arena_pos(arena);
 	u64 pos_new = pos_old;
-	if (size < pos_old)
+	if (amt < pos_old)
 	{
-		pos_new = pos_old - size;
+		pos_new = pos_old - amt;
 	}
 	arena_pop_to(arena, pos_new);
 }

@@ -38,33 +38,33 @@ struct Symbol
 	String8 signature;
 };
 
-typedef struct Symbolnode Symbolnode;
-struct Symbolnode
+typedef struct SymbolNode SymbolNode;
+struct SymbolNode
 {
+	SymbolNode *next;
 	Symbol symbol;
-	Symbolnode *next;
 };
 
-typedef struct Symbollist Symbollist;
-struct Symbollist
+typedef struct SymbolList SymbolList;
+struct SymbolList
 {
-	Symbolnode *start;
-	Symbolnode *end;
+	SymbolNode *first;
+	SymbolNode *last;
 	u64 count;
 };
 
-read_only static String8 directories[] = {str8litc("base"), str8litc("9p"), str8litc("cmd")};
+read_only static String8 directories[] = {str8_lit_comp("base"), str8_lit_comp("9p"), str8_lit_comp("cmd")};
 
 static String8
 cleansignature(Arena *a, String8 signature)
 {
-	if (signature.len == 0)
+	if (signature.size == 0)
 	{
 		return signature;
 	}
-	u64 newlinepos = str8index(signature, 0, str8lit("\n"), 0);
-	String8 cleaned = (newlinepos < signature.len) ? str8prefix(signature, newlinepos) : signature;
-	return pushstr8cpy(a, cleaned);
+	u64 newlinepos = str8_find_needle(signature, 0, str8_lit("\n"), 0);
+	String8 cleaned = (newlinepos < signature.size) ? str8_prefix(signature, newlinepos) : signature;
+	return str8_copy(a, cleaned);
 }
 
 static String8
@@ -72,14 +72,14 @@ extractfunctionsignature(Arena *a, String8 source, TSNode node)
 {
 	u32 startbyte = ts_node_start_byte(node);
 	u32 endbyte = ts_node_end_byte(node);
-	if (startbyte >= source.len || endbyte > source.len || endbyte <= startbyte)
+	if (startbyte >= source.size || endbyte > source.size || endbyte <= startbyte)
 	{
-		return str8zero();
+		return str8_zero();
 	}
-	String8 signature = str8substr(source, rng1u64(startbyte, endbyte));
+	String8 signature = str8_substr(source, rng1u64(startbyte, endbyte));
 	b32 foundopenbrace = 0;
 	u64 i = 0;
-	for (; i < signature.len; i++)
+	for (; i < signature.size; i++)
 	{
 		if (signature.str[i] == '{')
 		{
@@ -91,20 +91,20 @@ extractfunctionsignature(Arena *a, String8 source, TSNode node)
 			break;
 		}
 	}
-	if (foundopenbrace && i < signature.len)
+	if (foundopenbrace && i < signature.size)
 	{
-		signature = str8prefix(signature, i);
+		signature = str8_prefix(signature, i);
 	}
 	return cleansignature(a, signature);
 }
 
 static b32
-symbolexists(Symbollist *list, Symbol symbol)
+symbolexists(SymbolList *list, Symbol symbol)
 {
-	for (Symbolnode *node = list->start; node != NULL; node = node->next)
+	for (SymbolNode *node = list->first; node != NULL; node = node->next)
 	{
-		if (str8cmp(node->symbol.name, symbol.name, 0) && str8cmp(node->symbol.type, symbol.type, 0) &&
-		    str8cmp(node->symbol.file, symbol.file, 0) && node->symbol.line == symbol.line)
+		if (str8_match(node->symbol.name, symbol.name, 0) && str8_match(node->symbol.type, symbol.type, 0) &&
+		    str8_match(node->symbol.file, symbol.file, 0) && node->symbol.line == symbol.line)
 		{
 			return 1;
 		}
@@ -113,33 +113,33 @@ symbolexists(Symbollist *list, Symbol symbol)
 }
 
 static void
-symbollistpush(Arena *a, Symbollist *list, Symbol symbol)
+symbollistpush(Arena *a, SymbolList *list, Symbol symbol)
 {
 	if (symbolexists(list, symbol))
 	{
 		return;
 	}
-	Symbolnode *node = push_array(a, Symbolnode, 1);
-	*node = (Symbolnode){.symbol = symbol, .next = NULL};
-	if (list->end == NULL)
+	SymbolNode *node = push_array(a, SymbolNode, 1);
+	*node = (SymbolNode){.symbol = symbol, .next = NULL};
+	if (list->last == NULL)
 	{
-		list->start = node;
-		list->end = node;
+		list->first = node;
+		list->last = node;
 	}
 	else
 	{
-		list->end->next = node;
-		list->end = node;
+		list->last->next = node;
+		list->last = node;
 	}
 	list->count++;
 }
 
-static String8array
+static String8Array
 listcfiles(Arena *a, String8 dirpath)
 {
-	String8array result = {0};
-	String8list files = {0};
-	String8 dirpathcpy = pushstr8cpy(a, dirpath);
+	String8Array result = {0};
+	String8List files = {0};
+	String8 dirpathcpy = str8_copy(a, dirpath);
 	DIR *dp = opendir((char *)dirpathcpy.str);
 	if (dp == NULL)
 	{
@@ -152,69 +152,69 @@ listcfiles(Arena *a, String8 dirpath)
 		{
 			continue;
 		}
-		String8 name = str8cstr(entry->d_name);
-		String8 ext = str8ext(name);
-		if (!str8cmp(ext, str8lit(".c"), 0) || !str8cmp(ext, str8lit(".h"), 0))
+		String8 name = str8_cstring(entry->d_name);
+		String8 ext = str8_skip_last_dot(name);
+		if (!str8_match(ext, str8_lit(".c"), 0) || !str8_match(ext, str8_lit(".h"), 0))
 		{
-			String8 fullpath = pushstr8f(a, "%.*s/%.*s", str8varg(dirpath), str8varg(name));
-			str8listpush(a, &files, fullpath);
+			String8 fullpath = str8f(a, "%.*s/%.*s", str8_varg(dirpath), str8_varg(name));
+			str8_list_push(a, &files, fullpath);
 		}
 	}
 	closedir(dp);
-	if (files.nnode == 0)
+	if (files.node_count == 0)
 	{
 		return result;
 	}
-	result.v = push_array(a, String8, files.nnode);
+	result.v = push_array(a, String8, files.node_count);
 	u64 i = 0;
-	for (String8node *node = files.start; node != NULL; node = node->next)
+	for (String8Node *node = files.first; node != NULL; node = node->next)
 	{
-		result.v[i++] = node->str;
+		result.v[i++] = node->string;
 	}
-	result.cnt = files.nnode;
+	result.count = files.node_count;
 	return result;
 }
 
 static void
-symbolresult(Arena *a, Jsonbuilder *b, Symbollist *symbols)
+symbolresult(Arena *a, Jsonbuilder *b, SymbolList *symbols)
 {
 	jsonbobjstart(b);
-	jsonbobjkey(b, str8lit("content"));
+	jsonbobjkey(b, str8_lit("content"));
 	jsonbarrstart(b);
 
 	jsonbobjstart(b);
-	jsonbobjkey(b, str8lit("type"));
-	jsonbwritestr(b, str8lit("text"));
+	jsonbobjkey(b, str8_lit("type"));
+	jsonbwritestr(b, str8_lit("text"));
 	jsonbobjcomma(b);
-	jsonbobjkey(b, str8lit("text"));
+	jsonbobjkey(b, str8_lit("text"));
 
 	u64 estsize = 1024 + symbols->count * 200;
 	Jsonbuilder textbuilder = jsonbuilder(a, estsize);
 	jsonbobjstart(&textbuilder);
-	jsonbobjkey(&textbuilder, str8lit("symbols"));
+	jsonbobjkey(&textbuilder, str8_lit("symbols"));
 	jsonbarrstart(&textbuilder);
 
-	for (Symbolnode *node = symbols->start; node != NULL; node = node->next)
+	for (SymbolNode *node = symbols->first; node != NULL; node = node->next)
 	{
 		Symbol *sym = &node->symbol;
-		if (node != symbols->start)
+		if (node != symbols->first)
 		{
 			jsonbarrcomma(&textbuilder);
 		}
 		jsonbobjstart(&textbuilder);
-		jsonbobjkey(&textbuilder, str8lit("name"));
+		jsonbobjkey(&textbuilder, str8_lit("name"));
 		jsonbwritestr(&textbuilder, sym->name);
 		jsonbobjcomma(&textbuilder);
-		jsonbobjkey(&textbuilder, str8lit("type"));
+		jsonbobjkey(&textbuilder, str8_lit("type"));
 		jsonbwritestr(&textbuilder, sym->type);
 		jsonbobjcomma(&textbuilder);
-		jsonbobjkey(&textbuilder, str8lit("file"));
+		jsonbobjkey(&textbuilder, str8_lit("file"));
 		jsonbwritestr(&textbuilder, sym->file);
 		jsonbobjcomma(&textbuilder);
-		jsonbobjkey(&textbuilder, str8lit("line"));
+		jsonbobjkey(&textbuilder, str8_lit("line"));
 		jsonbwritenum(&textbuilder, sym->line);
 		jsonbobjcomma(&textbuilder);
-		jsonbobjkey(&textbuilder, str8lit("signature"));
+		jsonbobjkey(&textbuilder, str8_lit("signature"));
 		jsonbwritestr(&textbuilder, sym->signature);
 		jsonbobjend(&textbuilder);
 	}
@@ -232,15 +232,15 @@ symbolresult(Arena *a, Jsonbuilder *b, Symbollist *symbols)
 static void
 printmcpresponse(Arena *a, String8 requestid, String8 result)
 {
-	u64 estsize = 100 + requestid.len + result.len;
+	u64 estsize = 100 + requestid.size + result.size;
 	Jsonbuilder b = jsonbuilder(a, estsize);
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("jsonrpc"));
-	jsonbwritestr(&b, str8lit("2.0"));
+	jsonbobjkey(&b, str8_lit("jsonrpc"));
+	jsonbwritestr(&b, str8_lit("2.0"));
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("id"));
-	if (requestid.len > 0)
+	jsonbobjkey(&b, str8_lit("id"));
+	if (requestid.size > 0)
 	{
 		jsonbwritestr(&b, requestid);
 	}
@@ -250,27 +250,27 @@ printmcpresponse(Arena *a, String8 requestid, String8 result)
 	}
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("result"));
+	jsonbobjkey(&b, str8_lit("result"));
 	jsonbwrite(&b, result);
 	jsonbobjend(&b);
 
 	String8 output = jsonbfinish(&b);
-	printf("%.*s\n", str8varg(output));
+	printf("%.*s\n", str8_varg(output));
 	fflush(stdout);
 }
 
 static void
 printmcperror(Arena *a, String8 requestid, s32 code, String8 message)
 {
-	u64 estsize = 150 + requestid.len + message.len;
+	u64 estsize = 150 + requestid.size + message.size;
 	Jsonbuilder b = jsonbuilder(a, estsize);
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("jsonrpc"));
-	jsonbwritestr(&b, str8lit("2.0"));
+	jsonbobjkey(&b, str8_lit("jsonrpc"));
+	jsonbwritestr(&b, str8_lit("2.0"));
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("id"));
-	if (requestid.len > 0)
+	jsonbobjkey(&b, str8_lit("id"));
+	if (requestid.size > 0)
 	{
 		jsonbwritestr(&b, requestid);
 	}
@@ -280,23 +280,23 @@ printmcperror(Arena *a, String8 requestid, s32 code, String8 message)
 	}
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("error"));
+	jsonbobjkey(&b, str8_lit("error"));
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("code"));
+	jsonbobjkey(&b, str8_lit("code"));
 	jsonbwritenum(&b, code);
 	jsonbobjcomma(&b);
-	jsonbobjkey(&b, str8lit("message"));
+	jsonbobjkey(&b, str8_lit("message"));
 	jsonbwritestr(&b, message);
 	jsonbobjend(&b);
 	jsonbobjend(&b);
 
 	String8 output = jsonbfinish(&b);
-	printf("%.*s\n", str8varg(output));
+	printf("%.*s\n", str8_varg(output));
 	fflush(stdout);
 }
 
 static void
-extractsymbolsfromnode(Arena *a, Symbollist *symbols, TSNode node, String8 filepath, String8 source)
+extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filepath, String8 source)
 {
 	TSSymbol symboltype = ts_node_symbol(node);
 	const char *typename = ts_language_symbol_name(tree_sitter_c(), symboltype);
@@ -322,18 +322,18 @@ extractsymbolsfromnode(Arena *a, Symbollist *symbols, TSNode node, String8 filep
 				TSPoint endpoint = ts_node_end_point(child);
 				u32 startline = startpoint.row;
 				u32 endline = endpoint.row;
-				if (startline < source.len && endline < source.len)
+				if (startline < source.size && endline < source.size)
 				{
 					u32 startbyte = ts_node_start_byte(child);
 					u32 endbyte = ts_node_end_byte(child);
-					if (startbyte < source.len && endbyte <= source.len && endbyte > startbyte)
+					if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 					{
-						String8 identifiertext = str8substr(source, rng1u64(startbyte, endbyte));
-						if (identifiertext.len > 0)
+						String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+						if (identifiertext.size > 0)
 						{
-							Symbol symbol = {.name = pushstr8cpy(a, identifiertext),
-							                 .type = str8lit("function"),
-							                 .file = pushstr8cpy(a, filepath),
+							Symbol symbol = {.name = str8_copy(a, identifiertext),
+							                 .type = str8_lit("function"),
+							                 .file = str8_copy(a, filepath),
 							                 .line = startline + 1,
 							                 .signature = extractfunctionsignature(a, source, node)};
 							symbollistpush(a, symbols, symbol);
@@ -357,25 +357,25 @@ extractsymbolsfromnode(Arena *a, Symbollist *symbols, TSNode node, String8 filep
 				TSPoint startpoint = ts_node_start_point(structchild);
 				u32 startbyte = ts_node_start_byte(structchild);
 				u32 endbyte = ts_node_end_byte(structchild);
-				if (startbyte < source.len && endbyte <= source.len && endbyte > startbyte)
+				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
-					String8 identifiertext = str8substr(source, rng1u64(startbyte, endbyte));
-					if (identifiertext.len > 0)
+					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
-						symbol.name = pushstr8cpy(a, identifiertext);
-						symbol.type = str8lit("struct");
-						symbol.file = pushstr8cpy(a, filepath);
+						symbol.name = str8_copy(a, identifiertext);
+						symbol.type = str8_lit("struct");
+						symbol.file = str8_copy(a, filepath);
 						symbol.line = startpoint.row + 1;
 						u32 startbyte = ts_node_start_byte(node);
 						u32 endbyte = ts_node_end_byte(node);
-						if (startbyte < source.len && endbyte <= source.len && endbyte > startbyte)
+						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 nodetext = str8substr(source, rng1u64(startbyte, endbyte));
-							String8list lines = str8split(a, nodetext, (u8 *)"\n", 1, 0);
-							if (lines.start != NULL)
+							String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
+							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
+							if (lines.first != NULL)
 							{
-								symbol.signature = pushstr8cpy(a, lines.start->str);
+								symbol.signature = str8_copy(a, lines.first->string);
 							}
 						}
 						symbollistpush(a, symbols, symbol);
@@ -398,25 +398,25 @@ extractsymbolsfromnode(Arena *a, Symbollist *symbols, TSNode node, String8 filep
 				TSPoint startpoint = ts_node_start_point(enumchild);
 				u32 startbyte = ts_node_start_byte(enumchild);
 				u32 endbyte = ts_node_end_byte(enumchild);
-				if (startbyte < source.len && endbyte <= source.len && endbyte > startbyte)
+				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
-					String8 identifiertext = str8substr(source, rng1u64(startbyte, endbyte));
-					if (identifiertext.len > 0)
+					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
-						symbol.name = pushstr8cpy(a, identifiertext);
-						symbol.type = str8lit("enum");
-						symbol.file = pushstr8cpy(a, filepath);
+						symbol.name = str8_copy(a, identifiertext);
+						symbol.type = str8_lit("enum");
+						symbol.file = str8_copy(a, filepath);
 						symbol.line = startpoint.row + 1;
 						u32 startbyte = ts_node_start_byte(node);
 						u32 endbyte = ts_node_end_byte(node);
-						if (startbyte < source.len && endbyte <= source.len && endbyte > startbyte)
+						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 nodetext = str8substr(source, rng1u64(startbyte, endbyte));
-							String8list lines = str8split(a, nodetext, (u8 *)"\n", 1, 0);
-							if (lines.start != NULL)
+							String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
+							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
+							if (lines.first != NULL)
 							{
-								symbol.signature = pushstr8cpy(a, lines.start->str);
+								symbol.signature = str8_copy(a, lines.first->string);
 							}
 						}
 						symbollistpush(a, symbols, symbol);
@@ -438,21 +438,21 @@ extractsymbolsfromnode(Arena *a, Symbollist *symbols, TSNode node, String8 filep
 						TSPoint startpoint = ts_node_start_point(enumnamechild);
 						u32 startbyte = ts_node_start_byte(enumnamechild);
 						u32 endbyte = ts_node_end_byte(enumnamechild);
-						if (startbyte < source.len && endbyte <= source.len && endbyte > startbyte)
+						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 identifiertext = str8substr(source, rng1u64(startbyte, endbyte));
-							if (identifiertext.len > 0)
+							String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+							if (identifiertext.size > 0)
 							{
 								Symbol symbol = {0};
-								symbol.name = pushstr8cpy(a, identifiertext);
-								symbol.type = str8lit("enum");
-								symbol.file = pushstr8cpy(a, filepath);
+								symbol.name = str8_copy(a, identifiertext);
+								symbol.type = str8_lit("enum");
+								symbol.file = str8_copy(a, filepath);
 								symbol.line = startpoint.row + 1;
 								u32 startbyte = ts_node_start_byte(enumlistchild);
 								u32 endbyte = ts_node_end_byte(enumlistchild);
-								if (startbyte < source.len && endbyte <= source.len && endbyte > startbyte)
+								if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 								{
-									String8 nodetext = str8substr(source, rng1u64(startbyte, endbyte));
+									String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
 									symbol.signature = cleansignature(a, nodetext);
 								}
 								symbollistpush(a, symbols, symbol);
@@ -476,25 +476,25 @@ extractsymbolsfromnode(Arena *a, Symbollist *symbols, TSNode node, String8 filep
 				TSPoint startpoint = ts_node_start_point(typedefchild);
 				u32 startbyte = ts_node_start_byte(typedefchild);
 				u32 endbyte = ts_node_end_byte(typedefchild);
-				if (startbyte < source.len && endbyte <= source.len && endbyte > startbyte)
+				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
-					String8 identifiertext = str8substr(source, rng1u64(startbyte, endbyte));
-					if (identifiertext.len > 0)
+					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
-						symbol.name = pushstr8cpy(a, identifiertext);
-						symbol.type = str8lit("typedef");
-						symbol.file = pushstr8cpy(a, filepath);
+						symbol.name = str8_copy(a, identifiertext);
+						symbol.type = str8_lit("typedef");
+						symbol.file = str8_copy(a, filepath);
 						symbol.line = startpoint.row + 1;
 						u32 startbyte = ts_node_start_byte(node);
 						u32 endbyte = ts_node_end_byte(node);
-						if (startbyte < source.len && endbyte <= source.len && endbyte > startbyte)
+						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 nodetext = str8substr(source, rng1u64(startbyte, endbyte));
-							String8list lines = str8split(a, nodetext, (u8 *)"\n", 1, 0);
-							if (lines.start != NULL)
+							String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
+							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
+							if (lines.first != NULL)
 							{
-								symbol.signature = pushstr8cpy(a, lines.start->str);
+								symbol.signature = str8_copy(a, lines.first->string);
 							}
 						}
 						symbollistpush(a, symbols, symbol);
@@ -517,21 +517,21 @@ extractsymbolsfromnode(Arena *a, Symbollist *symbols, TSNode node, String8 filep
 				TSPoint startpoint = ts_node_start_point(child);
 				u32 startbyte = ts_node_start_byte(child);
 				u32 endbyte = ts_node_end_byte(child);
-				if (startbyte < source.len && endbyte <= source.len && endbyte > startbyte)
+				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
-					String8 identifiertext = str8substr(source, rng1u64(startbyte, endbyte));
-					if (identifiertext.len > 0)
+					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
-						symbol.name = pushstr8cpy(a, identifiertext);
-						symbol.type = str8lit("macro");
-						symbol.file = pushstr8cpy(a, filepath);
+						symbol.name = str8_copy(a, identifiertext);
+						symbol.type = str8_lit("macro");
+						symbol.file = str8_copy(a, filepath);
 						symbol.line = startpoint.row + 1;
 						u32 startbyte = ts_node_start_byte(node);
 						u32 endbyte = ts_node_end_byte(node);
-						if (startbyte < source.len && endbyte <= source.len && endbyte > startbyte)
+						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 nodetext = str8substr(source, rng1u64(startbyte, endbyte));
+							String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
 							symbol.signature = cleansignature(a, nodetext);
 						}
 						symbollistpush(a, symbols, symbol);
@@ -549,10 +549,10 @@ extractsymbolsfromnode(Arena *a, Symbollist *symbols, TSNode node, String8 filep
 	}
 }
 
-static Symbollist
+static SymbolList
 parsecfiletreesitter(Arena *a, String8 filepath, String8 source)
 {
-	Symbollist symbols = {0};
+	SymbolList symbols = {0};
 	TSParser *parser = ts_parser_new();
 	if (!ts_parser_set_language(parser, tree_sitter_c()))
 	{
@@ -560,13 +560,13 @@ parsecfiletreesitter(Arena *a, String8 filepath, String8 source)
 		ts_parser_delete(parser);
 		return symbols;
 	}
-	char *sourcecstr = (char *)push_array(a, u8, source.len + 1);
-	memcpy(sourcecstr, source.str, source.len);
-	sourcecstr[source.len] = '\0';
-	TSTree *tree = ts_parser_parse_string(parser, NULL, sourcecstr, source.len);
+	char *sourcecstr = (char *)push_array(a, u8, source.size + 1);
+	memcpy(sourcecstr, source.str, source.size);
+	sourcecstr[source.size] = '\0';
+	TSTree *tree = ts_parser_parse_string(parser, NULL, sourcecstr, source.size);
 	if (tree == NULL)
 	{
-		fprintf(stderr, "mcpsrv: failed to parse source file '%.*s'\n", str8varg(filepath));
+		fprintf(stderr, "mcpsrv: failed to parse source file '%.*s'\n", str8_varg(filepath));
 		ts_parser_delete(parser);
 		return symbols;
 	}
@@ -580,24 +580,24 @@ parsecfiletreesitter(Arena *a, String8 filepath, String8 source)
 static String8
 symbolsearch(Arena *a, String8 pattern)
 {
-	Symbollist allsymbols = {0};
-	Symbollist filtered = {0};
+	SymbolList allsymbols = {0};
+	SymbolList filtered = {0};
 	for (u64 d = 0; d < ArrayCount(directories); d++)
 	{
-		String8array files = listcfiles(a, directories[d]);
-		for (u64 i = 0; i < files.cnt; i++)
+		String8Array files = listcfiles(a, directories[d]);
+		for (u64 i = 0; i < files.count; i++)
 		{
 			String8 source = readfile(a, files.v[i]);
-			if (source.len > 0 && source.str != NULL)
+			if (source.size > 0 && source.str != NULL)
 			{
-				Symbollist filesymbols = parsecfiletreesitter(a, files.v[i], source);
+				SymbolList filesymbols = parsecfiletreesitter(a, files.v[i], source);
 				if (filesymbols.count == 0)
 				{
-					fprintf(stderr, "mcpsrv: failed to parse symbols from '%.*s' using tree-sitter\n", str8varg(files.v[i]));
+					fprintf(stderr, "mcpsrv: failed to parse symbols from '%.*s' using tree-sitter\n", str8_varg(files.v[i]));
 				}
 				else
 				{
-					for (Symbolnode *symnode = filesymbols.start; symnode != NULL; symnode = symnode->next)
+					for (SymbolNode *symnode = filesymbols.first; symnode != NULL; symnode = symnode->next)
 					{
 						symbollistpush(a, &allsymbols, symnode->symbol);
 					}
@@ -605,11 +605,12 @@ symbolsearch(Arena *a, String8 pattern)
 			}
 		}
 	}
-	for (Symbolnode *node = allsymbols.start; node != NULL; node = node->next)
+	for (SymbolNode *node = allsymbols.first; node != NULL; node = node->next)
 	{
 		Symbol *sym = &node->symbol;
-		if (pattern.len == 0 ||
-		    (sym->name.len >= pattern.len && str8index(sym->name, 0, pattern, CASEINSENSITIVE) < sym->name.len))
+		if (pattern.size == 0 ||
+		    (sym->name.size >= pattern.size &&
+		     str8_find_needle(sym->name, 0, pattern, StringMatchFlag_CaseInsensitive) < sym->name.size))
 		{
 			symbollistpush(a, &filtered, *sym);
 		}
@@ -625,27 +626,27 @@ initialize(Arena *a, String8 requestid)
 {
 	Jsonbuilder b = jsonbuilder(a, 512);
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("protocolVersion"));
-	jsonbwritestr(&b, str8lit("2024-11-05"));
+	jsonbobjkey(&b, str8_lit("protocolVersion"));
+	jsonbwritestr(&b, str8_lit("2024-11-05"));
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("capabilities"));
+	jsonbobjkey(&b, str8_lit("capabilities"));
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("tools"));
+	jsonbobjkey(&b, str8_lit("tools"));
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("listChanged"));
+	jsonbobjkey(&b, str8_lit("listChanged"));
 	jsonbwritebool(&b, 0);
 	jsonbobjend(&b);
 	jsonbobjend(&b);
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("serverInfo"));
+	jsonbobjkey(&b, str8_lit("serverInfo"));
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("name"));
-	jsonbwritestr(&b, str8lit("mcpsrv"));
+	jsonbobjkey(&b, str8_lit("name"));
+	jsonbwritestr(&b, str8_lit("mcpsrv"));
 	jsonbobjcomma(&b);
-	jsonbobjkey(&b, str8lit("version"));
-	jsonbwritestr(&b, str8lit("0.1.0"));
+	jsonbobjkey(&b, str8_lit("version"));
+	jsonbwritestr(&b, str8_lit("0.1.0"));
 	jsonbobjend(&b);
 	jsonbobjend(&b);
 
@@ -658,37 +659,37 @@ toolslist(Arena *a, String8 requestid)
 {
 	Jsonbuilder b = jsonbuilder(a, 2048);
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("tools"));
+	jsonbobjkey(&b, str8_lit("tools"));
 	jsonbarrstart(&b);
 
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("name"));
-	jsonbwritestr(&b, str8lit("symbol_search"));
+	jsonbobjkey(&b, str8_lit("name"));
+	jsonbwritestr(&b, str8_lit("symbol_search"));
 	jsonbobjcomma(&b);
-	jsonbobjkey(&b, str8lit("description"));
-	jsonbwritestr(&b, str8lit("Search for symbols in C codebase"));
-	jsonbobjcomma(&b);
-
-	jsonbobjkey(&b, str8lit("inputSchema"));
-	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("type"));
-	jsonbwritestr(&b, str8lit("object"));
+	jsonbobjkey(&b, str8_lit("description"));
+	jsonbwritestr(&b, str8_lit("Search for symbols in C codebase"));
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("properties"));
+	jsonbobjkey(&b, str8_lit("inputSchema"));
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("pattern"));
-	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("type"));
-	jsonbwritestr(&b, str8lit("string"));
+	jsonbobjkey(&b, str8_lit("type"));
+	jsonbwritestr(&b, str8_lit("object"));
 	jsonbobjcomma(&b);
-	jsonbobjkey(&b, str8lit("description"));
-	jsonbwritestr(&b, str8lit("Search pattern for symbol names"));
+
+	jsonbobjkey(&b, str8_lit("properties"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8_lit("pattern"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8_lit("type"));
+	jsonbwritestr(&b, str8_lit("string"));
+	jsonbobjcomma(&b);
+	jsonbobjkey(&b, str8_lit("description"));
+	jsonbwritestr(&b, str8_lit("Search pattern for symbol names"));
 	jsonbobjend(&b);
 	jsonbobjend(&b);
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("required"));
+	jsonbobjkey(&b, str8_lit("required"));
 	jsonbarrstart(&b);
 	jsonbarrend(&b);
 	jsonbobjend(&b);
@@ -696,70 +697,70 @@ toolslist(Arena *a, String8 requestid)
 	jsonbarrcomma(&b);
 
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("name"));
-	jsonbwritestr(&b, str8lit("symbol_info"));
+	jsonbobjkey(&b, str8_lit("name"));
+	jsonbwritestr(&b, str8_lit("symbol_info"));
 	jsonbobjcomma(&b);
-	jsonbobjkey(&b, str8lit("description"));
-	jsonbwritestr(&b, str8lit("Get detailed information about a specific symbol"));
-	jsonbobjcomma(&b);
-
-	jsonbobjkey(&b, str8lit("inputSchema"));
-	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("type"));
-	jsonbwritestr(&b, str8lit("object"));
+	jsonbobjkey(&b, str8_lit("description"));
+	jsonbwritestr(&b, str8_lit("Get detailed information about a specific symbol"));
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("properties"));
+	jsonbobjkey(&b, str8_lit("inputSchema"));
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("name"));
-	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("type"));
-	jsonbwritestr(&b, str8lit("string"));
+	jsonbobjkey(&b, str8_lit("type"));
+	jsonbwritestr(&b, str8_lit("object"));
 	jsonbobjcomma(&b);
-	jsonbobjkey(&b, str8lit("description"));
-	jsonbwritestr(&b, str8lit("Symbol name to look up"));
+
+	jsonbobjkey(&b, str8_lit("properties"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8_lit("name"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8_lit("type"));
+	jsonbwritestr(&b, str8_lit("string"));
+	jsonbobjcomma(&b);
+	jsonbobjkey(&b, str8_lit("description"));
+	jsonbwritestr(&b, str8_lit("Symbol name to look up"));
 	jsonbobjend(&b);
 	jsonbobjend(&b);
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("required"));
+	jsonbobjkey(&b, str8_lit("required"));
 	jsonbarrstart(&b);
-	jsonbwritestr(&b, str8lit("name"));
+	jsonbwritestr(&b, str8_lit("name"));
 	jsonbarrend(&b);
 	jsonbobjend(&b);
 	jsonbobjend(&b);
 	jsonbarrcomma(&b);
 
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("name"));
-	jsonbwritestr(&b, str8lit("file_symbols"));
+	jsonbobjkey(&b, str8_lit("name"));
+	jsonbwritestr(&b, str8_lit("file_symbols"));
 	jsonbobjcomma(&b);
-	jsonbobjkey(&b, str8lit("description"));
-	jsonbwritestr(&b, str8lit("List all symbols in a specific file"));
-	jsonbobjcomma(&b);
-
-	jsonbobjkey(&b, str8lit("inputSchema"));
-	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("type"));
-	jsonbwritestr(&b, str8lit("object"));
+	jsonbobjkey(&b, str8_lit("description"));
+	jsonbwritestr(&b, str8_lit("List all symbols in a specific file"));
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("properties"));
+	jsonbobjkey(&b, str8_lit("inputSchema"));
 	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("file"));
-	jsonbobjstart(&b);
-	jsonbobjkey(&b, str8lit("type"));
-	jsonbwritestr(&b, str8lit("string"));
+	jsonbobjkey(&b, str8_lit("type"));
+	jsonbwritestr(&b, str8_lit("object"));
 	jsonbobjcomma(&b);
-	jsonbobjkey(&b, str8lit("description"));
-	jsonbwritestr(&b, str8lit("File path to analyze"));
+
+	jsonbobjkey(&b, str8_lit("properties"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8_lit("file"));
+	jsonbobjstart(&b);
+	jsonbobjkey(&b, str8_lit("type"));
+	jsonbwritestr(&b, str8_lit("string"));
+	jsonbobjcomma(&b);
+	jsonbobjkey(&b, str8_lit("description"));
+	jsonbwritestr(&b, str8_lit("File path to analyze"));
 	jsonbobjend(&b);
 	jsonbobjend(&b);
 	jsonbobjcomma(&b);
 
-	jsonbobjkey(&b, str8lit("required"));
+	jsonbobjkey(&b, str8_lit("required"));
 	jsonbarrstart(&b);
-	jsonbwritestr(&b, str8lit("file"));
+	jsonbwritestr(&b, str8_lit("file"));
 	jsonbarrend(&b);
 	jsonbobjend(&b);
 	jsonbobjend(&b);
@@ -773,20 +774,20 @@ toolslist(Arena *a, String8 requestid)
 static String8
 symbolinfo(Arena *a, String8 symbolname)
 {
-	Symbollist allsymbols = {0};
-	Symbollist filtered = {0};
+	SymbolList allsymbols = {0};
+	SymbolList filtered = {0};
 	for (u64 d = 0; d < ArrayCount(directories); d++)
 	{
-		String8array files = listcfiles(a, directories[d]);
-		for (u64 i = 0; i < files.cnt; i++)
+		String8Array files = listcfiles(a, directories[d]);
+		for (u64 i = 0; i < files.count; i++)
 		{
 			String8 source = readfile(a, files.v[i]);
-			if (source.len > 0 && source.str != NULL)
+			if (source.size > 0 && source.str != NULL)
 			{
-				Symbollist filesymbols = parsecfiletreesitter(a, files.v[i], source);
+				SymbolList filesymbols = parsecfiletreesitter(a, files.v[i], source);
 				if (filesymbols.count > 0)
 				{
-					for (Symbolnode *symnode = filesymbols.start; symnode != NULL; symnode = symnode->next)
+					for (SymbolNode *symnode = filesymbols.first; symnode != NULL; symnode = symnode->next)
 					{
 						symbollistpush(a, &allsymbols, symnode->symbol);
 					}
@@ -794,10 +795,10 @@ symbolinfo(Arena *a, String8 symbolname)
 			}
 		}
 	}
-	for (Symbolnode *node = allsymbols.start; node != NULL; node = node->next)
+	for (SymbolNode *node = allsymbols.first; node != NULL; node = node->next)
 	{
 		Symbol *sym = &node->symbol;
-		if (str8cmp(sym->name, symbolname, 0))
+		if (str8_match(sym->name, symbolname, 0))
 		{
 			symbollistpush(a, &filtered, *sym);
 		}
@@ -811,24 +812,24 @@ symbolinfo(Arena *a, String8 symbolname)
 static String8
 filesymbols(Arena *a, String8 filepath)
 {
-	Symbollist symbols = {0};
+	SymbolList symbols = {0};
 	String8 source = readfile(a, filepath);
-	if (source.len == 0 || source.str == NULL)
+	if (source.size == 0 || source.str == NULL)
 	{
 		Jsonbuilder b = jsonbuilder(a, 512);
 		jsonbobjstart(&b);
-		jsonbobjkey(&b, str8lit("content"));
+		jsonbobjkey(&b, str8_lit("content"));
 		jsonbarrstart(&b);
 
 		jsonbobjstart(&b);
-		jsonbobjkey(&b, str8lit("type"));
-		jsonbwritestr(&b, str8lit("text"));
+		jsonbobjkey(&b, str8_lit("type"));
+		jsonbwritestr(&b, str8_lit("text"));
 		jsonbobjcomma(&b);
-		jsonbobjkey(&b, str8lit("text"));
+		jsonbobjkey(&b, str8_lit("text"));
 		jsonbwritec(&b, '"');
-		jsonbwrite(&b, str8lit("{\\\"error\\\":\\\"Failed to read file '"));
+		jsonbwrite(&b, str8_lit("{\\\"error\\\":\\\"Failed to read file '"));
 		jsonbwrite(&b, filepath);
-		jsonbwrite(&b, str8lit("'\\\"}"));
+		jsonbwrite(&b, str8_lit("'\\\"}"));
 		jsonbwritec(&b, '"');
 		jsonbobjend(&b);
 
@@ -847,12 +848,12 @@ static void
 toolcall(Arena *a, String8 requestid, String8 toolname, String8 arguments)
 {
 	Jsonvalue argsobj = jsonparse(a, arguments);
-	if (str8cmp(toolname, str8lit("symbol_search"), 0))
+	if (str8_match(toolname, str8_lit("symbol_search"), 0))
 	{
-		String8 pattern = str8zero();
+		String8 pattern = str8_zero();
 		if (argsobj.type == JSON_OBJECT)
 		{
-			Jsonvalue patternval = jsonget(argsobj, str8lit("pattern"));
+			Jsonvalue patternval = jsonget(argsobj, str8_lit("pattern"));
 			if (patternval.type == JSON_STRING)
 			{
 				pattern = patternval.string;
@@ -861,12 +862,12 @@ toolcall(Arena *a, String8 requestid, String8 toolname, String8 arguments)
 		String8 result = symbolsearch(a, pattern);
 		printmcpresponse(a, requestid, result);
 	}
-	else if (str8cmp(toolname, str8lit("symbol_info"), 0))
+	else if (str8_match(toolname, str8_lit("symbol_info"), 0))
 	{
-		String8 symbolname = str8zero();
+		String8 symbolname = str8_zero();
 		if (argsobj.type == JSON_OBJECT)
 		{
-			Jsonvalue nameval = jsonget(argsobj, str8lit("name"));
+			Jsonvalue nameval = jsonget(argsobj, str8_lit("name"));
 			if (nameval.type == JSON_STRING)
 			{
 				symbolname = nameval.string;
@@ -875,12 +876,12 @@ toolcall(Arena *a, String8 requestid, String8 toolname, String8 arguments)
 		String8 result = symbolinfo(a, symbolname);
 		printmcpresponse(a, requestid, result);
 	}
-	else if (str8cmp(toolname, str8lit("file_symbols"), 0))
+	else if (str8_match(toolname, str8_lit("file_symbols"), 0))
 	{
-		String8 filepath = str8zero();
+		String8 filepath = str8_zero();
 		if (argsobj.type == JSON_OBJECT)
 		{
-			Jsonvalue fileval = jsonget(argsobj, str8lit("file"));
+			Jsonvalue fileval = jsonget(argsobj, str8_lit("file"));
 			if (fileval.type == JSON_STRING)
 			{
 				filepath = fileval.string;
@@ -891,69 +892,69 @@ toolcall(Arena *a, String8 requestid, String8 toolname, String8 arguments)
 	}
 	else
 	{
-		printmcperror(a, requestid, -32601, pushstr8f(a, "Unknown tool: %.*s", str8varg(toolname)));
+		printmcperror(a, requestid, -32601, str8f(a, "Unknown tool: %.*s", str8_varg(toolname)));
 	}
 }
 
 static void
 mcprequest(Arena *a, String8 line)
 {
-	String8 requestid = str8zero();
-	u64 idstart = str8index(line, 0, str8lit("\"id\":"), 0);
-	if (idstart < line.len)
+	String8 requestid = str8_zero();
+	u64 idstart = str8_find_needle(line, 0, str8_lit("\"id\":"), 0);
+	if (idstart < line.size)
 	{
 		idstart += 5;
-		if (idstart < line.len)
+		if (idstart < line.size)
 		{
 			if (line.str[idstart] == '"')
 			{
 				idstart++;
-				u64 idend = str8index(line, idstart, str8lit("\""), 0);
-				if (idend < line.len)
+				u64 idend = str8_find_needle(line, idstart, str8_lit("\""), 0);
+				if (idend < line.size)
 				{
-					requestid = str8substr(line, rng1u64(idstart, idend));
+					requestid = str8_substr(line, rng1u64(idstart, idend));
 				}
 			}
 			else
 			{
 				u64 idend = idstart;
-				while (idend < line.len && (line.str[idend] >= '0' && line.str[idend] <= '9'))
+				while (idend < line.size && (line.str[idend] >= '0' && line.str[idend] <= '9'))
 				{
 					idend++;
 				}
 				if (idend > idstart)
 				{
-					requestid = str8substr(line, rng1u64(idstart, idend));
+					requestid = str8_substr(line, rng1u64(idstart, idend));
 				}
 			}
 		}
 	}
-	if (str8index(line, 0, str8lit("\"method\":\"initialize\""), 0) < line.len)
+	if (str8_find_needle(line, 0, str8_lit("\"method\":\"initialize\""), 0) < line.size)
 	{
 		initialize(a, requestid);
 	}
-	else if (str8index(line, 0, str8lit("\"method\":\"tools/list\""), 0) < line.len)
+	else if (str8_find_needle(line, 0, str8_lit("\"method\":\"tools/list\""), 0) < line.size)
 	{
 		toolslist(a, requestid);
 	}
-	else if (str8index(line, 0, str8lit("\"method\":\"tools/call\""), 0) < line.len)
+	else if (str8_find_needle(line, 0, str8_lit("\"method\":\"tools/call\""), 0) < line.size)
 	{
-		u64 namestart = str8index(line, 0, str8lit("\"name\":\""), 0);
-		if (namestart < line.len)
+		u64 namestart = str8_find_needle(line, 0, str8_lit("\"name\":\""), 0);
+		if (namestart < line.size)
 		{
 			namestart += 8;
-			u64 nameend = str8index(line, namestart, str8lit("\""), 0);
-			if (nameend < line.len)
+			u64 nameend = str8_find_needle(line, namestart, str8_lit("\""), 0);
+			if (nameend < line.size)
 			{
-				String8 toolname = str8substr(line, rng1u64(namestart, nameend));
-				u64 argsstart = str8index(line, 0, str8lit("\"arguments\":{"), 0);
-				String8 arguments = str8zero();
-				if (argsstart < line.len)
+				String8 toolname = str8_substr(line, rng1u64(namestart, nameend));
+				u64 argsstart = str8_find_needle(line, 0, str8_lit("\"arguments\":{"), 0);
+				String8 arguments = str8_zero();
+				if (argsstart < line.size)
 				{
 					argsstart += 12;
 					u64 bracecount = 1;
 					u64 argsend = argsstart;
-					while (argsend < line.len && bracecount > 0)
+					while (argsend < line.size && bracecount > 0)
 					{
 						if (line.str[argsend] == '{')
 						{
@@ -969,7 +970,7 @@ mcprequest(Arena *a, String8 line)
 					{
 						if (argsend > argsstart)
 						{
-							arguments = str8substr(line, rng1u64(argsstart, argsend - 1));
+							arguments = str8_substr(line, rng1u64(argsstart, argsend - 1));
 						}
 					}
 				}
@@ -987,13 +988,13 @@ main(void)
 	char line[8192] = {0};
 	while (fgets(line, sizeof(line), stdin))
 	{
-		size_t len = strlen(line);
-		if (len > 0 && line[len - 1] == '\n')
+		size_t size = strlen(line);
+		if (size > 0 && line[size - 1] == '\n')
 		{
-			line[len - 1] = '\0';
-			len--;
+			line[size - 1] = '\0';
+			size--;
 		}
-		String8 input = str8((u8 *)line, len);
+		String8 input = str8((u8 *)line, size);
 		Temp temp = temp_begin(arena);
 		mcprequest(arena, input);
 		temp_end(temp);

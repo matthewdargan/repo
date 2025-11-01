@@ -56,7 +56,7 @@ static void *arena_push(Arena *arena, u64 size, u64 align, b32 zero);
 static u64 arena_pos(Arena *arena);
 static void arena_pop_to(Arena *arena, u64 pos);
 static void arena_clear(Arena *arena);
-static void arena_pop(Arena *arena, u64 size);
+static void arena_pop(Arena *arena, u64 amt);
 static Temp temp_begin(Arena *arena);
 static void temp_end(Temp temp);
 

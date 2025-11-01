@@ -20,9 +20,9 @@ getuser()
 	struct passwd *pw = getpwuid(uid);
 	if (pw == NULL)
 	{
-		return str8lit("none");
+		return str8_lit("none");
 	}
-	return str8cstr(pw->pw_name);
+	return str8_cstring(pw->pw_name);
 }
 
 static Cfsys *
@@ -60,23 +60,23 @@ debug9pprint(String8 dir, Fcall fc)
 	{
 		return;
 	}
-	fprintf(stderr, "%.*s ", str8varg(dir));
+	fprintf(stderr, "%.*s ", str8_varg(dir));
 	switch (fc.type)
 	{
 		case Tversion:
 		{
-			fprintf(stderr, "Tversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, str8varg(fc.version));
+			fprintf(stderr, "Tversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, str8_varg(fc.version));
 		}
 		break;
 		case Rversion:
 		{
-			fprintf(stderr, "Rversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, str8varg(fc.version));
+			fprintf(stderr, "Rversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, str8_varg(fc.version));
 		}
 		break;
 		case Tauth:
 		{
-			fprintf(stderr, "Tauth tag=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.afid, str8varg(fc.uname),
-			        str8varg(fc.aname));
+			fprintf(stderr, "Tauth tag=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.afid, str8_varg(fc.uname),
+			        str8_varg(fc.aname));
 		}
 		break;
 		case Rauth:
@@ -87,13 +87,13 @@ debug9pprint(String8 dir, Fcall fc)
 		break;
 		case Rerror:
 		{
-			fprintf(stderr, "Rerror tag=%u ename='%.*s'\n", fc.tag, str8varg(fc.ename));
+			fprintf(stderr, "Rerror tag=%u ename='%.*s'\n", fc.tag, str8_varg(fc.ename));
 		}
 		break;
 		case Tattach:
 		{
 			fprintf(stderr, "Tattach tag=%u fid=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.fid, fc.afid,
-			        str8varg(fc.uname), str8varg(fc.aname));
+			        str8_varg(fc.uname), str8_varg(fc.aname));
 		}
 		break;
 		case Rattach:
@@ -106,7 +106,7 @@ debug9pprint(String8 dir, Fcall fc)
 			fprintf(stderr, "Twalk tag=%u fid=%u newfid=%u nwname=%u", fc.tag, fc.fid, fc.newfid, fc.nwname);
 			for (u32 i = 0; i < fc.nwname; i++)
 			{
-				fprintf(stderr, " '%.*s'", str8varg(fc.wname[i]));
+				fprintf(stderr, " '%.*s'", str8_varg(fc.wname[i]));
 			}
 			fprintf(stderr, "\n");
 		}
@@ -134,8 +134,8 @@ debug9pprint(String8 dir, Fcall fc)
 		break;
 		case Tcreate:
 		{
-			fprintf(stderr, "Tcreate tag=%u fid=%u name='%.*s' perm=%u mode=%u\n", fc.tag, fc.fid, str8varg(fc.name), fc.perm,
-			        fc.mode);
+			fprintf(stderr, "Tcreate tag=%u fid=%u name='%.*s' perm=%u mode=%u\n", fc.tag, fc.fid, str8_varg(fc.name),
+			        fc.perm, fc.mode);
 		}
 		break;
 		case Rcreate:
@@ -151,12 +151,12 @@ debug9pprint(String8 dir, Fcall fc)
 		break;
 		case Rread:
 		{
-			fprintf(stderr, "Rread tag=%u count=%lu\n", fc.tag, fc.data.len);
+			fprintf(stderr, "Rread tag=%u count=%lu\n", fc.tag, fc.data.size);
 		}
 		break;
 		case Twrite:
 		{
-			fprintf(stderr, "Twrite tag=%u fid=%u offset=%lu count=%lu\n", fc.tag, fc.fid, fc.offset, fc.data.len);
+			fprintf(stderr, "Twrite tag=%u fid=%u offset=%lu count=%lu\n", fc.tag, fc.fid, fc.offset, fc.data.size);
 		}
 		break;
 		case Rwrite:
@@ -191,12 +191,12 @@ debug9pprint(String8 dir, Fcall fc)
 		break;
 		case Rstat:
 		{
-			fprintf(stderr, "Rstat tag=%u stat.len=%lu\n", fc.tag, fc.stat.len);
+			fprintf(stderr, "Rstat tag=%u stat.size=%lu\n", fc.tag, fc.stat.size);
 		}
 		break;
 		case Twstat:
 		{
-			fprintf(stderr, "Twstat tag=%u fid=%u stat.len=%lu\n", fc.tag, fc.fid, fc.stat.len);
+			fprintf(stderr, "Twstat tag=%u fid=%u stat.size=%lu\n", fc.tag, fc.fid, fc.stat.size);
 		}
 		break;
 		case Rwstat:
@@ -224,24 +224,24 @@ fsrpc(Arena *a, Cfsys *fs, Fcall tx)
 			fs->nexttag = 1;
 		}
 	}
-	debug9pprint(str8lit("<-"), tx);
+	debug9pprint(str8_lit("<-"), tx);
 	String8 txmsg = fcallencode(a, tx);
-	if (txmsg.len == 0)
+	if (txmsg.size == 0)
 	{
 		return errfc;
 	}
-	ssize_t n = write(fs->fd, txmsg.str, txmsg.len);
-	if (n < 0 || (u64)n != txmsg.len)
+	ssize_t n = write(fs->fd, txmsg.str, txmsg.size);
+	if (n < 0 || (u64)n != txmsg.size)
 	{
 		return errfc;
 	}
 	String8 rxmsg = read9pmsg(a, fs->fd);
-	if (rxmsg.len == 0)
+	if (rxmsg.size == 0)
 	{
 		return errfc;
 	}
 	Fcall rx = fcalldecode(rxmsg);
-	debug9pprint(str8lit("->"), rx);
+	debug9pprint(str8_lit("->"), rx);
 	if (rx.type == 0 || rx.type == Rerror || rx.type != tx.type + 1)
 	{
 		return errfc;
@@ -267,7 +267,7 @@ fsversion(Arena *a, Cfsys *fs, u32 msize)
 		return 0;
 	}
 	fs->msize = rx.msize;
-	if (!str8cmp(rx.version, version9p, 0))
+	if (!str8_match(rx.version, version9p, 0))
 	{
 		return 0;
 	}
@@ -341,8 +341,8 @@ fswalk(Arena *a, Cfid *fid, String8 path)
 	wfid->qid = fid->qid;
 	wfid->fs = fid->fs;
 	b32 firstwalk = 1;
-	String8list parts = str8split(scratch.arena, path, (u8 *)"/", 1, 0);
-	String8node *node = parts.start;
+	String8List parts = str8_split(scratch.arena, path, (u8 *)"/", 1, 0);
+	String8Node *node = parts.first;
 	Fcall tx = {0};
 	tx.type = Twalk;
 	tx.fid = fid->fid;
@@ -362,8 +362,8 @@ fswalk(Arena *a, Cfid *fid, String8 path)
 		u64 i = 0;
 		while (node != NULL && i < MAXWELEM)
 		{
-			String8 part = node->str;
-			if (part.str[0] == '.' && part.len == 1)
+			String8 part = node->string;
+			if (part.str[0] == '.' && part.size == 1)
 			{
 				node = node->next;
 				continue;
@@ -420,8 +420,8 @@ fscreate(Arena *a, Cfsys *fs, String8 name, u32 mode, u32 perm)
 	{
 		return NULL;
 	}
-	String8 dir = str8dirname(name);
-	String8 elem = str8basename(name);
+	String8 dir = str8_chop_last_slash(name);
+	String8 elem = str8_skip_last_slash(name);
 	Cfid *fid = fswalk(a, fs->root, dir);
 	if (fid == NULL)
 	{
@@ -534,7 +534,7 @@ fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 	{
 		return -1;
 	}
-	s64 nr = rx.data.len;
+	s64 nr = rx.data.size;
 	if (nr > (s64)n)
 	{
 		nr = n;
@@ -601,7 +601,7 @@ fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
 		tx.type = Twrite;
 		tx.fid = fid->fid;
 		tx.offset = (offset == -1) ? fid->offset : offset + nwrite;
-		tx.data.len = want;
+		tx.data.size = want;
 		tx.data.str = p + nwrite;
 		Fcall rx = fsrpc(a, fid->fs, tx);
 		if (rx.type != Rwrite)
@@ -658,9 +658,9 @@ dirpackage(Arena *a, u8 *buf, s64 ts, Dirlist *list)
 		{
 			return -1;
 		}
-		String8 dirmsg = {.str = &buf[i], .len = m};
+		String8 dirmsg = {.str = &buf[i], .size = m};
 		Dir d = dirdecode(dirmsg);
-		if (d.name.len == 0 && m > 2)
+		if (d.name.size == 0 && m > 2)
 		{
 			return -1;
 		}
@@ -768,7 +768,7 @@ fsdirfwstat(Arena *a, Cfid *fid, Dir d)
 	}
 	Temp scratch = temp_begin(a);
 	String8 stat = direncode(scratch.arena, d);
-	if (stat.len == 0)
+	if (stat.size == 0)
 	{
 		return 0;
 	}
@@ -811,7 +811,7 @@ fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode)
 	if (mode == AEXIST)
 	{
 		Dir d = fsdirstat(a, fs, name);
-		if (d.name.len == 0)
+		if (d.name.size == 0)
 		{
 			return 0;
 		}
@@ -855,7 +855,7 @@ fsseek(Arena *a, Cfid *fid, s64 offset, u32 type)
 		case SEEKEND:
 		{
 			Dir d = fsdirfstat(a, fid);
-			if (d.name.len == 0)
+			if (d.name.size == 0)
 			{
 				return -1;
 			}

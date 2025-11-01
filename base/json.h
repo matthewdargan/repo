@@ -59,7 +59,5 @@ static Jsonvalue jsonparsestring(Arena *a, String8 text, u64 *pos);
 static Jsonvalue jsonparsenumber(Arena *a, String8 text, u64 *pos);
 static Jsonvalue jsonparsearray(Arena *a, String8 text, u64 *pos);
 static Jsonvalue jsonparseobject(Arena *a, String8 text, u64 *pos);
-static void jsonwritevalue(Arena *a, String8list *parts, Jsonvalue val);
-static void jsonwritestringescaped(Arena *a, String8list *parts, String8 s);
 
 #endif  // JSON_H

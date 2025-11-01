@@ -21,7 +21,7 @@ static Req *
 getreq(Srv *srv)
 {
 	String8 msg = read9pmsg(srv->arena, srv->infd);
-	if (msg.len <= 0)
+	if (msg.size <= 0)
 	{
 		return NULL;
 	}
@@ -55,21 +55,21 @@ getreq(Srv *srv)
 static void
 sversion(Srv *srv, Req *r)
 {
-	if (!str8cmp(r->ifcall.version, version9p, 0))
+	if (!str8_match(r->ifcall.version, version9p, 0))
 	{
-		r->ofcall.version = str8lit("unknown");
-		respond(r, str8zero());
+		r->ofcall.version = str8_lit("unknown");
+		respond(r, str8_zero());
 		return;
 	}
 	r->ofcall.version = version9p;
 	r->ofcall.msize = r->ifcall.msize;
-	respond(r, str8zero());
+	respond(r, str8_zero());
 }
 
 static void
 rversion(Req *r, String8 err)
 {
-	if (err.len > 0)
+	if (err.size > 0)
 	{
 		return;
 	}
@@ -91,7 +91,7 @@ sauth(Srv *srv, Req *r)
 	}
 	else
 	{
-		String8 err = pushstr8f(srv->arena, "authentication not required");
+		String8 err = str8f(srv->arena, "authentication not required");
 		respond(r, err);
 	}
 }
@@ -99,7 +99,7 @@ sauth(Srv *srv, Req *r)
 static void
 rauth(Req *r, String8 err)
 {
-	if (err.len > 0 && r->afid != NULL)
+	if (err.size > 0 && r->afid != NULL)
 	{
 		closefid(removefid(r->srv, r->afid->fid));
 	}
@@ -124,21 +124,21 @@ sattach(Srv *srv, Req *r)
 			return;
 		}
 	}
-	r->fid->uid = pushstr8cpy(srv->arena, r->ifcall.uname);
+	r->fid->uid = str8_copy(srv->arena, r->ifcall.uname);
 	if (srv->attach != NULL)
 	{
 		srv->attach(r);
 	}
 	else
 	{
-		respond(r, str8zero());
+		respond(r, str8_zero());
 	}
 }
 
 static void
 rattach(Req *r, String8 err)
 {
-	if (err.len > 0 && r->fid != NULL)
+	if (err.size > 0 && r->fid != NULL)
 	{
 		closefid(removefid(r->srv, r->fid->fid));
 	}
@@ -150,7 +150,7 @@ sflush(Srv *srv, Req *r)
 	r->oldreq = lookupreq(srv, r->ifcall.oldtag);
 	if (r->oldreq == NULL || r->oldreq == r)
 	{
-		respond(r, str8zero());
+		respond(r, str8_zero());
 	}
 	else if (srv->flush != NULL)
 	{
@@ -158,14 +158,14 @@ sflush(Srv *srv, Req *r)
 	}
 	else
 	{
-		respond(r, str8zero());
+		respond(r, str8_zero());
 	}
 }
 
 static b32
 rflush(Req *r, String8 err)
 {
-	if (err.len > 0)
+	if (err.size > 0)
 	{
 		return 0;
 	}
@@ -195,7 +195,7 @@ swalk(Srv *srv, Req *r)
 	}
 	if (r->fid->omode != ~0U)
 	{
-		respond(r, str8lit("cannot clone open fid"));
+		respond(r, str8_lit("cannot clone open fid"));
 		return;
 	}
 	if (r->ifcall.nwname && !(r->fid->qid.type & QTDIR))
@@ -211,7 +211,7 @@ swalk(Srv *srv, Req *r)
 			respond(r, Edupfid);
 			return;
 		}
-		r->newfid->uid = pushstr8cpy(srv->arena, r->fid->uid);
+		r->newfid->uid = str8_copy(srv->arena, r->fid->uid);
 	}
 	else
 	{
@@ -223,14 +223,14 @@ swalk(Srv *srv, Req *r)
 	}
 	else
 	{
-		respond(r, str8lit("no walk function"));
+		respond(r, str8_lit("no walk function"));
 	}
 }
 
 static void
 rwalk(Req *r, String8 err)
 {
-	if (err.len > 0 || r->ofcall.nwqid < r->ifcall.nwname)
+	if (err.size > 0 || r->ofcall.nwqid < r->ifcall.nwname)
 	{
 		if (r->ifcall.fid != r->ifcall.newfid && r->newfid != NULL)
 		{
@@ -238,14 +238,14 @@ rwalk(Req *r, String8 err)
 		}
 		if (r->ofcall.nwqid == 0)
 		{
-			if (err.len == 0 && r->ifcall.nwname != 0)
+			if (err.size == 0 && r->ifcall.nwname != 0)
 			{
 				r->error = Enotfound;
 			}
 		}
 		else
 		{
-			r->error = str8zero();
+			r->error = str8_zero();
 		}
 	}
 	else
@@ -325,14 +325,14 @@ sopen(Srv *srv, Req *r)
 	}
 	else
 	{
-		respond(r, str8zero());
+		respond(r, str8_zero());
 	}
 }
 
 static void
 ropen(Req *r, String8 err)
 {
-	if (err.len > 0)
+	if (err.size > 0)
 	{
 		return;
 	}
@@ -373,7 +373,7 @@ screate(Srv *srv, Req *r)
 static void
 rcreate(Req *r, String8 err)
 {
-	if (err.len > 0)
+	if (err.size > 0)
 	{
 		return;
 	}
@@ -419,14 +419,14 @@ sread(Srv *srv, Req *r)
 	}
 	else
 	{
-		respond(r, str8lit("no srv->read"));
+		respond(r, str8_lit("no srv->read"));
 	}
 }
 
 static void
 rread(Req *r, String8 err)
 {
-	if (err.len == 0 && (r->fid->qid.type & QTDIR))
+	if (err.size == 0 && (r->fid->qid.type & QTDIR))
 	{
 		r->fid->offset = r->ifcall.offset + r->ofcall.count;
 	}
@@ -458,7 +458,7 @@ swrite(Srv *srv, Req *r)
 	u32 o = r->fid->omode & 3;
 	if (o != OWRITE && o != ORDWR)
 	{
-		String8 err = pushstr8f(srv->arena, "write on fid with open mode 0x%x", r->fid->omode);
+		String8 err = str8f(srv->arena, "write on fid with open mode 0x%x", r->fid->omode);
 		respond(r, err);
 		return;
 	}
@@ -468,14 +468,14 @@ swrite(Srv *srv, Req *r)
 	}
 	else
 	{
-		respond(r, str8lit("no srv->write"));
+		respond(r, str8_lit("no srv->write"));
 	}
 }
 
 static void
 rwrite(Req *r, String8 err)
 {
-	if (err.len > 0)
+	if (err.size > 0)
 	{
 		return;
 	}
@@ -491,7 +491,7 @@ sclunk(Srv *srv, Req *r)
 	}
 	else
 	{
-		respond(r, str8zero());
+		respond(r, str8_zero());
 	}
 }
 
@@ -628,7 +628,7 @@ srvrun(Srv *srv)
 		{
 			break;
 		}
-		if (r->error.len > 0)
+		if (r->error.size > 0)
 		{
 			respond(r, r->error);
 			continue;
@@ -702,7 +702,7 @@ srvrun(Srv *srv)
 			break;
 			default:
 			{
-				respond(r, str8lit("unknown message"));
+				respond(r, str8_lit("unknown message"));
 			}
 			break;
 		}
@@ -798,20 +798,20 @@ respond(Req *r, String8 err)
 	}
 	r->ofcall.tag = r->ifcall.tag;
 	r->ofcall.type = r->ifcall.type + 1;
-	if (r->error.len > 0)
+	if (r->error.size > 0)
 	{
 		setfcallerror(&r->ofcall, r->error);
 	}
 	// TODO: logging
 	String8 buf = fcallencode(srv->arena, r->ofcall);
-	if (buf.len <= 0)
+	if (buf.size <= 0)
 	{
 		// TODO: log error
 		return;
 	}
 	removereq(srv, r->ifcall.tag);
-	u64 n = write(srv->outfd, buf.str, buf.len);
-	if (n != buf.len)
+	u64 n = write(srv->outfd, buf.str, buf.size);
+	if (n != buf.size)
 	{
 		// TODO: log error
 		return;
@@ -821,7 +821,7 @@ free:
 	for (u32 i = 0; i < r->nflush; i++)
 	{
 		r->flush[i]->oldreq = NULL;
-		respond(r->flush[i], str8zero());
+		respond(r->flush[i], str8_zero());
 	}
 	closereq(r);
 }

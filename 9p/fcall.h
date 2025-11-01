@@ -1,7 +1,7 @@
 #ifndef FCALL_H
 #define FCALL_H
 
-read_only static String8 version9p = str8litc("9P2000");
+read_only static String8 version9p = str8_lit_comp("9P2000");
 
 #define MAXWELEM 16
 
