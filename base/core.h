@@ -1,26 +1,35 @@
 #ifndef CORE_H
 #define CORE_H
 
+// Foreign Includes
+// clang-format off
+#include <stdio.h>
+#include <stdarg.h>
+#include <string.h>
+#include <stdint.h>
+// clang-format on
+
+// Codebase Keywords
 #define read_only __attribute__((section(".rodata")))
+
+// Units
 #define KB(n) (((u64)(n)) << 10)
 #define MB(n) (((u64)(n)) << 20)
 #define GB(n) (((u64)(n)) << 30)
 #define TB(n) (((u64)(n)) << 40)
+
+// Clamps, Mins, Maxes
 #define Min(A, B) (((A) < (B)) ? (A) : (B))
 #define Max(A, B) (((A) > (B)) ? (A) : (B))
+
+// Type -> Alignment
+#define AlignOf(T) __alignof(T)
+
+// Memory Operation Macros
 #define MemoryCopy(dst, src, size) memmove((dst), (src), (size))
 #define MemoryZero(s, z) memset((s), 0, (z))
-#define AlignOf(T) __alignof(T)
-#define SLLStackPush_N(f, n, next) ((n)->next = (f), (f) = (n))
-#define SLLStackPop_N(f, next) ((f) = (f)->next)
-#define SLLStackPush(f, n) SLLStackPush_N(f, n, next)
-#define SLLStackPop(f) SLLStackPop_N(f, next)
-#define ArrayCount(a) (sizeof(a) / sizeof((a)[0]))
-#define AlignPow2(x, b) (((x) + (b) - 1) & (~((b) - 1)))
-#define Glue_(A, B) A##B
-#define Glue(A, B) Glue_(A, B)
-#define StaticAssert(C, ID) static u8 Glue(ID, __LINE__)[(C) ? 1 : -1]
 
+// Asserts
 #define Trap() __builtin_trap()
 #define AssertAlways(x) \
 	do                    \
@@ -35,7 +44,15 @@
 #else
 #define Assert(x) (void)(x)
 #endif
+#define StaticAssert(C, ID) static u8 Glue(ID, __LINE__)[(C) ? 1 : -1]
 
+// Linked List Building Macros
+#define SLLStackPush_N(f, n, next) ((n)->next = (f), (f) = (n))
+#define SLLStackPop_N(f, next) ((f) = (f)->next)
+#define SLLStackPush(f, n) SLLStackPush_N(f, n, next)
+#define SLLStackPop(f) SLLStackPop_N(f, next)
+
+// Address Sanitizer Markup
 #if defined(__has_feature)
 #if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
 #define ASAN_ENABLED 1
@@ -52,6 +69,13 @@ void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
 #define AsanUnpoisonMemoryRegion(addr, size) ((void)(addr), (void)(size))
 #endif
 
+// Misc. Helper Macros
+#define ArrayCount(a) (sizeof(a) / sizeof((a)[0]))
+#define AlignPow2(x, b) (((x) + (b) - 1) & (~((b) - 1)))
+#define Glue_(A, B) A##B
+#define Glue(A, B) Glue_(A, B)
+
+// Base Types
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -67,6 +91,7 @@ typedef s64 b64;
 typedef float f32;
 typedef double f64;
 
+// Type Limits
 #define U8MAX 0xff
 #define U16MAX 0xffff
 #define U32MAX 0xffffffffu
@@ -80,6 +105,7 @@ typedef double f64;
 #define S32MIN (-S32MAX - 1)
 #define S64MIN (-S64MAX - 1)
 
+// Endianness
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 #define LITTLEENDIAN 1
 #elif defined(__LITTLE_ENDIAN__) || defined(__ARMEL__) || defined(_WIN32) || defined(__i386__) || \
@@ -99,15 +125,17 @@ typedef double f64;
 #define fromleu64(x) bswapu64((x))
 #endif
 
-typedef struct U64array U64array;
-struct U64array
+// Array Types
+typedef struct U64Array U64Array;
+struct U64Array
 {
 	u64 *v;
 	u64 cnt;
 };
 
-typedef struct Datetime Datetime;
-struct Datetime
+// Time Types
+typedef struct DateTime DateTime;
+struct DateTime
 {
 	u16 msec;  // [0,999]
 	u16 sec;   // [0,60]
@@ -118,24 +146,20 @@ struct Datetime
 	u32 year;  // 1 = 1 CE, 0 = 1 BC
 };
 
+typedef u64 DenseTime;
+
 enum
 {
 	ISDIR = 1 << 0,
 };
 
-typedef struct Fprops Fprops;
-struct Fprops
-{
-	u64 size;
-	u64 modified;
-	u64 created;
-	u32 flags;
-};
-
+// Bit Functions
 static u16 bswapu16(u16 x);
 static u32 bswapu32(u32 x);
 static u64 bswapu64(u64 x);
-static u64 datetimetodense(Datetime dt);
-static Datetime densetodatetime(u64 t);
+
+// Time Functions
+static DenseTime dense_time_from_date_time(DateTime dt);
+static DateTime date_time_from_dense_time(DenseTime t);
 
 #endif  // CORE_H

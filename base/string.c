@@ -1,3 +1,4 @@
+// Character Classification/Conversion Functions
 static b32
 char_is_space(u8 c)
 {
@@ -68,6 +69,7 @@ cstring8_length(u8 *c)
 	return p - c;
 }
 
+// String Constructors
 static String8
 str8(u8 *str, u64 size)
 {
@@ -116,6 +118,7 @@ dim1u64(Rng1U64 range)
 	return range.max > range.min ? (range.max - range.min) : 0;
 }
 
+// String Stylization
 static String8
 upper_from_str8(Arena *arena, String8 string)
 {
@@ -138,6 +141,7 @@ lower_from_str8(Arena *arena, String8 string)
 	return string;
 }
 
+// String Matching
 static b32
 str8_match(String8 a, String8 b, StringMatchFlags flags)
 {
@@ -224,6 +228,7 @@ str8_find_needle_reverse(String8 string, u64 start_pos, String8 needle, StringMa
 	return 0;
 }
 
+// String Slicing
 static String8
 str8_substr(String8 str, Rng1U64 range)
 {
@@ -267,6 +272,7 @@ str8_chop(String8 str, u64 amt)
 	return str;
 }
 
+// String Formatting/Copying
 static String8
 str8_cat(Arena *arena, String8 s1, String8 s2)
 {
@@ -318,6 +324,7 @@ str8f(Arena *arena, char *fmt, ...)
 	return s;
 }
 
+// String <-> Integer Conversions
 static b32
 str8_is_integer(String8 string, u32 radix)
 {
@@ -500,6 +507,7 @@ str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_
 	return s;
 }
 
+// String List Construction Functions
 static String8Node *
 str8_list_push_node(String8List *list, String8Node *node, String8 s)
 {
@@ -528,6 +536,7 @@ str8_list_push(Arena *arena, String8List *list, String8 string)
 	return node;
 }
 
+// String Splitting/Joining
 static String8List
 str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count, StringSplitFlags flags)
 {
@@ -600,6 +609,7 @@ str8_list_join(Arena *arena, String8List *list, StringJoin *optional_params)
 	return s;
 }
 
+// String Arrays
 static String8Array
 str8_array_from_list(Arena *arena, String8List *list)
 {
@@ -625,6 +635,7 @@ str8_array_reserve(Arena *arena, u64 count)
 	return array;
 }
 
+// String Path Helpers
 static String8
 str8_chop_last_slash(String8 string)
 {

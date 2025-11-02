@@ -1,428 +1,495 @@
-static String8List
-os_args(Arena *a, int argc, char **argv)
+// Handle Type Functions
+static OS_Handle
+os_handle_zero(void)
 {
-	String8List list = {0};
-	for (int i = 0; i < argc; i++)
-	{
-		String8 s = str8_cstring(argv[i]);
-		str8_list_push(a, &list, s);
-	}
-	return list;
+	OS_Handle handle = {0};
+	return handle;
 }
 
-static String8
-readfile(Arena *a, String8 path)
+static b32
+os_handle_match(OS_Handle a, OS_Handle b)
 {
-	u64 fd = open_fd(a, path, O_RDONLY);
-	Fprops props = os_fstat(fd);
-	String8 data = read_file_rng(a, fd, rng1u64(0, props.size));
-	close_fd(fd);
+	return a.u64[0] == b.u64[0];
+}
+
+// Filesystem Helpers
+static String8
+os_data_from_file_path(Arena *arena, String8 path)
+{
+	OS_Handle file = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
+	OS_FileProperties props = os_properties_from_file(file);
+	String8 data = os_string_from_file_range(arena, file, rng1u64(0, props.size));
+	os_file_close(file);
 	return data;
 }
 
 static b32
-writefile(Arena *a, String8 path, String8 data)
+os_write_data_to_file_path(String8 path, String8 data)
 {
-	b32 ok = 0;
-	u64 fd = open_fd(a, path, O_WRONLY);
-	if (fd != 0)
+	b32 good = 0;
+	OS_Handle file = os_file_open(OS_AccessFlag_Write, path);
+	if (!os_handle_match(file, os_handle_zero()))
 	{
-		ok = 1;
-		write_rng(fd, rng1u64(0, data.size), data.str);
-		close_fd(fd);
+		u64 bytes_written = os_file_write(file, rng1u64(0, data.size), data.str);
+		good = (bytes_written == data.size);
+		os_file_close(file);
 	}
-	return ok;
+	return good;
 }
 
 static b32
-appendfile(Arena *a, String8 path, String8 data)
+os_append_data_to_file_path(String8 path, String8 data)
 {
-	b32 ok = 0;
+	b32 good = 0;
 	if (data.size != 0)
 	{
-		u64 fd = open_fd(a, path, O_WRONLY | O_APPEND | O_CREAT);
-		if (fd != 0)
+		OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append, path);
+		if (!os_handle_match(file, os_handle_zero()))
 		{
-			ok = 1;
-			u64 pos = os_fstat(fd).size;
-			write_rng(fd, rng1u64(pos, pos + data.size), data.str);
-			close_fd(fd);
+			u64 pos = os_properties_from_file(file).size;
+			u64 bytes_written = os_file_write(file, rng1u64(pos, pos + data.size), data.str);
+			good = (bytes_written == data.size);
+			os_file_close(file);
 		}
 	}
-	return ok;
+	return good;
 }
 
 static String8
-read_file_rng(Arena *a, u64 fd, Rng1U64 r)
+os_string_from_file_range(Arena *arena, OS_Handle file, Rng1U64 range)
 {
-	u64 pre = arena_pos(a);
-	u64 len = dim1u64(r);
-	String8 s = {
-	    .str = push_array_no_zero(a, u8, len),
-	    .size = len,
-	};
-	u64 nread = read_rng(fd, r, s.str);
-	if (nread < s.size)
+	u64 pre_pos = arena_pos(arena);
+	String8 result;
+	result.size = dim1u64(range);
+	result.str = push_array_no_zero(arena, u8, result.size);
+	u64 actual_read_size = os_file_read(file, range, result.str);
+	if (actual_read_size < result.size)
 	{
-		arena_pop_to(a, pre + nread);
-		s.size = nread;
+		arena_pop_to(arena, pre_pos + actual_read_size);
+		result.size = actual_read_size;
 	}
-	return s;
+	return result;
 }
 
-static Datetime
-tmtodatetime(tm t, u32 msec)
+// Helpers
+static DateTime
+os_date_time_from_tm(tm in, u32 msec)
 {
-	Datetime dt = {
-	    .msec = msec,
-	    .sec = t.tm_sec,
-	    .min = t.tm_min,
-	    .hour = t.tm_hour,
-	    .day = t.tm_mday - 1,
-	    .mon = t.tm_mon,
-	    .year = t.tm_year + 1900,
-	};
+	DateTime dt = {0};
+	dt.sec = in.tm_sec;
+	dt.min = in.tm_min;
+	dt.hour = in.tm_hour;
+	dt.day = in.tm_mday - 1;
+	dt.mon = in.tm_mon;
+	dt.year = in.tm_year + 1900;
+	dt.msec = msec;
 	return dt;
 }
 
 static tm
-datetimetotm(Datetime dt)
+os_tm_from_date_time(DateTime dt)
 {
-	tm t = {0};
-	t.tm_sec = dt.sec;
-	t.tm_min = dt.min;
-	t.tm_hour = dt.hour;
-	t.tm_mday = dt.day + 1;
-	t.tm_mon = dt.mon;
-	t.tm_year = dt.year - 1900;
-	return t;
+	tm result = {0};
+	result.tm_sec = dt.sec;
+	result.tm_min = dt.min;
+	result.tm_hour = dt.hour;
+	result.tm_mday = dt.day + 1;
+	result.tm_mon = dt.mon;
+	result.tm_year = dt.year - 1900;
+	return result;
 }
 
 static timespec
-datetimetotimespec(Datetime dt)
+os_timespec_from_date_time(DateTime dt)
 {
-	tm t = datetimetotm(dt);
-	time_t sec = timegm(&t);
-	timespec ts = {0};
-	ts.tv_sec = sec;
-	return ts;
+	tm tm_val = os_tm_from_date_time(dt);
+	time_t seconds = timegm(&tm_val);
+	timespec result = {0};
+	result.tv_sec = seconds;
+	return result;
 }
 
 static u64
-timespectodense(timespec ts)
+os_dense_time_from_timespec(timespec in)
 {
-	tm t = {0};
-	gmtime_r(&ts.tv_sec, &t);
-	Datetime dt = tmtodatetime(t, ts.tv_nsec / 1000000);
-	return datetimetodense(dt);
+	u64 result = 0;
+	{
+		tm tm_time = {0};
+		gmtime_r(&in.tv_sec, &tm_time);
+		DateTime date_time = os_date_time_from_tm(tm_time, in.tv_nsec / 1000000);
+		result = dense_time_from_date_time(date_time);
+	}
+	return result;
 }
 
-static Fprops
-stattoprops(struct stat *st)
+static OS_FileProperties
+os_file_properties_from_stat(struct stat *s)
 {
-	Fprops props = {0};
-	props.size = st->st_size;
-	props.modified = timespectodense(st->st_mtim);
-	props.created = timespectodense(st->st_ctim);
-	if (st->st_mode & S_IFDIR)
+	OS_FileProperties props = {0};
+	props.size = s->st_size;
+	props.created = os_dense_time_from_timespec(s->st_ctim);
+	props.modified = os_dense_time_from_timespec(s->st_mtim);
+	if (s->st_mode & S_IFDIR)
 	{
-		props.flags |= ISDIR;
+		props.flags |= OS_FilePropertyFlag_Directory;
 	}
 	return props;
 }
 
-static String8
-cwd(Arena *a)
+// System Info
+static OS_SystemInfo os_system_info = {0};
+
+static OS_SystemInfo *
+os_get_system_info(void)
 {
-	char *cwd = getcwd(0, 0);
-	String8 s = str8_copy(a, str8_cstring(cwd));
-	free(cwd);
-	return s;
+	return &os_system_info;
 }
 
+static String8
+os_get_current_path(Arena *arena)
+{
+	char *cwdir = getcwd(0, 0);
+	String8 string = str8_copy(arena, str8_cstring(cwdir));
+	free(cwdir);
+	return string;
+}
+
+// Memory Allocation
 static void *
 os_reserve(u64 size)
 {
-	void *p = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (p == MAP_FAILED)
+	void *result = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (result == MAP_FAILED)
 	{
-		p = NULL;
+		result = 0;
 	}
-	return p;
+	return result;
 }
 
 static b32
-os_commit(void *p, u64 size)
+os_commit(void *ptr, u64 size)
 {
-	mprotect(p, size, PROT_READ | PROT_WRITE);
+	mprotect(ptr, size, PROT_READ | PROT_WRITE);
 	return 1;
 }
 
 static void
-os_decommit(void *p, u64 size)
+os_decommit(void *ptr, u64 size)
 {
-	madvise(p, size, MADV_DONTNEED);
-	mprotect(p, size, PROT_NONE);
+	madvise(ptr, size, MADV_DONTNEED);
+	mprotect(ptr, size, PROT_NONE);
 }
 
 static void
-os_release(void *p, u64 size)
+os_release(void *ptr, u64 size)
 {
-	munmap(p, size);
+	munmap(ptr, size);
 }
 
 static void *
 os_reserve_large(u64 size)
 {
-	void *p = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
-	if (p == MAP_FAILED)
+	void *result = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+	if (result == MAP_FAILED)
 	{
-		p = NULL;
+		result = 0;
 	}
-	return p;
+	return result;
 }
 
-static u64
-open_fd(Arena *a, String8 path, int flags)
+// File System
+static OS_Handle
+os_file_open(OS_AccessFlags flags, String8 path)
 {
-	Temp scratch = temp_begin(a);
-	String8 p = str8_copy(scratch.arena, path);
-	int fd = open((char *)p.str, flags, 0755);
-	temp_end(scratch);
-	if (fd == -1)
+	Temp scratch = temp_begin(NULL);
+	String8 path_copy = str8_copy(scratch.arena, path);
+	int lnx_flags = 0;
+	if (flags & OS_AccessFlag_Read && flags & OS_AccessFlag_Write)
 	{
-		return 0;
+		lnx_flags = O_RDWR;
 	}
-	return (u64)fd;
+	else if (flags & OS_AccessFlag_Write)
+	{
+		lnx_flags = O_WRONLY;
+	}
+	else if (flags & OS_AccessFlag_Read)
+	{
+		lnx_flags = O_RDONLY;
+	}
+	if (flags & OS_AccessFlag_Append)
+	{
+		lnx_flags |= O_APPEND;
+	}
+	if (flags & (OS_AccessFlag_Write | OS_AccessFlag_Append))
+	{
+		lnx_flags |= O_CREAT;
+	}
+	int fd = open((char *)path_copy.str, lnx_flags, 0755);
+	OS_Handle handle = {0};
+	if (fd != -1)
+	{
+		handle.u64[0] = fd;
+	}
+	temp_end(scratch);
+	return handle;
 }
 
 static void
-close_fd(u64 fd)
+os_file_close(OS_Handle file)
 {
-	if (fd == 0)
+	if (os_handle_match(file, os_handle_zero()))
 	{
 		return;
 	}
+	int fd = (int)file.u64[0];
 	close(fd);
 }
 
 static u64
-read_rng(u64 fd, Rng1U64 r, void *out)
+os_file_read(OS_Handle file, Rng1U64 rng, void *out_data)
 {
-	if (fd == 0)
+	if (os_handle_match(file, os_handle_zero()))
 	{
 		return 0;
 	}
-	u64 size = dim1u64(r);
-	u64 nread = 0;
-	u64 nleft = size;
-	while (nleft > 0)
+	int fd = (int)file.u64[0];
+	u64 total_num_bytes_to_read = dim1u64(rng);
+	u64 total_num_bytes_read = 0;
+	u64 total_num_bytes_left_to_read = total_num_bytes_to_read;
+	for (; total_num_bytes_left_to_read > 0;)
 	{
-		int n = pread(fd, (u8 *)out + nread, nleft, r.min + nread);
-		if (n >= 0)
+		int read_result =
+		    pread(fd, (u8 *)out_data + total_num_bytes_read, total_num_bytes_left_to_read, rng.min + total_num_bytes_read);
+		if (read_result >= 0)
 		{
-			nread += n;
-			nleft -= n;
+			total_num_bytes_read += read_result;
+			total_num_bytes_left_to_read -= read_result;
 		}
 		else if (errno != EINTR)
 		{
 			break;
 		}
 	}
-	return nread;
+	return total_num_bytes_read;
 }
 
 static u64
-write_rng(u64 fd, Rng1U64 r, void *data)
+os_file_write(OS_Handle file, Rng1U64 rng, void *data)
 {
-	if (fd == 0)
+	if (os_handle_match(file, os_handle_zero()))
 	{
 		return 0;
 	}
-	u64 size = dim1u64(r);
-	u64 nwrite = 0;
-	u64 nleft = size;
-	while (nleft > 0)
+	int fd = (int)file.u64[0];
+	u64 total_num_bytes_to_write = dim1u64(rng);
+	u64 total_num_bytes_written = 0;
+	u64 total_num_bytes_left_to_write = total_num_bytes_to_write;
+	for (; total_num_bytes_left_to_write > 0;)
 	{
-		int n = pwrite(fd, (u8 *)data + nwrite, nleft, r.min + nwrite);
-		if (n >= 0)
+		int write_result = pwrite(fd, (u8 *)data + total_num_bytes_written, total_num_bytes_left_to_write,
+		                          rng.min + total_num_bytes_written);
+		if (write_result >= 0)
 		{
-			nwrite += n;
-			nleft -= n;
+			total_num_bytes_written += write_result;
+			total_num_bytes_left_to_write -= write_result;
 		}
 		else if (errno != EINTR)
 		{
 			break;
 		}
 	}
-	return nwrite;
+	return total_num_bytes_written;
 }
 
 static b32
-settimes(u64 fd, Datetime dt)
+os_file_set_times(OS_Handle file, DateTime date_time)
 {
-	if (fd == 0)
+	if (os_handle_match(file, os_handle_zero()))
 	{
 		return 0;
 	}
-	timespec ts = datetimetotimespec(dt);
-	timespec times[2] = {ts, ts};
-	return futimens(fd, times) != -1;
+	int fd = (int)file.u64[0];
+	timespec time = os_timespec_from_date_time(date_time);
+	timespec times[2] = {time, time};
+	int futimens_result = futimens(fd, times);
+	b32 good = (futimens_result != -1);
+	return good;
 }
 
-static Fprops
-os_fstat(u64 fd)
+static OS_FileProperties
+os_properties_from_file(OS_Handle file)
 {
-	Fprops props = {0};
-	if (fd == 0)
+	if (os_handle_match(file, os_handle_zero()))
 	{
-		return props;
+		return (OS_FileProperties){0};
 	}
-	struct stat st = {0};
-	if (fstat(fd, &st) != -1)
+	int fd = (int)file.u64[0];
+	struct stat fd_stat = {0};
+	int fstat_result = fstat(fd, &fd_stat);
+	OS_FileProperties props = {0};
+	if (fstat_result != -1)
 	{
-		props = stattoprops(&st);
+		props = os_file_properties_from_stat(&fd_stat);
 	}
 	return props;
 }
 
 static b32
-osremove(Arena *a, String8 path)
+os_delete_file_at_path(String8 path)
 {
-	Temp scratch = temp_begin(a);
-	b32 ok = 0;
-	String8 p = str8_copy(scratch.arena, path);
-	if (remove((char *)p.str) != -1)
+	Temp scratch = temp_begin(NULL);
+	b32 result = 0;
+	String8 path_copy = str8_copy(scratch.arena, path);
+	if (remove((char *)path_copy.str) != -1)
 	{
-		ok = 1;
+		result = 1;
 	}
 	temp_end(scratch);
-	return ok;
+	return result;
 }
 
 static String8
-abspath(Arena *a, String8 path)
+os_full_path_from_path(Arena *arena, String8 path)
 {
-	Temp scratch = temp_begin(a);
-	String8 p = str8_copy(scratch.arena, path);
-	char buf[PATH_MAX];
-	if (realpath((char *)p.str, buf) == NULL)
-	{
-		temp_end(scratch);
-		return str8_zero();
-	}
-	String8 s = str8_copy(scratch.arena, str8_cstring(buf));
+	Temp scratch = temp_begin(arena);
+	String8 path_copy = str8_copy(scratch.arena, path);
+	char buffer[PATH_MAX] = {0};
+	realpath((char *)path_copy.str, buffer);
+	String8 result = str8_copy(arena, str8_cstring(buffer));
 	temp_end(scratch);
-	return s;
+	return result;
 }
 
 static b32
-fileexists(Arena *a, String8 path)
+os_file_path_exists(String8 path)
 {
-	Temp scratch = temp_begin(a);
-	String8 p = str8_copy(scratch.arena, path);
-	b32 ok = 0;
-	if (access((char *)p.str, F_OK) == 0)
+	Temp scratch = temp_begin(NULL);
+	String8 path_copy = str8_copy(scratch.arena, path);
+	int access_result = access((char *)path_copy.str, F_OK);
+	b32 result = 0;
+	if (access_result == 0)
 	{
-		ok = 1;
+		result = 1;
 	}
 	temp_end(scratch);
-	return ok;
+	return result;
 }
 
 static b32
-direxists(Arena *a, String8 path)
+os_directory_path_exists(String8 path)
 {
-	Temp scratch = temp_begin(a);
-	String8 p = str8_copy(scratch.arena, path);
-	b32 ok = 0;
-	DIR *d = opendir((char *)p.str);
-	if (d != NULL)
+	Temp scratch = temp_begin(NULL);
+	b32 exists = 0;
+	String8 path_copy = str8_copy(scratch.arena, path);
+	DIR *handle = opendir((char *)path_copy.str);
+	if (handle)
 	{
-		closedir(d);
-		ok = 1;
+		closedir(handle);
+		exists = 1;
 	}
 	temp_end(scratch);
-	return ok;
+	return exists;
 }
 
-static Fprops
-osstat(Arena *a, String8 path)
+static OS_FileProperties
+os_properties_from_file_path(String8 path)
 {
-	Temp scratch = temp_begin(a);
-	String8 p = str8_copy(scratch.arena, path);
-	Fprops props = {0};
-	struct stat st = {0};
-	if (stat((char *)p.str, &st) != -1)
+	Temp scratch = temp_begin(NULL);
+	String8 path_copy = str8_copy(scratch.arena, path);
+	struct stat f_stat = {0};
+	int stat_result = stat((char *)path_copy.str, &f_stat);
+	OS_FileProperties props = {0};
+	if (stat_result != -1)
 	{
-		props = stattoprops(&st);
+		props = os_file_properties_from_stat(&f_stat);
 	}
 	temp_end(scratch);
 	return props;
 }
 
 static b32
-osmkdir(Arena *a, String8 path)
+os_make_directory(String8 path)
 {
-	Temp scratch = temp_begin(a);
-	String8 p = str8_copy(scratch.arena, path);
-	b32 ok = 0;
-	if (mkdir((char *)p.str, 0755) != -1)
+	Temp scratch = temp_begin(NULL);
+	b32 result = 0;
+	String8 path_copy = str8_copy(scratch.arena, path);
+	if (mkdir((char *)path_copy.str, 0755) != -1)
 	{
-		ok = 1;
+		result = 1;
 	}
 	temp_end(scratch);
-	return ok;
+	return result;
 }
 
+// Time
 static u64
-nowus(void)
+os_now_microseconds(void)
 {
-	timespec ts = {0};
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ts.tv_sec * 1000000 + (ts.tv_nsec / 1000);
+	timespec t;
+	clock_gettime(CLOCK_MONOTONIC, &t);
+	u64 result = t.tv_sec * 1000000 + (t.tv_nsec / 1000);
+	return result;
 }
 
 static u32
-nowunix(void)
+os_now_unix(void)
 {
-	return time(0);
+	time_t t = time(0);
+	return (u32)t;
 }
 
-static Datetime
-nowutc(void)
+static DateTime
+os_now_universal_time(void)
 {
 	time_t t = 0;
 	time(&t);
-	tm ut = {0};
-	gmtime_r(&t, &ut);
-	return tmtodatetime(ut, 0);
+	tm universal_tm = {0};
+	gmtime_r(&t, &universal_tm);
+	DateTime result = os_date_time_from_tm(universal_tm, 0);
+	return result;
 }
 
-static Datetime
-localtoutc(Datetime dt)
+static DateTime
+os_universal_time_from_local(DateTime *date_time)
 {
-	tm lt = datetimetotm(dt);
-	lt.tm_isdst = -1;
-	time_t t = mktime(&lt);
-	tm ut = {0};
-	gmtime_r(&t, &ut);
-	return tmtodatetime(ut, 0);
+	tm local_tm = os_tm_from_date_time(*date_time);
+	local_tm.tm_isdst = -1;
+	time_t universal_t = mktime(&local_tm);
+
+	tm universal_tm = {0};
+	gmtime_r(&universal_t, &universal_tm);
+	DateTime result = os_date_time_from_tm(universal_tm, 0);
+	return result;
 }
 
-static Datetime
-utctolocal(Datetime dt)
+static DateTime
+os_local_time_from_universal(DateTime *date_time)
 {
-	tm ut = datetimetotm(dt);
-	ut.tm_isdst = -1;
-	time_t t = timegm(&ut);
-	tm lt = {0};
-	localtime_r(&t, &lt);
-	return tmtodatetime(lt, 0);
+	tm universal_tm = os_tm_from_date_time(*date_time);
+	universal_tm.tm_isdst = -1;
+	time_t universal_t = timegm(&universal_tm);
+	tm local_tm = {0};
+	localtime_r(&universal_t, &local_tm);
+
+	DateTime result = os_date_time_from_tm(local_tm, 0);
+	return result;
 }
 
 static void
-sleepms(u32 msec)
+os_sleep_milliseconds(u32 msec)
 {
 	usleep(msec * 1000);
+}
+
+// Process
+static String8List
+os_args(Arena *arena, int argc, char **argv)
+{
+	String8List list = {0};
+	for (int i = 0; i < argc; i++)
+	{
+		String8 s = str8_cstring(argv[i]);
+		str8_list_push(arena, &list, s);
+	}
+	return list;
 }

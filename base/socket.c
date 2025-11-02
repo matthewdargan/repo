@@ -43,7 +43,7 @@ netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv)
 	u64 colonpos = str8_find_needle(addr, 0, str8_lit(":"), 0);
 	if (bangpos >= addr.size)
 	{
-		if (fileexists(a, addr))
+		if (os_file_path_exists(addr))
 		{
 			na.net = str8_lit("unix");
 			na.host = str8_copy(a, addr);
@@ -306,20 +306,20 @@ socketlisten(String8 port, struct addrinfo *hints)
 	int opt = 1;
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof opt) < 0)
 	{
-		close_fd(fd);
+		close(fd);
 		freeaddrinfo(res);
 		return 0;
 	}
 	if (bind(fd, res->ai_addr, res->ai_addrlen) < 0)
 	{
-		close_fd(fd);
+		close(fd);
 		freeaddrinfo(res);
 		return 0;
 	}
 	freeaddrinfo(res);
 	if (listen(fd, 1) < 0)
 	{
-		close_fd(fd);
+		close(fd);
 		return 0;
 	}
 	return (u64)fd;
@@ -336,7 +336,7 @@ socketaccept(u64 fd)
 	int opt = 1;
 	if (setsockopt(connfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt) < 0)
 	{
-		close_fd(connfd);
+		close(connfd);
 		return 0;
 	}
 	return (u64)connfd;
@@ -377,13 +377,13 @@ socketconnect(String8 host, String8 port, struct addrinfo *hints)
 	int opt = 1;
 	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof opt) < 0)
 	{
-		close_fd(fd);
+		close(fd);
 		freeaddrinfo(res);
 		return 0;
 	}
 	if (connect(fd, res->ai_addr, res->ai_addrlen) < 0)
 	{
-		close_fd(fd);
+		close(fd);
 		freeaddrinfo(res);
 		return 0;
 	}

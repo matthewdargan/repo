@@ -1,30 +1,9 @@
-#include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdarg.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <time.h>
-#include <unistd.h>
-
-/* clang-format off */
-#include "base/core.h"
-#include "base/arena.h"
-#include "base/string.h"
-#include "base/os.h"
-#include "base/json.h"
-#include "base/core.c"
-#include "base/arena.c"
-#include "base/string.c"
-#include "base/os.c"
-#include "base/json.c"
+// clang-format off
+#include "base/inc.h"
+#include "base/inc.c"
 #include <tree_sitter/api.h>
 #include "parser_c.c"
-/* clang-format on */
+// clang-format on
 
 extern const TSLanguage *tree_sitter_c(void);
 
@@ -587,7 +566,7 @@ symbolsearch(Arena *a, String8 pattern)
 		String8Array files = listcfiles(a, directories[d]);
 		for (u64 i = 0; i < files.count; i++)
 		{
-			String8 source = readfile(a, files.v[i]);
+			String8 source = os_data_from_file_path(a, files.v[i]);
 			if (source.size > 0 && source.str != NULL)
 			{
 				SymbolList filesymbols = parsecfiletreesitter(a, files.v[i], source);
@@ -781,7 +760,7 @@ symbolinfo(Arena *a, String8 symbolname)
 		String8Array files = listcfiles(a, directories[d]);
 		for (u64 i = 0; i < files.count; i++)
 		{
-			String8 source = readfile(a, files.v[i]);
+			String8 source = os_data_from_file_path(a, files.v[i]);
 			if (source.size > 0 && source.str != NULL)
 			{
 				SymbolList filesymbols = parsecfiletreesitter(a, files.v[i], source);
@@ -813,7 +792,7 @@ static String8
 filesymbols(Arena *a, String8 filepath)
 {
 	SymbolList symbols = {0};
-	String8 source = readfile(a, filepath);
+	String8 source = os_data_from_file_path(a, filepath);
 	if (source.size == 0 || source.str == NULL)
 	{
 		Jsonbuilder b = jsonbuilder(a, 512);
@@ -983,7 +962,10 @@ mcprequest(Arena *a, String8 line)
 int
 main(void)
 {
-	sysinfo = (Sysinfo){.nprocs = sysconf(_SC_NPROCESSORS_ONLN), .pagesz = sysconf(_SC_PAGESIZE), .lpagesz = 0x200000};
+	OS_SystemInfo *sysinfo = os_get_system_info();
+	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
+	sysinfo->page_size = sysconf(_SC_PAGESIZE);
+	sysinfo->large_page_size = 0x200000;
 	Arena *arena = arena_alloc();
 	char line[8192] = {0};
 	while (fgets(line, sizeof(line), stdin))

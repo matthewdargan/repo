@@ -1,6 +1,7 @@
 #ifndef ARENA_H
 #define ARENA_H
 
+// Arena Types
 #define ARENA_HEADER_SIZE 128
 #define ARENA_FREE_LIST 1
 
@@ -45,6 +46,7 @@ struct Temp
 	u64 pos;
 };
 
+// Arena Functions
 read_only static ArenaFlags arena_default_flags = 0;
 read_only static u64 arena_default_reserve_size = MB(64);
 read_only static u64 arena_default_commit_size = KB(64);

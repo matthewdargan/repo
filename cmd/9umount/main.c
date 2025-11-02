@@ -1,29 +1,11 @@
-#include <dirent.h>
-#include <errno.h>
 #include <mntent.h>
 #include <pwd.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
 #include <sys/mount.h>
-#include <sys/stat.h>
-#include <time.h>
-#include <unistd.h>
 
-/* clang-format off */
-#include "base/core.h"
-#include "base/arena.h"
-#include "base/string.h"
-#include "base/cmd.h"
-#include "base/os.h"
-#include "base/core.c"
-#include "base/arena.c"
-#include "base/string.c"
-#include "base/cmd.c"
-#include "base/os.c"
-/* clang-format on */
+// clang-format off
+#include "base/inc.h"
+#include "base/inc.c"
+// clang-format on
 
 static b32
 mountedby(Arena *a, String8 mntopts, String8 user)
@@ -44,7 +26,10 @@ mountedby(Arena *a, String8 mntopts, String8 user)
 int
 main(int argc, char *argv[])
 {
-	sysinfo = (Sysinfo){.nprocs = sysconf(_SC_NPROCESSORS_ONLN), .pagesz = sysconf(_SC_PAGESIZE), .lpagesz = 0x200000};
+	OS_SystemInfo *sysinfo = os_get_system_info();
+	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
+	sysinfo->page_size = sysconf(_SC_PAGESIZE);
+	sysinfo->large_page_size = 0x200000;
 	Arena *arena = arena_alloc();
 	String8List args = os_args(arena, argc, argv);
 	Cmd parsed = cmdparse(arena, args);
@@ -64,7 +49,7 @@ main(int argc, char *argv[])
 	for (String8Node *node = parsed.inputs.first; node != NULL; node = node->next)
 	{
 		String8 mtpt = node->string;
-		String8 path = abspath(arena, mtpt);
+		String8 path = os_full_path_from_path(arena, mtpt);
 		if (path.size == 0)
 		{
 			fprintf(stderr, "9umount: %.*s: %s\n", str8_varg(mtpt), strerror(errno));

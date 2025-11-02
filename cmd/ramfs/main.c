@@ -1,38 +1,11 @@
-#include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <netdb.h>
-#include <netinet/tcp.h>
-#include <stdarg.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/un.h>
-#include <time.h>
-#include <unistd.h>
-
-/* clang-format off */
-#include "base/core.h"
-#include "base/arena.h"
-#include "base/string.h"
-#include "base/cmd.h"
-#include "base/os.h"
-#include "base/socket.h"
+// clang-format off
+#include "base/inc.h"
 #include "9p/fcall.h"
 #include "9p/srv.h"
-#include "base/core.c"
-#include "base/arena.c"
-#include "base/string.c"
-#include "base/cmd.c"
-#include "base/os.c"
-#include "base/socket.c"
+#include "base/inc.c"
 #include "9p/fcall.c"
 #include "9p/srv.c"
-/* clang-format on */
+// clang-format on
 
 typedef struct Ramfile Ramfile;
 struct Ramfile
@@ -86,7 +59,7 @@ ramfs_read(Req *r)
 	{
 		String8 dirdata = str8_zero();
 		u64 pos = 0;
-		time_t now = nowunix();
+		time_t now = os_now_unix();
 		for (Ramentry *file = filelist; file != NULL; file = file->next)
 		{
 			if (pos >= r->ifcall.offset)
@@ -251,7 +224,7 @@ ramfs_stat(Req *r)
 	Ramentry *e = r->fid->aux;
 	if (e == NULL)
 	{
-		time_t now = nowunix();
+		time_t now = os_now_unix();
 		Dir d = {0};
 		d.qid = r->fid->qid;
 		d.mode = DMDIR | 0755;
@@ -265,7 +238,7 @@ ramfs_stat(Req *r)
 	}
 	else
 	{
-		time_t now = nowunix();
+		time_t now = os_now_unix();
 		Dir d = {0};
 		d.qid = r->fid->qid;
 		d.mode = 0644;
@@ -345,7 +318,10 @@ ramfs_open(Req *r)
 int
 main(int argc, char *argv[])
 {
-	sysinfo = (Sysinfo){.nprocs = sysconf(_SC_NPROCESSORS_ONLN), .pagesz = sysconf(_SC_PAGESIZE), .lpagesz = 0x200000};
+	OS_SystemInfo *sysinfo = os_get_system_info();
+	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
+	sysinfo->page_size = sysconf(_SC_PAGESIZE);
+	sysinfo->large_page_size = 0x200000;
 	Arena *arena = arena_alloc();
 	String8List args = os_args(arena, argc, argv);
 	Cmd parsed = cmdparse(arena, args);

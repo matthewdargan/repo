@@ -1,6 +1,12 @@
 #ifndef SOCKET_H
 #define SOCKET_H
 
+// Includes
+#include <netdb.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+
 typedef struct Netaddr Netaddr;
 struct Netaddr
 {

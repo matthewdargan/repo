@@ -1,3 +1,4 @@
+// Arena Functions
 static Arena *
 arena_alloc(void)
 {
@@ -10,17 +11,18 @@ arena_alloc(void)
 static Arena *
 arena_alloc_(ArenaParams params)
 {
+	OS_SystemInfo *sysinfo = os_get_system_info();
 	u64 reserve_size = params.reserve_size;
 	u64 commit_size = params.commit_size;
 	if (params.flags & ArenaFlag_LargePages)
 	{
-		reserve_size = AlignPow2(reserve_size, sysinfo.lpagesz);
-		commit_size = AlignPow2(commit_size, sysinfo.lpagesz);
+		reserve_size = AlignPow2(reserve_size, sysinfo->large_page_size);
+		commit_size = AlignPow2(commit_size, sysinfo->large_page_size);
 	}
 	else
 	{
-		reserve_size = AlignPow2(reserve_size, sysinfo.pagesz);
-		commit_size = AlignPow2(commit_size, sysinfo.pagesz);
+		reserve_size = AlignPow2(reserve_size, sysinfo->page_size);
+		commit_size = AlignPow2(commit_size, sysinfo->page_size);
 	}
 	void *base = params.optional_backing_buffer;
 	if (base == NULL)

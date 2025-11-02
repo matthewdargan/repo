@@ -1,3 +1,4 @@
+// Bit Functions
 static u16
 bswapu16(u16 x)
 {
@@ -19,8 +20,9 @@ bswapu64(u64 x)
 	        ((x & (u64)0x000000000000ff00) << 40) | ((x & (u64)0x00000000000000ff) << 56));
 }
 
-static u64
-datetimetodense(Datetime dt)
+// Time Functions
+static DenseTime
+dense_time_from_date_time(DateTime dt)
 {
 	u64 t = dt.year;
 	t *= 12;
@@ -38,10 +40,10 @@ datetimetodense(Datetime dt)
 	return t;
 }
 
-static Datetime
-densetodatetime(u64 t)
+static DateTime
+date_time_from_dense_time(DenseTime t)
 {
-	Datetime dt = {0};
+	DateTime dt = {0};
 	dt.msec = t % 1000;
 	t /= 1000;
 	dt.sec = t % 61;
