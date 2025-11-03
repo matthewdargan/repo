@@ -11,7 +11,7 @@ the forms:
 
 Usage:
 
-    9mount [-nsx] [-a spec] [-m msize] [-u uid] [-g gid] dial mtpt
+    9mount [-nsx] [-a=spec] [-m=msize] [-u=uid] [-g=gid] dial mtpt
 
 The -n flag prints the mount command to stderr instead of performing
 the mount.
@@ -43,7 +43,7 @@ Import plan 9 "sources" archive:
 
 Import maildir from remote server:
 
-    9mount -a /home/user/mail 'tcp!server!5640' $HOME/mail
+    9mount -a='/home/user/mail' 'tcp!server!5640' $HOME/mail
 
 Mount host filesystem shared via virtio-9p:
 

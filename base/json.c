@@ -135,8 +135,8 @@ jsonparsestring(Arena *a, String8 text, u64 *pos)
 	u64 end = *pos;
 	(*pos)++;
 	String8 unescaped = str8_substr(text, rng1u64(start, end));
-	u8 *dst = push_array(a, u8, unescaped.size);
-	u64 dstpos = 0;
+	u8 *dst           = push_array(a, u8, unescaped.size);
+	u64 dstpos        = 0;
 	for (u64 i = 0; i < unescaped.size; i++)
 	{
 		if (unescaped.str[i] == '\\' && i + 1 < unescaped.size)
@@ -196,7 +196,7 @@ jsonparsestring(Arena *a, String8 text, u64 *pos)
 			dst[dstpos++] = unescaped.str[i];
 		}
 	}
-	result.type = JSON_STRING;
+	result.type   = JSON_STRING;
 	result.string = str8(dst, dstpos);
 	return result;
 }
@@ -205,7 +205,7 @@ static Jsonvalue
 jsonparsenumber(Arena *a, String8 text, u64 *pos)
 {
 	Jsonvalue result = {0};
-	u64 start = *pos;
+	u64 start        = *pos;
 	if (*pos < text.size && text.str[*pos] == '-')
 	{
 		(*pos)++;
@@ -234,16 +234,16 @@ jsonparsenumber(Arena *a, String8 text, u64 *pos)
 			(*pos)++;
 		}
 	}
-	u64 end = *pos;
+	u64 end        = *pos;
 	String8 numstr = str8_substr(text, rng1u64(start, end));
-	char *numcstr = (char *)push_array(a, u8, numstr.size + 1);
+	char *numcstr  = (char *)push_array(a, u8, numstr.size + 1);
 	memcpy(numcstr, numstr.str, numstr.size);
 	numcstr[numstr.size] = '\0';
-	char *endptr = NULL;
-	f64 value = strtod(numcstr, &endptr);
+	char *endptr         = NULL;
+	f64 value            = strtod(numcstr, &endptr);
 	if (endptr != numcstr)
 	{
-		result.type = JSON_NUMBER;
+		result.type   = JSON_NUMBER;
 		result.number = value;
 	}
 	return result;
@@ -265,9 +265,9 @@ jsonparsearray(Arena *a, String8 text, u64 *pos)
 		result.type = JSON_ARRAY;
 		return result;
 	}
-	u64 capacity = 16;
+	u64 capacity    = 16;
 	Jsonvalue *vals = push_array(a, Jsonvalue, capacity);
-	u64 count = 0;
+	u64 count       = 0;
 	while (*pos < text.size)
 	{
 		Jsonvalue elem = jsonparsevalue(a, text, pos);
@@ -302,9 +302,9 @@ jsonparsearray(Arena *a, String8 text, u64 *pos)
 			break;
 		}
 	}
-	result.type = JSON_ARRAY;
+	result.type    = JSON_ARRAY;
 	result.arrvals = vals;
-	result.arrcnt = count;
+	result.arrcnt  = count;
 	return result;
 }
 
@@ -324,10 +324,10 @@ jsonparseobject(Arena *a, String8 text, u64 *pos)
 		result.type = JSON_OBJECT;
 		return result;
 	}
-	u64 capacity = 16;
-	String8 *keys = push_array(a, String8, capacity);
+	u64 capacity    = 16;
+	String8 *keys   = push_array(a, String8, capacity);
 	Jsonvalue *vals = push_array(a, Jsonvalue, capacity);
-	u64 count = 0;
+	u64 count       = 0;
 	while (*pos < text.size)
 	{
 		Jsonvalue key = jsonparsevalue(a, text, pos);
@@ -374,10 +374,10 @@ jsonparseobject(Arena *a, String8 text, u64 *pos)
 			break;
 		}
 	}
-	result.type = JSON_OBJECT;
+	result.type    = JSON_OBJECT;
 	result.objkeys = keys;
 	result.objvals = vals;
-	result.objcnt = count;
+	result.objcnt  = count;
 	return result;
 }
 
@@ -419,8 +419,8 @@ jsonbuilder(Arena *a, u64 estsize)
 	}
 	Jsonbuilder b = {
 	    .data = push_array(a, u8, estsize),
-	    .pos = 0,
-	    .cap = estsize,
+	    .pos  = 0,
+	    .cap  = estsize,
 	};
 	return b;
 }
@@ -496,7 +496,7 @@ jsonbwritestr(Jsonbuilder *b, String8 s)
 				else
 				{
 					u8 hexbuf[6];
-					u8 hexlen = 0;
+					u8 hexlen        = 0;
 					hexbuf[hexlen++] = '\\';
 					hexbuf[hexlen++] = 'u';
 					hexbuf[hexlen++] = "0123456789abcdef"[(c >> 12) & 0xf];

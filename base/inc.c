@@ -3,7 +3,7 @@
 #include "core.c"
 #include "arena.c"
 #include "string.c"
-#include "cmd.c"
+#include "command_line.c"
 #include "os.c"
 #include "socket.c"
 #include "json.c"

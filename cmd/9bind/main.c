@@ -8,20 +8,20 @@
 int
 main(int argc, char *argv[])
 {
-	OS_SystemInfo *sysinfo = os_get_system_info();
+	OS_SystemInfo *sysinfo           = os_get_system_info();
 	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo->page_size = sysconf(_SC_PAGESIZE);
-	sysinfo->large_page_size = 0x200000;
-	Arena *arena = arena_alloc();
-	String8List args = os_args(arena, argc, argv);
-	Cmd parsed = cmdparse(arena, args);
+	sysinfo->page_size               = sysconf(_SC_PAGESIZE);
+	sysinfo->large_page_size         = 0x200000;
+	Arena *arena                     = arena_alloc();
+	String8List args                 = os_args(arena, argc, argv);
+	CmdLine parsed                   = cmd_line_from_string_list(arena, args);
 	if (parsed.inputs.node_count != 2)
 	{
 		fprintf(stderr, "usage: 9bind old new\n");
 		return 1;
 	}
-	String8 old = parsed.inputs.first->string;
-	String8 new = parsed.inputs.first->next->string;
+	String8 old    = parsed.inputs.first->string;
+	String8 new    = parsed.inputs.first->next->string;
 	struct stat st = {0};
 	if (stat((char *)new.str, &st) || access((char *)new.str, W_OK))
 	{

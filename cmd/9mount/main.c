@@ -15,16 +15,16 @@ resolvehost(Arena *a, String8 host)
 		return str8_zero();
 	}
 	memcpy(hostbuf, host.str, host.size);
-	hostbuf[host.size] = 0;
+	hostbuf[host.size]  = 0;
 	struct addrinfo *ai = NULL;
-	int ret = getaddrinfo(hostbuf, NULL, NULL, &ai);
+	int ret             = getaddrinfo(hostbuf, NULL, NULL, &ai);
 	if (ret != 0)
 	{
 		fprintf(stderr, "9mount: getaddrinfo %.*s: %s\n", str8_varg(host), gai_strerror(ret));
 		return str8_zero();
 	}
 	char ipbuf[INET6_ADDRSTRLEN] = {0};
-	ret = getnameinfo(ai->ai_addr, ai->ai_addrlen, ipbuf, sizeof ipbuf, NULL, 0, NI_NUMERICHOST);
+	ret                          = getnameinfo(ai->ai_addr, ai->ai_addrlen, ipbuf, sizeof ipbuf, NULL, 0, NI_NUMERICHOST);
 	if (ret != 0)
 	{
 		fprintf(stderr, "9mount: getnameinfo: %s\n", gai_strerror(ret));
@@ -39,29 +39,29 @@ resolvehost(Arena *a, String8 host)
 int
 main(int argc, char *argv[])
 {
-	OS_SystemInfo *sysinfo = os_get_system_info();
+	OS_SystemInfo *sysinfo           = os_get_system_info();
 	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo->page_size = sysconf(_SC_PAGESIZE);
-	sysinfo->large_page_size = 0x200000;
-	Arena *arena = arena_alloc();
-	String8List args = os_args(arena, argc, argv);
-	Cmd parsed = cmdparse(arena, args);
-	b32 dryrun = cmdhasflag(&parsed, str8_lit("n"));
-	b32 singleattach = cmdhasflag(&parsed, str8_lit("s"));
-	b32 exclusive = cmdhasflag(&parsed, str8_lit("x"));
-	String8 aname = cmdstr(&parsed, str8_lit("a"));
-	String8 msizestr = cmdstr(&parsed, str8_lit("m"));
-	String8 uidstr = cmdstr(&parsed, str8_lit("u"));
-	String8 gidstr = cmdstr(&parsed, str8_lit("g"));
+	sysinfo->page_size               = sysconf(_SC_PAGESIZE);
+	sysinfo->large_page_size         = 0x200000;
+	Arena *arena                     = arena_alloc();
+	String8List args                 = os_args(arena, argc, argv);
+	CmdLine parsed                   = cmd_line_from_string_list(arena, args);
+	b32 dryrun                       = cmd_line_has_flag(&parsed, str8_lit("n"));
+	b32 singleattach                 = cmd_line_has_flag(&parsed, str8_lit("s"));
+	b32 exclusive                    = cmd_line_has_flag(&parsed, str8_lit("x"));
+	String8 aname                    = cmd_line_string(&parsed, str8_lit("a"));
+	String8 msizestr                 = cmd_line_string(&parsed, str8_lit("m"));
+	String8 uidstr                   = cmd_line_string(&parsed, str8_lit("u"));
+	String8 gidstr                   = cmd_line_string(&parsed, str8_lit("g"));
 	if (parsed.inputs.node_count != 2)
 	{
 		fprintf(stderr, "usage: 9mount [-nsx] [-a spec] [-m msize] [-u uid] [-g gid] dial mtpt\n");
 		return 1;
 	}
-	String8 dial = parsed.inputs.first->string;
-	String8 mtpt = parsed.inputs.first->next->string;
-	uid_t uid = uidstr.size > 0 ? (uid_t)u64_from_str8(uidstr, 10) : getuid();
-	gid_t gid = gidstr.size > 0 ? (gid_t)u64_from_str8(gidstr, 10) : getgid();
+	String8 dial      = parsed.inputs.first->string;
+	String8 mtpt      = parsed.inputs.first->next->string;
+	uid_t uid         = uidstr.size > 0 ? (uid_t)u64_from_str8(uidstr, 10) : getuid();
+	gid_t gid         = gidstr.size > 0 ? (gid_t)u64_from_str8(gidstr, 10) : getgid();
 	struct passwd *pw = getpwuid(uid);
 	if (pw == NULL)
 	{
@@ -80,7 +80,7 @@ main(int argc, char *argv[])
 		return 1;
 	}
 	String8List opts = {0};
-	String8 addr = str8_zero();
+	String8 addr     = str8_zero();
 	if (str8_match(dial, str8_lit("-"), 0))
 	{
 		addr = str8_lit("nodev");
@@ -153,8 +153,8 @@ main(int argc, char *argv[])
 		str8_list_push(arena, &opts, str8f(arena, "access=%d", uid));
 	}
 	StringJoin join = {
-	    .pre = str8_zero(),
-	    .sep = str8_lit(","),
+	    .pre  = str8_zero(),
+	    .sep  = str8_lit(","),
 	    .post = str8_zero(),
 	};
 	String8 optstr = str8_list_join(arena, &opts, &join);

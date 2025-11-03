@@ -39,7 +39,7 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 		return NULL;
 	}
 	Netaddr local = {0};
-	u64 fd = socketdial(na, local);
+	u64 fd        = socketdial(na, local);
 	if (fd == 0)
 	{
 		fprintf(stderr, "9p: dial failed for '%.*s'\n", str8_varg(addr));
@@ -56,10 +56,10 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 }
 
 static void
-cmd9pcreate(Arena *a, String8 addr, String8 aname, Cmd parsed)
+cmd9pcreate(Arena *a, String8 addr, String8 aname, CmdLine parsed)
 {
 	Temp scratch = temp_begin(a);
-	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
+	Cfsys *fs    = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
 		temp_end(scratch);
@@ -68,7 +68,7 @@ cmd9pcreate(Arena *a, String8 addr, String8 aname, Cmd parsed)
 	for (String8Node *node = parsed.inputs.first->next; node != NULL; node = node->next)
 	{
 		String8 name = node->string;
-		Cfid *fid = fscreate(scratch.arena, fs, name, OREAD, 0666);
+		Cfid *fid    = fscreate(scratch.arena, fs, name, OREAD, 0666);
 		if (fid == NULL)
 		{
 			fprintf(stderr, "9p: failed to create '%.*s'\n", str8_varg(name));
@@ -86,7 +86,7 @@ static void
 cmd9pread(Arena *a, String8 addr, String8 aname, String8 name)
 {
 	Temp scratch = temp_begin(a);
-	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
+	Cfsys *fs    = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
 		temp_end(scratch);
@@ -127,7 +127,7 @@ static void
 cmd9pwrite(Arena *a, String8 addr, String8 aname, String8 name)
 {
 	Temp scratch = temp_begin(a);
-	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
+	Cfsys *fs    = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
 		temp_end(scratch);
@@ -166,10 +166,10 @@ cmd9pwrite(Arena *a, String8 addr, String8 aname, String8 name)
 }
 
 static void
-cmd9premove(Arena *a, String8 addr, String8 aname, Cmd parsed)
+cmd9premove(Arena *a, String8 addr, String8 aname, CmdLine parsed)
 {
 	Temp scratch = temp_begin(a);
-	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
+	Cfsys *fs    = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
 		temp_end(scratch);
@@ -191,7 +191,7 @@ static void
 cmd9pstat(Arena *a, String8 addr, String8 aname, String8 name)
 {
 	Temp scratch = temp_begin(a);
-	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
+	Cfsys *fs    = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
 		temp_end(scratch);
@@ -211,10 +211,10 @@ cmd9pstat(Arena *a, String8 addr, String8 aname, String8 name)
 }
 
 static void
-cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
+cmd9pls(Arena *a, String8 addr, String8 aname, CmdLine parsed)
 {
 	Temp scratch = temp_begin(a);
-	Cfsys *fs = fsconnect(scratch.arena, addr, aname);
+	Cfsys *fs    = fsconnect(scratch.arena, addr, aname);
 	if (fs == NULL)
 	{
 		temp_end(scratch);
@@ -224,7 +224,7 @@ cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 	if (namenode == NULL)
 	{
 		String8 name = str8_lit(".");
-		Dir d = fsdirstat(scratch.arena, fs, name);
+		Dir d        = fsdirstat(scratch.arena, fs, name);
 		if (d.name.size == 0)
 		{
 			fprintf(stderr, "9p: failed to stat '%.*s'\n", str8_varg(name));
@@ -267,7 +267,7 @@ cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 		for (; namenode != NULL; namenode = namenode->next)
 		{
 			String8 name = namenode->string;
-			Dir d = fsdirstat(scratch.arena, fs, name);
+			Dir d        = fsdirstat(scratch.arena, fs, name);
 			if (d.name.size == 0)
 			{
 				fprintf(stderr, "9p: failed to stat '%.*s'\n", str8_varg(name));
@@ -307,22 +307,22 @@ cmd9pls(Arena *a, String8 addr, String8 aname, Cmd parsed)
 int
 main(int argc, char *argv[])
 {
-	OS_SystemInfo *sysinfo = os_get_system_info();
+	OS_SystemInfo *sysinfo           = os_get_system_info();
 	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo->page_size = sysconf(_SC_PAGESIZE);
-	sysinfo->large_page_size = 0x200000;
-	Arena *arena = arena_alloc();
-	String8List args = os_args(arena, argc, argv);
-	Cmd parsed = cmdparse(arena, args);
-	String8 addr = str8_zero();
-	String8 aname = str8_zero();
-	if (cmdhasarg(&parsed, str8_lit("a")))
+	sysinfo->page_size               = sysconf(_SC_PAGESIZE);
+	sysinfo->large_page_size         = 0x200000;
+	Arena *arena                     = arena_alloc();
+	String8List args                 = os_args(arena, argc, argv);
+	CmdLine parsed                   = cmd_line_from_string_list(arena, args);
+	String8 addr                     = str8_zero();
+	String8 aname                    = str8_zero();
+	if (cmd_line_has_argument(&parsed, str8_lit("a")))
 	{
-		addr = cmdstr(&parsed, str8_lit("a"));
+		addr = cmd_line_string(&parsed, str8_lit("a"));
 	}
-	if (cmdhasarg(&parsed, str8_lit("A")))
+	if (cmd_line_has_argument(&parsed, str8_lit("A")))
 	{
-		aname = cmdstr(&parsed, str8_lit("A"));
+		aname = cmd_line_string(&parsed, str8_lit("A"));
 	}
 	if (parsed.inputs.node_count < 2)
 	{

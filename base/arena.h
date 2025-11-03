@@ -8,7 +8,7 @@
 typedef u64 ArenaFlags;
 enum
 {
-	ArenaFlag_NoChain = (1 << 0),
+	ArenaFlag_NoChain    = (1 << 0),
 	ArenaFlag_LargePages = (1 << 1),
 };
 
@@ -49,7 +49,7 @@ struct Temp
 // Arena Functions
 read_only static ArenaFlags arena_default_flags = 0;
 read_only static u64 arena_default_reserve_size = MB(64);
-read_only static u64 arena_default_commit_size = KB(64);
+read_only static u64 arena_default_commit_size  = KB(64);
 
 static Arena *arena_alloc(void);
 static Arena *arena_alloc_(ArenaParams params);

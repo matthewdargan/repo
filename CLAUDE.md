@@ -28,7 +28,7 @@ This is a systems programming monorepo implemented in C99 (ISO/IEC 9899:1999) wi
 - **`core.c/h`** - Custom type definitions
 - **`arena.c/h`** - Arena allocators (`Arena` for general use, `Temp` for scope-local)
 - **`string.c/h`** - Length-based strings
-- **`cmd.c/h`** - Command-line parsing
+- **`command_line.c/h`** - Command-line parsing
 - **`os.c/h`** - OS operations
 - **`socket.c/h`** - Network operations
 

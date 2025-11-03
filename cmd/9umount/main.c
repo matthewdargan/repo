@@ -26,19 +26,19 @@ mountedby(Arena *a, String8 mntopts, String8 user)
 int
 main(int argc, char *argv[])
 {
-	OS_SystemInfo *sysinfo = os_get_system_info();
+	OS_SystemInfo *sysinfo           = os_get_system_info();
 	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo->page_size = sysconf(_SC_PAGESIZE);
-	sysinfo->large_page_size = 0x200000;
-	Arena *arena = arena_alloc();
-	String8List args = os_args(arena, argc, argv);
-	Cmd parsed = cmdparse(arena, args);
+	sysinfo->page_size               = sysconf(_SC_PAGESIZE);
+	sysinfo->large_page_size         = 0x200000;
+	Arena *arena                     = arena_alloc();
+	String8List args                 = os_args(arena, argc, argv);
+	CmdLine parsed                   = cmd_line_from_string_list(arena, args);
 	if (parsed.inputs.node_count == 0)
 	{
 		fprintf(stderr, "usage: 9umount mtpt...\n");
 		return 1;
 	}
-	uid_t uid = getuid();
+	uid_t uid         = getuid();
 	struct passwd *pw = getpwuid(uid);
 	if (pw == NULL)
 	{
@@ -74,12 +74,12 @@ main(int argc, char *argv[])
 			String8 mntdir = str8_cstring(mnt->mnt_dir);
 			if (str8_match(path, mntdir, 0))
 			{
-				ok = 1;
+				ok              = 1;
 				String8 mnttype = str8_cstring(mnt->mnt_type);
 				String8 mntopts = str8_cstring(mnt->mnt_opts);
 				String8 homedir = str8_cstring(pw->pw_dir);
-				String8 user = str8_cstring(pw->pw_name);
-				b32 inhome = (str8_find_needle(mntdir, 0, homedir, 0) == 0);
+				String8 user    = str8_cstring(pw->pw_name);
+				b32 inhome      = (str8_find_needle(mntdir, 0, homedir, 0) == 0);
 				if (!inhome && !str8_match(mnttype, str8_lit("9p"), 0))
 				{
 					fprintf(stderr, "9umount: %.*s: refusing to unmount non-9p fs\n", str8_varg(path));

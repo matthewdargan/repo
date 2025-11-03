@@ -12,7 +12,7 @@ resolveport(String8 port, String8 proto)
 	}
 	memcpy(portbuf, port.str, port.size);
 	portbuf[port.size] = 0;
-	char protobuf[16] = {0};
+	char protobuf[16]  = {0};
 	if (proto.size > 0 && proto.size < sizeof protobuf)
 	{
 		memcpy(protobuf, proto.str, proto.size);
@@ -39,29 +39,29 @@ netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv)
 	{
 		defnet = str8_lit("tcp");
 	}
-	u64 bangpos = str8_find_needle(addr, 0, str8_lit("!"), 0);
+	u64 bangpos  = str8_find_needle(addr, 0, str8_lit("!"), 0);
 	u64 colonpos = str8_find_needle(addr, 0, str8_lit(":"), 0);
 	if (bangpos >= addr.size)
 	{
 		if (os_file_path_exists(addr))
 		{
-			na.net = str8_lit("unix");
-			na.host = str8_copy(a, addr);
+			na.net    = str8_lit("unix");
+			na.host   = str8_copy(a, addr);
 			na.isunix = 1;
 			return na;
 		}
 		if (colonpos < addr.size)
 		{
-			String8 host = str8_prefix(addr, colonpos);
+			String8 host    = str8_prefix(addr, colonpos);
 			String8 service = str8_skip(addr, colonpos + 1);
-			na.net = str8_copy(a, defnet);
-			na.host = str8_copy(a, host);
-			na.port = resolveport(service, na.net);
-			na.isunix = 0;
+			na.net          = str8_copy(a, defnet);
+			na.host         = str8_copy(a, host);
+			na.port         = resolveport(service, na.net);
+			na.isunix       = 0;
 			return na;
 		}
-		na.net = str8_copy(a, defnet);
-		na.host = str8_copy(a, addr);
+		na.net    = str8_copy(a, defnet);
+		na.host   = str8_copy(a, addr);
 		na.isunix = 0;
 		if (defsrv.size > 0)
 		{
@@ -69,28 +69,28 @@ netaddr(Arena *a, String8 addr, String8 defnet, String8 defsrv)
 		}
 		return na;
 	}
-	String8 net = str8_prefix(addr, bangpos);
+	String8 net     = str8_prefix(addr, bangpos);
 	String8 service = str8_skip(addr, bangpos + 1);
-	bangpos = str8_find_needle(service, 0, str8_lit("!"), 0);
+	bangpos         = str8_find_needle(service, 0, str8_lit("!"), 0);
 	if (bangpos < service.size)
 	{
 		String8 host = str8_prefix(service, bangpos);
 		String8 port = str8_skip(service, bangpos + 1);
-		na.net = str8_copy(a, net);
-		na.host = str8_copy(a, host);
-		na.port = resolveport(port, na.net);
-		na.isunix = str8_match(na.net, str8_lit("unix"), 0);
+		na.net       = str8_copy(a, net);
+		na.host      = str8_copy(a, host);
+		na.port      = resolveport(port, na.net);
+		na.isunix    = str8_match(na.net, str8_lit("unix"), 0);
 		return na;
 	}
 	if (str8_match(net, str8_lit("unix"), 0))
 	{
-		na.net = str8_lit("unix");
-		na.host = str8_copy(a, service);
+		na.net    = str8_lit("unix");
+		na.host   = str8_copy(a, service);
 		na.isunix = 1;
 		return na;
 	}
-	na.net = str8_copy(a, net);
-	na.host = str8_copy(a, service);
+	na.net    = str8_copy(a, net);
+	na.host   = str8_copy(a, service);
 	na.isunix = 0;
 	if (defsrv.size > 0)
 	{
@@ -119,7 +119,7 @@ socketdial(Netaddr na, Netaddr local)
 		}
 		memcpy(hostbuf, na.host.str, na.host.size);
 		hostbuf[na.host.size] = 0;
-		int fd = open(hostbuf, O_RDWR);
+		int fd                = open(hostbuf, O_RDWR);
 		if (fd >= 0)
 		{
 			return (u64)fd;
@@ -130,7 +130,7 @@ socketdial(Netaddr na, Netaddr local)
 			return 0;
 		}
 		struct sockaddr_un unaddr = {0};
-		unaddr.sun_family = AF_UNIX;
+		unaddr.sun_family         = AF_UNIX;
 		if (na.host.size >= sizeof unaddr.sun_path)
 		{
 			close(fd);
@@ -181,9 +181,9 @@ socketdial(Netaddr na, Netaddr local)
 		return 0;
 	}
 	struct addrinfo hints = {0};
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = socktype;
-	struct addrinfo *res = NULL;
+	hints.ai_family       = AF_UNSPEC;
+	hints.ai_socktype     = socktype;
+	struct addrinfo *res  = NULL;
 	if (getaddrinfo(hostbuf, NULL, &hints, &res) != 0)
 	{
 		return 0;
@@ -400,7 +400,7 @@ socketread(u64 fd, void *buf, u64 size)
 	}
 	u64 nread = 0;
 	u64 nleft = size;
-	u8 *p = buf;
+	u8 *p     = buf;
 	while (nleft > 0)
 	{
 		ssize_t n = read(fd, p + nread, nleft);
@@ -420,15 +420,15 @@ socketread(u64 fd, void *buf, u64 size)
 static String8
 socketreadmsg(Arena *a, u64 fd)
 {
-	u64 size = 0;
+	u64 size  = 0;
 	u64 nread = socketread(fd, &size, sizeof size);
 	if (nread != sizeof size || size == 0)
 	{
 		return str8_zero();
 	}
 	String8 data = str8_zero();
-	data.str = push_array(a, u8, size);
-	nread = socketread(fd, data.str, size);
+	data.str     = push_array(a, u8, size);
+	nread        = socketread(fd, data.str, size);
 	if (nread != size)
 	{
 		data.str = NULL;
@@ -473,12 +473,12 @@ socketreadhttp(Arena *a, u64 fd)
 	}
 	String8 hdr = str8(buf, hdrend);
 	u64 bodylen = 0;
-	String8 cl = str8_lit("content-length: ");
-	u64 clpos = str8_find_needle(hdr, 0, cl, StringMatchFlag_CaseInsensitive);
+	String8 cl  = str8_lit("content-length: ");
+	u64 clpos   = str8_find_needle(hdr, 0, cl, StringMatchFlag_CaseInsensitive);
 	if (clpos < hdr.size)
 	{
 		u64 start = clpos + cl.size;
-		u64 end = str8_find_needle(hdr, start, str8_lit("\r\n"), 0);
+		u64 end   = str8_find_needle(hdr, start, str8_lit("\r\n"), 0);
 		if (end < hdr.size)
 		{
 			String8 lenstr = str8_substr(hdr, rng1u64(start, end));
@@ -486,7 +486,7 @@ socketreadhttp(Arena *a, u64 fd)
 		}
 	}
 	String8 data = {
-	    .str = push_array_no_zero(a, u8, hdrend + bodylen),
+	    .str  = push_array_no_zero(a, u8, hdrend + bodylen),
 	    .size = hdrend + bodylen,
 	};
 	memcpy(data.str, buf, hdrend);
@@ -516,8 +516,8 @@ socketwrite(u64 fd, String8 data)
 		return 0;
 	}
 	u64 nwrite = 0;
-	u64 nleft = data.size;
-	u8 *p = data.str;
+	u64 nleft  = data.size;
+	u8 *p      = data.str;
 	while (nleft > 0)
 	{
 		ssize_t n = write(fd, p + nwrite, nleft);

@@ -94,7 +94,7 @@ str8_zero(void)
 static String8
 str8_cstring(char *c)
 {
-	u8 *str = (u8 *)c;
+	u8 *str   = (u8 *)c;
 	String8 s = {.str = str, .size = cstring8_length(str)};
 	return s;
 }
@@ -153,7 +153,7 @@ str8_match(String8 a, String8 b, StringMatchFlags flags)
 	else if (a.size == b.size || (flags & StringMatchFlag_RightSideSloppy))
 	{
 		u64 size = Min(a.size, b.size);
-		ok = 1;
+		ok       = 1;
 		for (u64 i = 0; i < size; i++)
 		{
 			u8 at = a.str[i];
@@ -180,12 +180,12 @@ str8_find_needle(String8 string, u64 start_pos, String8 needle, StringMatchFlags
 	{
 		return string.size;
 	}
-	u8 *p = string.str + start_pos;
-	u64 stoplen = string.size - needle.size;
-	u8 *end = string.str + string.size;
-	String8 tail = str8_skip(needle, 1);
+	u8 *p                     = string.str + start_pos;
+	u64 stoplen               = string.size - needle.size;
+	u8 *end                   = string.str + string.size;
+	String8 tail              = str8_skip(needle, 1);
 	StringMatchFlags adjflags = flags | StringMatchFlag_RightSideSloppy;
-	u8 n0adj = needle.str[0];
+	u8 n0adj                  = needle.str[0];
 	if (adjflags & StringMatchFlag_CaseInsensitive)
 	{
 		n0adj = upper_from_char(n0adj);
@@ -258,8 +258,8 @@ str8_skip(String8 str, u64 amt)
 static String8
 str8_postfix(String8 str, u64 size)
 {
-	size = Min(size, str.size);
-	str.str = str.str + str.size - size;
+	size     = Min(size, str.size);
+	str.str  = str.str + str.size - size;
 	str.size = size;
 	return str;
 }
@@ -277,7 +277,7 @@ static String8
 str8_cat(Arena *arena, String8 s1, String8 s2)
 {
 	String8 str = {
-	    .str = push_array_no_zero(arena, u8, s1.size + s2.size + 1),
+	    .str  = push_array_no_zero(arena, u8, s1.size + s2.size + 1),
 	    .size = s1.size + s2.size,
 	};
 	memmove(str.str, s1.str, s1.size);
@@ -290,7 +290,7 @@ static String8
 str8_copy(Arena *arena, String8 s)
 {
 	String8 str = {
-	    .str = push_array_no_zero(arena, u8, s.size + 1),
+	    .str  = push_array_no_zero(arena, u8, s.size + 1),
 	    .size = s.size,
 	};
 	memcpy(str.str, s.str, s.size);
@@ -304,11 +304,11 @@ str8fv(Arena *arena, char *fmt, va_list args)
 	va_list args2;
 	va_copy(args2, args);
 	u32 nbytes = vsnprintf(0, 0, fmt, args) + 1;
-	u8 *str = push_array_no_zero(arena, u8, nbytes);
-	String8 s = {
-	    .str = str,
-	    .size = vsnprintf((char *)str, nbytes, fmt, args2),
-	};
+	u8 *str    = push_array_no_zero(arena, u8, nbytes);
+	String8 s  = {
+	     .str  = str,
+	     .size = vsnprintf((char *)str, nbytes, fmt, args2),
+  };
 	s.str[s.size] = 0;
 	va_end(args2);
 	return s;
@@ -451,7 +451,7 @@ str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_
 			break;
 	}
 	u64 ndigits = 1;
-	u64 rem = value;
+	u64 rem     = value;
 	for (;;)
 	{
 		rem /= radix;
@@ -462,7 +462,7 @@ str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_
 		ndigits++;
 	}
 	u64 nleadz = (min_digits > ndigits) ? min_digits - ndigits : 0;
-	u64 nseps = 0;
+	u64 nseps  = 0;
 	if (digit_group_separator != 0)
 	{
 		nseps = (ndigits + nleadz) / group;
@@ -472,18 +472,18 @@ str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_
 		}
 	}
 	String8 s = {
-	    .str = push_array_no_zero(arena, u8, pre.size + nleadz + nseps + ndigits + 1),
+	    .str  = push_array_no_zero(arena, u8, pre.size + nleadz + nseps + ndigits + 1),
 	    .size = pre.size + nleadz + nseps + ndigits,
 	};
 	s.str[s.size] = 0;
-	rem = value;
-	u64 digtosep = group;
+	rem           = value;
+	u64 digtosep  = group;
 	for (u64 i = 0; i < s.size; i++)
 	{
 		if (digtosep == 0 && digit_group_separator != 0)
 		{
 			s.str[s.size - i - 1] = digit_group_separator;
-			digtosep = group + 1;
+			digtosep              = group + 1;
 		}
 		else
 		{
@@ -514,12 +514,12 @@ str8_list_push_node(String8List *list, String8Node *node, String8 s)
 	if (list->first == NULL)
 	{
 		list->first = node;
-		list->last = node;
+		list->last  = node;
 	}
 	else
 	{
 		list->last->next = node;
-		list->last = node;
+		list->last       = node;
 	}
 	node->next = NULL;
 	list->node_count++;
@@ -541,13 +541,13 @@ static String8List
 str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count, StringSplitFlags flags)
 {
 	String8List list = {0};
-	u8 *end = string.str + string.size;
+	u8 *end          = string.str + string.size;
 	for (u8 *p = string.str; p < end;)
 	{
 		u8 *start = p;
 		for (; p < end; p++)
 		{
-			u8 c = *p;
+			u8 c        = *p;
 			b32 issplit = 0;
 			for (u64 i = 0; i < split_char_count; i++)
 			{
@@ -614,7 +614,7 @@ static String8Array
 str8_array_from_list(Arena *arena, String8List *list)
 {
 	String8Array array = {
-	    .v = push_array_no_zero(arena, String8, list->node_count),
+	    .v     = push_array_no_zero(arena, String8, list->node_count),
 	    .count = list->node_count,
 	};
 	u64 i = 0;
@@ -629,7 +629,7 @@ static String8Array
 str8_array_reserve(Arena *arena, u64 count)
 {
 	String8Array array = {
-	    .v = push_array(arena, String8, count),
+	    .v     = push_array(arena, String8, count),
 	    .count = 0,
 	};
 	return array;
@@ -674,7 +674,7 @@ str8_skip_last_slash(String8 string)
 		{
 			p++;
 			string.size = string.str + string.size - p;
-			string.str = p;
+			string.str  = p;
 		}
 	}
 	return string;
@@ -684,7 +684,7 @@ static String8
 str8_chop_last_dot(String8 string)
 {
 	String8 result = string;
-	u64 p = string.size;
+	u64 p          = string.size;
 	while (p > 0)
 	{
 		p--;
@@ -701,7 +701,7 @@ static String8
 str8_skip_last_dot(String8 string)
 {
 	String8 result = string;
-	u64 p = string.size;
+	u64 p          = string.size;
 	while (p > 0)
 	{
 		p--;
@@ -712,4 +712,16 @@ str8_skip_last_dot(String8 string)
 		}
 	}
 	return result;
+}
+
+// Basic String Hashes
+static u64
+u64_hash_from_str8(String8 string)
+{
+	u64 hash = 5381;
+	for (u64 i = 0; i < string.size; i++)
+	{
+		hash = ((hash << 5) + hash) + string.str[i];
+	}
+	return hash;
 }

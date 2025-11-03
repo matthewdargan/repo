@@ -41,7 +41,7 @@ cleansignature(Arena *a, String8 signature)
 	{
 		return signature;
 	}
-	u64 newlinepos = str8_find_needle(signature, 0, str8_lit("\n"), 0);
+	u64 newlinepos  = str8_find_needle(signature, 0, str8_lit("\n"), 0);
 	String8 cleaned = (newlinepos < signature.size) ? str8_prefix(signature, newlinepos) : signature;
 	return str8_copy(a, cleaned);
 }
@@ -50,14 +50,14 @@ static String8
 extractfunctionsignature(Arena *a, String8 source, TSNode node)
 {
 	u32 startbyte = ts_node_start_byte(node);
-	u32 endbyte = ts_node_end_byte(node);
+	u32 endbyte   = ts_node_end_byte(node);
 	if (startbyte >= source.size || endbyte > source.size || endbyte <= startbyte)
 	{
 		return str8_zero();
 	}
-	String8 signature = str8_substr(source, rng1u64(startbyte, endbyte));
+	String8 signature  = str8_substr(source, rng1u64(startbyte, endbyte));
 	b32 foundopenbrace = 0;
-	u64 i = 0;
+	u64 i              = 0;
 	for (; i < signature.size; i++)
 	{
 		if (signature.str[i] == '{')
@@ -99,16 +99,16 @@ symbollistpush(Arena *a, SymbolList *list, Symbol symbol)
 		return;
 	}
 	SymbolNode *node = push_array(a, SymbolNode, 1);
-	*node = (SymbolNode){.symbol = symbol, .next = NULL};
+	*node            = (SymbolNode){.symbol = symbol, .next = NULL};
 	if (list->last == NULL)
 	{
 		list->first = node;
-		list->last = node;
+		list->last  = node;
 	}
 	else
 	{
 		list->last->next = node;
-		list->last = node;
+		list->last       = node;
 	}
 	list->count++;
 }
@@ -117,9 +117,9 @@ static String8Array
 listcfiles(Arena *a, String8 dirpath)
 {
 	String8Array result = {0};
-	String8List files = {0};
-	String8 dirpathcpy = str8_copy(a, dirpath);
-	DIR *dp = opendir((char *)dirpathcpy.str);
+	String8List files   = {0};
+	String8 dirpathcpy  = str8_copy(a, dirpath);
+	DIR *dp             = opendir((char *)dirpathcpy.str);
 	if (dp == NULL)
 	{
 		return result;
@@ -132,7 +132,7 @@ listcfiles(Arena *a, String8 dirpath)
 			continue;
 		}
 		String8 name = str8_cstring(entry->d_name);
-		String8 ext = str8_skip_last_dot(name);
+		String8 ext  = str8_skip_last_dot(name);
 		if (!str8_match(ext, str8_lit(".c"), 0) || !str8_match(ext, str8_lit(".h"), 0))
 		{
 			String8 fullpath = str8f(a, "%.*s/%.*s", str8_varg(dirpath), str8_varg(name));
@@ -145,7 +145,7 @@ listcfiles(Arena *a, String8 dirpath)
 		return result;
 	}
 	result.v = push_array(a, String8, files.node_count);
-	u64 i = 0;
+	u64 i    = 0;
 	for (String8Node *node = files.first; node != NULL; node = node->next)
 	{
 		result.v[i++] = node->string;
@@ -167,7 +167,7 @@ symbolresult(Arena *a, Jsonbuilder *b, SymbolList *symbols)
 	jsonbobjcomma(b);
 	jsonbobjkey(b, str8_lit("text"));
 
-	u64 estsize = 1024 + symbols->count * 200;
+	u64 estsize             = 1024 + symbols->count * 200;
 	Jsonbuilder textbuilder = jsonbuilder(a, estsize);
 	jsonbobjstart(&textbuilder);
 	jsonbobjkey(&textbuilder, str8_lit("symbols"));
@@ -211,7 +211,7 @@ symbolresult(Arena *a, Jsonbuilder *b, SymbolList *symbols)
 static void
 printmcpresponse(Arena *a, String8 requestid, String8 result)
 {
-	u64 estsize = 100 + requestid.size + result.size;
+	u64 estsize   = 100 + requestid.size + result.size;
 	Jsonbuilder b = jsonbuilder(a, estsize);
 	jsonbobjstart(&b);
 	jsonbobjkey(&b, str8_lit("jsonrpc"));
@@ -241,7 +241,7 @@ printmcpresponse(Arena *a, String8 requestid, String8 result)
 static void
 printmcperror(Arena *a, String8 requestid, s32 code, String8 message)
 {
-	u64 estsize = 150 + requestid.size + message.size;
+	u64 estsize   = 150 + requestid.size + message.size;
 	Jsonbuilder b = jsonbuilder(a, estsize);
 	jsonbobjstart(&b);
 	jsonbobjkey(&b, str8_lit("jsonrpc"));
@@ -277,15 +277,15 @@ printmcperror(Arena *a, String8 requestid, s32 code, String8 message)
 static void
 extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filepath, String8 source)
 {
-	TSSymbol symboltype = ts_node_symbol(node);
+	TSSymbol symboltype  = ts_node_symbol(node);
 	const char *typename = ts_language_symbol_name(tree_sitter_c(), symboltype);
 	if (strcmp(typename, "function_definition") == 0 || strcmp(typename, "declaration") == 0)
 	{
 		u32 childcount = ts_node_child_count(node);
 		for (u32 i = 0; i < childcount; i++)
 		{
-			TSNode child = ts_node_child(node, i);
-			TSSymbol childsymbol = ts_node_symbol(child);
+			TSNode child          = ts_node_child(node, i);
+			TSSymbol childsymbol  = ts_node_symbol(child);
 			const char *childtype = ts_language_symbol_name(tree_sitter_c(), childsymbol);
 			if (strcmp(childtype, "function_declarator") == 0 || strcmp(childtype, "identifier") == 0)
 			{
@@ -298,22 +298,22 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 					}
 				}
 				TSPoint startpoint = ts_node_start_point(child);
-				TSPoint endpoint = ts_node_end_point(child);
-				u32 startline = startpoint.row;
-				u32 endline = endpoint.row;
+				TSPoint endpoint   = ts_node_end_point(child);
+				u32 startline      = startpoint.row;
+				u32 endline        = endpoint.row;
 				if (startline < source.size && endline < source.size)
 				{
 					u32 startbyte = ts_node_start_byte(child);
-					u32 endbyte = ts_node_end_byte(child);
+					u32 endbyte   = ts_node_end_byte(child);
 					if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 					{
 						String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
 						if (identifiertext.size > 0)
 						{
-							Symbol symbol = {.name = str8_copy(a, identifiertext),
-							                 .type = str8_lit("function"),
-							                 .file = str8_copy(a, filepath),
-							                 .line = startline + 1,
+							Symbol symbol = {.name      = str8_copy(a, identifiertext),
+							                 .type      = str8_lit("function"),
+							                 .file      = str8_copy(a, filepath),
+							                 .line      = startline + 1,
 							                 .signature = extractfunctionsignature(a, source, node)};
 							symbollistpush(a, symbols, symbol);
 						}
@@ -328,29 +328,29 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 		u32 childcount = ts_node_child_count(node);
 		for (u32 i = 0; i < childcount; i++)
 		{
-			TSNode structchild = ts_node_child(node, i);
-			TSSymbol childsymbol = ts_node_symbol(structchild);
+			TSNode structchild    = ts_node_child(node, i);
+			TSSymbol childsymbol  = ts_node_symbol(structchild);
 			const char *childtype = ts_language_symbol_name(tree_sitter_c(), childsymbol);
 			if (strcmp(childtype, "type_identifier") == 0)
 			{
 				TSPoint startpoint = ts_node_start_point(structchild);
-				u32 startbyte = ts_node_start_byte(structchild);
-				u32 endbyte = ts_node_end_byte(structchild);
+				u32 startbyte      = ts_node_start_byte(structchild);
+				u32 endbyte        = ts_node_end_byte(structchild);
 				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
 					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
 					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
-						symbol.name = str8_copy(a, identifiertext);
-						symbol.type = str8_lit("struct");
-						symbol.file = str8_copy(a, filepath);
-						symbol.line = startpoint.row + 1;
+						symbol.name   = str8_copy(a, identifiertext);
+						symbol.type   = str8_lit("struct");
+						symbol.file   = str8_copy(a, filepath);
+						symbol.line   = startpoint.row + 1;
 						u32 startbyte = ts_node_start_byte(node);
-						u32 endbyte = ts_node_end_byte(node);
+						u32 endbyte   = ts_node_end_byte(node);
 						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
+							String8 nodetext  = str8_substr(source, rng1u64(startbyte, endbyte));
 							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
 							if (lines.first != NULL)
 							{
@@ -369,29 +369,29 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 		u32 childcount = ts_node_child_count(node);
 		for (u32 i = 0; i < childcount; i++)
 		{
-			TSNode enumchild = ts_node_child(node, i);
-			TSSymbol childsymbol = ts_node_symbol(enumchild);
+			TSNode enumchild      = ts_node_child(node, i);
+			TSSymbol childsymbol  = ts_node_symbol(enumchild);
 			const char *childtype = ts_language_symbol_name(tree_sitter_c(), childsymbol);
 			if (strcmp(childtype, "type_identifier") == 0)
 			{
 				TSPoint startpoint = ts_node_start_point(enumchild);
-				u32 startbyte = ts_node_start_byte(enumchild);
-				u32 endbyte = ts_node_end_byte(enumchild);
+				u32 startbyte      = ts_node_start_byte(enumchild);
+				u32 endbyte        = ts_node_end_byte(enumchild);
 				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
 					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
 					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
-						symbol.name = str8_copy(a, identifiertext);
-						symbol.type = str8_lit("enum");
-						symbol.file = str8_copy(a, filepath);
-						symbol.line = startpoint.row + 1;
+						symbol.name   = str8_copy(a, identifiertext);
+						symbol.type   = str8_lit("enum");
+						symbol.file   = str8_copy(a, filepath);
+						symbol.line   = startpoint.row + 1;
 						u32 startbyte = ts_node_start_byte(node);
-						u32 endbyte = ts_node_end_byte(node);
+						u32 endbyte   = ts_node_end_byte(node);
 						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
+							String8 nodetext  = str8_substr(source, rng1u64(startbyte, endbyte));
 							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
 							if (lines.first != NULL)
 							{
@@ -408,27 +408,27 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 				u32 enumlistcount = ts_node_child_count(enumchild);
 				for (u32 j = 0; j < enumlistcount; j++)
 				{
-					TSNode enumlistchild = ts_node_child(enumchild, j);
-					TSSymbol enumlistsymbol = ts_node_symbol(enumlistchild);
+					TSNode enumlistchild     = ts_node_child(enumchild, j);
+					TSSymbol enumlistsymbol  = ts_node_symbol(enumlistchild);
 					const char *enumlisttype = ts_language_symbol_name(tree_sitter_c(), enumlistsymbol);
 					if (strcmp(enumlisttype, "enumerator") == 0)
 					{
 						TSNode enumnamechild = ts_node_child(enumlistchild, 0);
-						TSPoint startpoint = ts_node_start_point(enumnamechild);
-						u32 startbyte = ts_node_start_byte(enumnamechild);
-						u32 endbyte = ts_node_end_byte(enumnamechild);
+						TSPoint startpoint   = ts_node_start_point(enumnamechild);
+						u32 startbyte        = ts_node_start_byte(enumnamechild);
+						u32 endbyte          = ts_node_end_byte(enumnamechild);
 						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
 							String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
 							if (identifiertext.size > 0)
 							{
 								Symbol symbol = {0};
-								symbol.name = str8_copy(a, identifiertext);
-								symbol.type = str8_lit("enum");
-								symbol.file = str8_copy(a, filepath);
-								symbol.line = startpoint.row + 1;
+								symbol.name   = str8_copy(a, identifiertext);
+								symbol.type   = str8_lit("enum");
+								symbol.file   = str8_copy(a, filepath);
+								symbol.line   = startpoint.row + 1;
 								u32 startbyte = ts_node_start_byte(enumlistchild);
-								u32 endbyte = ts_node_end_byte(enumlistchild);
+								u32 endbyte   = ts_node_end_byte(enumlistchild);
 								if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 								{
 									String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
@@ -447,29 +447,29 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 		u32 childcount = ts_node_child_count(node);
 		for (u32 i = 0; i < childcount; i++)
 		{
-			TSNode typedefchild = ts_node_child(node, i);
-			TSSymbol childsymbol = ts_node_symbol(typedefchild);
+			TSNode typedefchild   = ts_node_child(node, i);
+			TSSymbol childsymbol  = ts_node_symbol(typedefchild);
 			const char *childtype = ts_language_symbol_name(tree_sitter_c(), childsymbol);
 			if (strcmp(childtype, "type_identifier") == 0)
 			{
 				TSPoint startpoint = ts_node_start_point(typedefchild);
-				u32 startbyte = ts_node_start_byte(typedefchild);
-				u32 endbyte = ts_node_end_byte(typedefchild);
+				u32 startbyte      = ts_node_start_byte(typedefchild);
+				u32 endbyte        = ts_node_end_byte(typedefchild);
 				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
 					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
 					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
-						symbol.name = str8_copy(a, identifiertext);
-						symbol.type = str8_lit("typedef");
-						symbol.file = str8_copy(a, filepath);
-						symbol.line = startpoint.row + 1;
+						symbol.name   = str8_copy(a, identifiertext);
+						symbol.type   = str8_lit("typedef");
+						symbol.file   = str8_copy(a, filepath);
+						symbol.line   = startpoint.row + 1;
 						u32 startbyte = ts_node_start_byte(node);
-						u32 endbyte = ts_node_end_byte(node);
+						u32 endbyte   = ts_node_end_byte(node);
 						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
+							String8 nodetext  = str8_substr(source, rng1u64(startbyte, endbyte));
 							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
 							if (lines.first != NULL)
 							{
@@ -488,26 +488,26 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 		u32 childcount = ts_node_child_count(node);
 		for (u32 i = 0; i < childcount; i++)
 		{
-			TSNode child = ts_node_child(node, i);
-			TSSymbol childsymbol = ts_node_symbol(child);
+			TSNode child          = ts_node_child(node, i);
+			TSSymbol childsymbol  = ts_node_symbol(child);
 			const char *childtype = ts_language_symbol_name(tree_sitter_c(), childsymbol);
 			if (strcmp(childtype, "identifier") == 0)
 			{
 				TSPoint startpoint = ts_node_start_point(child);
-				u32 startbyte = ts_node_start_byte(child);
-				u32 endbyte = ts_node_end_byte(child);
+				u32 startbyte      = ts_node_start_byte(child);
+				u32 endbyte        = ts_node_end_byte(child);
 				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
 					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
 					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
-						symbol.name = str8_copy(a, identifiertext);
-						symbol.type = str8_lit("macro");
-						symbol.file = str8_copy(a, filepath);
-						symbol.line = startpoint.row + 1;
+						symbol.name   = str8_copy(a, identifiertext);
+						symbol.type   = str8_lit("macro");
+						symbol.file   = str8_copy(a, filepath);
+						symbol.line   = startpoint.row + 1;
 						u32 startbyte = ts_node_start_byte(node);
-						u32 endbyte = ts_node_end_byte(node);
+						u32 endbyte   = ts_node_end_byte(node);
 						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
 							String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
@@ -532,7 +532,7 @@ static SymbolList
 parsecfiletreesitter(Arena *a, String8 filepath, String8 source)
 {
 	SymbolList symbols = {0};
-	TSParser *parser = ts_parser_new();
+	TSParser *parser   = ts_parser_new();
 	if (!ts_parser_set_language(parser, tree_sitter_c()))
 	{
 		fprintf(stderr, "mcpsrv: failed to set tree-sitter language for C\n");
@@ -542,7 +542,7 @@ parsecfiletreesitter(Arena *a, String8 filepath, String8 source)
 	char *sourcecstr = (char *)push_array(a, u8, source.size + 1);
 	memcpy(sourcecstr, source.str, source.size);
 	sourcecstr[source.size] = '\0';
-	TSTree *tree = ts_parser_parse_string(parser, NULL, sourcecstr, source.size);
+	TSTree *tree            = ts_parser_parse_string(parser, NULL, sourcecstr, source.size);
 	if (tree == NULL)
 	{
 		fprintf(stderr, "mcpsrv: failed to parse source file '%.*s'\n", str8_varg(filepath));
@@ -560,7 +560,7 @@ static String8
 symbolsearch(Arena *a, String8 pattern)
 {
 	SymbolList allsymbols = {0};
-	SymbolList filtered = {0};
+	SymbolList filtered   = {0};
 	for (u64 d = 0; d < ArrayCount(directories); d++)
 	{
 		String8Array files = listcfiles(a, directories[d]);
@@ -594,7 +594,7 @@ symbolsearch(Arena *a, String8 pattern)
 			symbollistpush(a, &filtered, *sym);
 		}
 	}
-	u64 estsize = 1024 + filtered.count * 200;
+	u64 estsize   = 1024 + filtered.count * 200;
 	Jsonbuilder b = jsonbuilder(a, estsize);
 	symbolresult(a, &b, &filtered);
 	return jsonbfinish(&b);
@@ -754,7 +754,7 @@ static String8
 symbolinfo(Arena *a, String8 symbolname)
 {
 	SymbolList allsymbols = {0};
-	SymbolList filtered = {0};
+	SymbolList filtered   = {0};
 	for (u64 d = 0; d < ArrayCount(directories); d++)
 	{
 		String8Array files = listcfiles(a, directories[d]);
@@ -782,7 +782,7 @@ symbolinfo(Arena *a, String8 symbolname)
 			symbollistpush(a, &filtered, *sym);
 		}
 	}
-	u64 estsize = 1024 + filtered.count * 200;
+	u64 estsize   = 1024 + filtered.count * 200;
 	Jsonbuilder b = jsonbuilder(a, estsize);
 	symbolresult(a, &b, &filtered);
 	return jsonbfinish(&b);
@@ -792,7 +792,7 @@ static String8
 filesymbols(Arena *a, String8 filepath)
 {
 	SymbolList symbols = {0};
-	String8 source = os_data_from_file_path(a, filepath);
+	String8 source     = os_data_from_file_path(a, filepath);
 	if (source.size == 0 || source.str == NULL)
 	{
 		Jsonbuilder b = jsonbuilder(a, 512);
@@ -816,8 +816,8 @@ filesymbols(Arena *a, String8 filepath)
 		jsonbobjend(&b);
 		return jsonbfinish(&b);
 	}
-	symbols = parsecfiletreesitter(a, filepath, source);
-	u64 estsize = 1024 + symbols.count * 200;
+	symbols       = parsecfiletreesitter(a, filepath, source);
+	u64 estsize   = 1024 + symbols.count * 200;
 	Jsonbuilder b = jsonbuilder(a, estsize);
 	symbolresult(a, &b, &symbols);
 	return jsonbfinish(&b);
@@ -879,7 +879,7 @@ static void
 mcprequest(Arena *a, String8 line)
 {
 	String8 requestid = str8_zero();
-	u64 idstart = str8_find_needle(line, 0, str8_lit("\"id\":"), 0);
+	u64 idstart       = str8_find_needle(line, 0, str8_lit("\"id\":"), 0);
 	if (idstart < line.size)
 	{
 		idstart += 5;
@@ -925,14 +925,14 @@ mcprequest(Arena *a, String8 line)
 			u64 nameend = str8_find_needle(line, namestart, str8_lit("\""), 0);
 			if (nameend < line.size)
 			{
-				String8 toolname = str8_substr(line, rng1u64(namestart, nameend));
-				u64 argsstart = str8_find_needle(line, 0, str8_lit("\"arguments\":{"), 0);
+				String8 toolname  = str8_substr(line, rng1u64(namestart, nameend));
+				u64 argsstart     = str8_find_needle(line, 0, str8_lit("\"arguments\":{"), 0);
 				String8 arguments = str8_zero();
 				if (argsstart < line.size)
 				{
 					argsstart += 12;
 					u64 bracecount = 1;
-					u64 argsend = argsstart;
+					u64 argsend    = argsstart;
 					while (argsend < line.size && bracecount > 0)
 					{
 						if (line.str[argsend] == '{')
@@ -962,12 +962,12 @@ mcprequest(Arena *a, String8 line)
 int
 main(void)
 {
-	OS_SystemInfo *sysinfo = os_get_system_info();
+	OS_SystemInfo *sysinfo           = os_get_system_info();
 	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo->page_size = sysconf(_SC_PAGESIZE);
-	sysinfo->large_page_size = 0x200000;
-	Arena *arena = arena_alloc();
-	char line[8192] = {0};
+	sysinfo->page_size               = sysconf(_SC_PAGESIZE);
+	sysinfo->large_page_size         = 0x200000;
+	Arena *arena                     = arena_alloc();
+	char line[8192]                  = {0};
 	while (fgets(line, sizeof(line), stdin))
 	{
 		size_t size = strlen(line);
@@ -977,7 +977,7 @@ main(void)
 			size--;
 		}
 		String8 input = str8((u8 *)line, size);
-		Temp temp = temp_begin(arena);
+		Temp temp     = temp_begin(arena);
 		mcprequest(arena, input);
 		temp_end(temp);
 	}

@@ -147,4 +147,7 @@ static String8 str8_skip_last_slash(String8 string);
 static String8 str8_chop_last_dot(String8 string);
 static String8 str8_skip_last_dot(String8 string);
 
+// Basic String Hashes
+static u64 u64_hash_from_str8(String8 string);
+
 #endif  // STRING_H

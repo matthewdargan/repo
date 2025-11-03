@@ -47,8 +47,31 @@
 #define StaticAssert(C, ID) static u8 Glue(ID, __LINE__)[(C) ? 1 : -1]
 
 // Linked List Building Macros
+
+// linked list macro helpers
+#define CheckNil(nil, p) ((p) == 0 || (p) == nil)
+#define SetNil(nil, p) ((p) = nil)
+
+// singly-linked, doubly-headed lists (queues)
+#define SLLQueuePush_NZ(nil, f, l, n, next) \
+	(CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((l)->next = (n), (l) = (n), SetNil(nil, (n)->next)))
+#define SLLQueuePushFront_NZ(nil, f, l, n, next) \
+	(CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((n)->next = (f), (f) = (n)))
+#define SLLQueuePop_NZ(nil, f, l, next) ((f) == (l) ? (SetNil(nil, f), SetNil(nil, l)) : ((f) = (f)->next))
+
+// singly-linked, singly-headed lists (stacks)
 #define SLLStackPush_N(f, n, next) ((n)->next = (f), (f) = (n))
 #define SLLStackPop_N(f, next) ((f) = (f)->next)
+
+// singly-linked, doubly-headed list helpers
+#define SLLQueuePush_N(f, l, n, next) SLLQueuePush_NZ(0, f, l, n, next)
+#define SLLQueuePushFront_N(f, l, n, next) SLLQueuePushFront_NZ(0, f, l, n, next)
+#define SLLQueuePop_N(f, l, next) SLLQueuePop_NZ(0, f, l, next)
+#define SLLQueuePush(f, l, n) SLLQueuePush_NZ(0, f, l, n, next)
+#define SLLQueuePushFront(f, l, n) SLLQueuePushFront_NZ(0, f, l, n, next)
+#define SLLQueuePop(f, l) SLLQueuePop_NZ(0, f, l, next)
+
+// singly-linked, singly-headed list helpers
 #define SLLStackPush(f, n) SLLStackPush_N(f, n, next)
 #define SLLStackPop(f) SLLStackPop_N(f, next)
 

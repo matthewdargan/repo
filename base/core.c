@@ -44,7 +44,7 @@ static DateTime
 date_time_from_dense_time(DenseTime t)
 {
 	DateTime dt = {0};
-	dt.msec = t % 1000;
+	dt.msec     = t % 1000;
 	t /= 1000;
 	dt.sec = t % 61;
 	t /= 61;

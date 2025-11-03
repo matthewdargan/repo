@@ -24,7 +24,7 @@ struct Ramentry
 };
 
 static Ramentry *filelist = NULL;
-static u64 next_qid_path = 1;
+static u64 next_qid_path  = 1;
 
 static Ramentry *
 findfile(String8 name)
@@ -43,11 +43,11 @@ static Ramentry *
 addfile(Arena *arena, String8 name)
 {
 	Ramentry *e = push_array(arena, Ramentry, 1);
-	e->name = str8_copy(arena, name);
+	e->name     = str8_copy(arena, name);
 	e->qid_path = next_qid_path++;
-	e->file = NULL;
-	e->next = filelist;
-	filelist = e;
+	e->file     = NULL;
+	e->next     = filelist;
+	filelist    = e;
 	return e;
 }
 
@@ -58,24 +58,24 @@ ramfs_read(Req *r)
 	if (e == NULL && (r->fid->qid.type & QTDIR))
 	{
 		String8 dirdata = str8_zero();
-		u64 pos = 0;
-		time_t now = os_now_unix();
+		u64 pos         = 0;
+		time_t now      = os_now_unix();
 		for (Ramentry *file = filelist; file != NULL; file = file->next)
 		{
 			if (pos >= r->ifcall.offset)
 			{
-				Dir d = {0};
-				d.qid = (Qid){.path = file->qid_path, .vers = 0, .type = QTFILE};
-				d.mode = 0644;
-				d.name = file->name;
-				d.uid = str8_lit("ramfs");
-				d.gid = str8_lit("ramfs");
-				d.muid = str8_lit("ramfs");
-				d.atime = now;
-				d.mtime = now;
-				d.len = file->file ? file->file->data.size : 0;
+				Dir d         = {0};
+				d.qid         = (Qid){.path = file->qid_path, .vers = 0, .type = QTFILE};
+				d.mode        = 0644;
+				d.name        = file->name;
+				d.uid         = str8_lit("ramfs");
+				d.gid         = str8_lit("ramfs");
+				d.muid        = str8_lit("ramfs");
+				d.atime       = now;
+				d.mtime       = now;
+				d.len         = file->file ? file->file->data.size : 0;
 				String8 entry = direncode(r->srv->arena, d);
-				u64 entrylen = entry.size;
+				u64 entrylen  = entry.size;
 				if (dirdata.size + entrylen > r->ifcall.count)
 				{
 					break;
@@ -89,7 +89,7 @@ ramfs_read(Req *r)
 					u8 *newdata = push_array(r->srv->arena, u8, dirdata.size + entrylen);
 					memcpy(newdata, dirdata.str, dirdata.size);
 					memcpy(newdata + dirdata.size, entry.str, entrylen);
-					dirdata.str = newdata;
+					dirdata.str  = newdata;
 					dirdata.size = dirdata.size + entrylen;
 				}
 			}
@@ -106,8 +106,8 @@ ramfs_read(Req *r)
 		return;
 	}
 	Ramfile *rf = e->file;
-	u64 offset = r->ifcall.offset;
-	u64 count = r->ifcall.count;
+	u64 offset  = r->ifcall.offset;
+	u64 count   = r->ifcall.count;
 	if (offset >= rf->data.size)
 	{
 		r->ofcall.data = str8_zero();
@@ -134,8 +134,8 @@ ramfs_write(Req *r)
 		return;
 	}
 	Ramfile *rf = e->file;
-	u64 offset = r->ifcall.offset;
-	u64 count = r->ifcall.data.size;
+	u64 offset  = r->ifcall.offset;
+	u64 count   = r->ifcall.data.size;
 	if (offset + count > rf->data.size)
 	{
 		u64 newsize = offset + count;
@@ -144,7 +144,7 @@ ramfs_write(Req *r)
 		{
 			memcpy(newdata, rf->data.str, rf->data.size);
 		}
-		rf->data.str = newdata;
+		rf->data.str  = newdata;
 		rf->data.size = newsize;
 	}
 	memcpy(rf->data.str + offset, r->ifcall.data.str, count);
@@ -161,16 +161,16 @@ ramfs_create(Req *r)
 		respond(r, str8_lit("file exists"));
 		return;
 	}
-	Ramfile *rf = push_array(r->srv->arena, Ramfile, 1);
-	rf->arena = r->srv->arena;
-	rf->data = str8_zero();
-	e = addfile(r->srv->arena, r->ifcall.name);
-	e->file = rf;
-	r->fid->aux = e;
+	Ramfile *rf      = push_array(r->srv->arena, Ramfile, 1);
+	rf->arena        = r->srv->arena;
+	rf->data         = str8_zero();
+	e                = addfile(r->srv->arena, r->ifcall.name);
+	e->file          = rf;
+	r->fid->aux      = e;
 	r->fid->qid.path = e->qid_path;
 	r->fid->qid.vers = 0;
 	r->fid->qid.type = QTFILE;
-	r->ofcall.qid = r->fid->qid;
+	r->ofcall.qid    = r->fid->qid;
 	respond(r, str8_zero());
 }
 
@@ -180,7 +180,7 @@ ramfs_attach(Req *r)
 	r->fid->qid.path = 0;
 	r->fid->qid.vers = 0;
 	r->fid->qid.type = QTDIR;
-	r->ofcall.qid = r->fid->qid;
+	r->ofcall.qid    = r->fid->qid;
 	respond(r, str8_zero());
 }
 
@@ -189,7 +189,7 @@ ramfs_walk(Req *r)
 {
 	if (r->ifcall.nwname == 0)
 	{
-		r->newfid->qid = r->fid->qid;
+		r->newfid->qid  = r->fid->qid;
 		r->ofcall.nwqid = 0;
 		respond(r, str8_zero());
 		return;
@@ -202,7 +202,7 @@ ramfs_walk(Req *r)
 			return;
 		}
 		String8 name = r->ifcall.wname[i];
-		Ramentry *e = findfile(name);
+		Ramentry *e  = findfile(name);
 		if (e == NULL)
 		{
 			respond(r, str8_lit("file not found"));
@@ -211,8 +211,8 @@ ramfs_walk(Req *r)
 		r->newfid->qid.path = e->qid_path;
 		r->newfid->qid.vers = 0;
 		r->newfid->qid.type = QTFILE;
-		r->newfid->aux = e;
-		r->ofcall.wqid[i] = r->newfid->qid;
+		r->newfid->aux      = e;
+		r->ofcall.wqid[i]   = r->newfid->qid;
 	}
 	r->ofcall.nwqid = r->ifcall.nwname;
 	respond(r, str8_zero());
@@ -224,31 +224,31 @@ ramfs_stat(Req *r)
 	Ramentry *e = r->fid->aux;
 	if (e == NULL)
 	{
-		time_t now = os_now_unix();
-		Dir d = {0};
-		d.qid = r->fid->qid;
-		d.mode = DMDIR | 0755;
-		d.name = str8_copy(r->srv->arena, str8_lit("."));
-		d.uid = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.gid = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.muid = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.atime = now;
-		d.mtime = now;
+		time_t now     = os_now_unix();
+		Dir d          = {0};
+		d.qid          = r->fid->qid;
+		d.mode         = DMDIR | 0755;
+		d.name         = str8_copy(r->srv->arena, str8_lit("."));
+		d.uid          = str8_copy(r->srv->arena, str8_lit("ramfs"));
+		d.gid          = str8_copy(r->srv->arena, str8_lit("ramfs"));
+		d.muid         = str8_copy(r->srv->arena, str8_lit("ramfs"));
+		d.atime        = now;
+		d.mtime        = now;
 		r->ofcall.stat = direncode(r->srv->arena, d);
 	}
 	else
 	{
-		time_t now = os_now_unix();
-		Dir d = {0};
-		d.qid = r->fid->qid;
-		d.mode = 0644;
-		d.name = str8_copy(r->srv->arena, e->name);
-		d.uid = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.gid = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.muid = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.atime = now;
-		d.mtime = now;
-		d.len = e->file ? e->file->data.size : 0;
+		time_t now     = os_now_unix();
+		Dir d          = {0};
+		d.qid          = r->fid->qid;
+		d.mode         = 0644;
+		d.name         = str8_copy(r->srv->arena, e->name);
+		d.uid          = str8_copy(r->srv->arena, str8_lit("ramfs"));
+		d.gid          = str8_copy(r->srv->arena, str8_lit("ramfs"));
+		d.muid         = str8_copy(r->srv->arena, str8_lit("ramfs"));
+		d.atime        = now;
+		d.mtime        = now;
+		d.len          = e->file ? e->file->data.size : 0;
 		r->ofcall.stat = direncode(r->srv->arena, d);
 	}
 	respond(r, str8_zero());
@@ -302,10 +302,10 @@ ramfs_open(Req *r)
 	Ramfile *rf = e->file;
 	if (rf == NULL)
 	{
-		rf = push_array(r->srv->arena, Ramfile, 1);
+		rf        = push_array(r->srv->arena, Ramfile, 1);
 		rf->arena = r->srv->arena;
-		rf->data = str8_zero();
-		e->file = rf;
+		rf->data  = str8_zero();
+		e->file   = rf;
 	}
 	if ((r->ifcall.mode & OTRUNC) && rf->data.size > 0)
 	{
@@ -318,22 +318,22 @@ ramfs_open(Req *r)
 int
 main(int argc, char *argv[])
 {
-	OS_SystemInfo *sysinfo = os_get_system_info();
+	OS_SystemInfo *sysinfo           = os_get_system_info();
 	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo->page_size = sysconf(_SC_PAGESIZE);
-	sysinfo->large_page_size = 0x200000;
-	Arena *arena = arena_alloc();
-	String8List args = os_args(arena, argc, argv);
-	Cmd parsed = cmdparse(arena, args);
-	String8 srvname = str8_zero();
-	String8 address = str8_zero();
-	if (cmdhasarg(&parsed, str8_lit("s")))
+	sysinfo->page_size               = sysconf(_SC_PAGESIZE);
+	sysinfo->large_page_size         = 0x200000;
+	Arena *arena                     = arena_alloc();
+	String8List args                 = os_args(arena, argc, argv);
+	CmdLine parsed                   = cmd_line_from_string_list(arena, args);
+	String8 srvname                  = str8_zero();
+	String8 address                  = str8_zero();
+	if (cmd_line_has_argument(&parsed, str8_lit("s")))
 	{
-		srvname = cmdstr(&parsed, str8_lit("s"));
+		srvname = cmd_line_string(&parsed, str8_lit("s"));
 	}
-	if (cmdhasarg(&parsed, str8_lit("a")))
+	if (cmd_line_has_argument(&parsed, str8_lit("a")))
 	{
-		address = cmdstr(&parsed, str8_lit("a"));
+		address = cmd_line_string(&parsed, str8_lit("a"));
 	}
 	if (srvname.size == 0 && address.size == 0)
 	{
@@ -350,7 +350,7 @@ main(int argc, char *argv[])
 			return 1;
 		}
 		String8 portstr = str8f(arena, "%llu", na.port);
-		u64 listenfd = socketlisten(portstr, NULL);
+		u64 listenfd    = socketlisten(portstr, NULL);
 		if (listenfd == 0)
 		{
 			fprintf(stderr, "ramfs: failed to listen on port %.*s\n", str8_varg(portstr));
@@ -367,9 +367,9 @@ main(int argc, char *argv[])
 				continue;
 			}
 			printf("ramfs: accepted connection\n");
-			u64 infd = connfd;
+			u64 infd  = connfd;
 			u64 outfd = connfd;
-			Srv *srv = srvalloc(arena, infd, outfd);
+			Srv *srv  = srvalloc(arena, infd, outfd);
 			if (srv == NULL)
 			{
 				fprintf(stderr, "ramfs: failed to allocate server\n");
@@ -377,12 +377,12 @@ main(int argc, char *argv[])
 				continue;
 			}
 			srv->attach = ramfs_attach;
-			srv->read = ramfs_read;
-			srv->write = ramfs_write;
+			srv->read   = ramfs_read;
+			srv->write  = ramfs_write;
 			srv->create = ramfs_create;
-			srv->open = ramfs_open;
-			srv->walk = ramfs_walk;
-			srv->stat = ramfs_stat;
+			srv->open   = ramfs_open;
+			srv->walk   = ramfs_walk;
+			srv->stat   = ramfs_stat;
 			srv->remove = ramfs_remove;
 			srvrun(srv);
 			srvfree(srv);
@@ -392,9 +392,9 @@ main(int argc, char *argv[])
 	}
 	else
 	{
-		u64 infd = STDIN_FILENO;
+		u64 infd  = STDIN_FILENO;
 		u64 outfd = STDOUT_FILENO;
-		Srv *srv = srvalloc(arena, infd, outfd);
+		Srv *srv  = srvalloc(arena, infd, outfd);
 		if (srv == NULL)
 		{
 			fprintf(stderr, "ramfs: failed to allocate server\n");
@@ -402,12 +402,12 @@ main(int argc, char *argv[])
 			return 1;
 		}
 		srv->attach = ramfs_attach;
-		srv->read = ramfs_read;
-		srv->write = ramfs_write;
+		srv->read   = ramfs_read;
+		srv->write  = ramfs_write;
 		srv->create = ramfs_create;
-		srv->open = ramfs_open;
-		srv->walk = ramfs_walk;
-		srv->stat = ramfs_stat;
+		srv->open   = ramfs_open;
+		srv->walk   = ramfs_walk;
+		srv->stat   = ramfs_stat;
 		srv->remove = ramfs_remove;
 		srvrun(srv);
 		srvfree(srv);
