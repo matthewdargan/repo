@@ -315,30 +315,25 @@ ramfs_open(Req *r)
 	respond(r, str8_zero());
 }
 
-int
-main(int argc, char *argv[])
+static void
+entry_point(CmdLine *cmd_line)
 {
-	OS_SystemInfo *sysinfo           = os_get_system_info();
-	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo->page_size               = sysconf(_SC_PAGESIZE);
-	sysinfo->large_page_size         = 0x200000;
-	Arena *arena                     = arena_alloc();
-	String8List args                 = os_args(arena, argc, argv);
-	CmdLine parsed                   = cmd_line_from_string_list(arena, args);
-	String8 srvname                  = str8_zero();
-	String8 address                  = str8_zero();
-	if (cmd_line_has_argument(&parsed, str8_lit("s")))
+	Arena *arena    = arena_alloc();
+	String8 srvname = str8_zero();
+	String8 address = str8_zero();
+	if (cmd_line_has_argument(cmd_line, str8_lit("s")))
 	{
-		srvname = cmd_line_string(&parsed, str8_lit("s"));
+		srvname = cmd_line_string(cmd_line, str8_lit("s"));
 	}
-	if (cmd_line_has_argument(&parsed, str8_lit("a")))
+	if (cmd_line_has_argument(cmd_line, str8_lit("a")))
 	{
-		address = cmd_line_string(&parsed, str8_lit("a"));
+		address = cmd_line_string(cmd_line, str8_lit("a"));
 	}
 	if (srvname.size == 0 && address.size == 0)
 	{
 		fprintf(stderr, "usage: ramfs [-s srvname] [-a address]\n");
-		return 1;
+		arena_release(arena);
+		return;
 	}
 	if (address.size > 0)
 	{
@@ -347,7 +342,7 @@ main(int argc, char *argv[])
 		{
 			fprintf(stderr, "ramfs: failed to parse address '%.*s'\n", str8_varg(address));
 			arena_release(arena);
-			return 1;
+			return;
 		}
 		String8 portstr = str8f(arena, "%llu", na.port);
 		u64 listenfd    = socketlisten(portstr, NULL);
@@ -355,7 +350,7 @@ main(int argc, char *argv[])
 		{
 			fprintf(stderr, "ramfs: failed to listen on port %.*s\n", str8_varg(portstr));
 			arena_release(arena);
-			return 1;
+			return;
 		}
 		printf("ramfs: listening on %.*s (port %.*s)\n", str8_varg(address), str8_varg(portstr));
 		for (;;)
@@ -399,7 +394,7 @@ main(int argc, char *argv[])
 		{
 			fprintf(stderr, "ramfs: failed to allocate server\n");
 			arena_release(arena);
-			return 1;
+			return;
 		}
 		srv->attach = ramfs_attach;
 		srv->read   = ramfs_read;
@@ -413,5 +408,4 @@ main(int argc, char *argv[])
 		srvfree(srv);
 	}
 	arena_release(arena);
-	return 0;
 }

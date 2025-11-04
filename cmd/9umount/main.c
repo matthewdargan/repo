@@ -23,44 +23,35 @@ mountedby(Arena *a, String8 mntopts, String8 user)
 	return 0;
 }
 
-int
-main(int argc, char *argv[])
+static void
+entry_point(CmdLine *cmd_line)
 {
-	OS_SystemInfo *sysinfo           = os_get_system_info();
-	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo->page_size               = sysconf(_SC_PAGESIZE);
-	sysinfo->large_page_size         = 0x200000;
-	Arena *arena                     = arena_alloc();
-	String8List args                 = os_args(arena, argc, argv);
-	CmdLine parsed                   = cmd_line_from_string_list(arena, args);
-	if (parsed.inputs.node_count == 0)
+	Temp scratch = scratch_begin(NULL, 0);
+	if (cmd_line->inputs.node_count == 0)
 	{
 		fprintf(stderr, "usage: 9umount mtpt...\n");
-		return 1;
+		return;
 	}
 	uid_t uid         = getuid();
 	struct passwd *pw = getpwuid(uid);
 	if (pw == NULL)
 	{
 		fprintf(stderr, "9umount: unknown uid %d\n", uid);
-		return 1;
+		return;
 	}
-	int ret = 0;
-	for (String8Node *node = parsed.inputs.first; node != NULL; node = node->next)
+	for (String8Node *node = cmd_line->inputs.first; node != NULL; node = node->next)
 	{
 		String8 mtpt = node->string;
-		String8 path = os_full_path_from_path(arena, mtpt);
+		String8 path = os_full_path_from_path(scratch.arena, mtpt);
 		if (path.size == 0)
 		{
 			fprintf(stderr, "9umount: %.*s: %s\n", str8_varg(mtpt), strerror(errno));
-			ret = 1;
 			continue;
 		}
 		FILE *fp = setmntent("/proc/mounts", "r");
 		if (fp == NULL)
 		{
 			fprintf(stderr, "9umount: could not open /proc/mounts: %s\n", strerror(errno));
-			ret = 1;
 			break;
 		}
 		b32 ok = 0;
@@ -83,17 +74,14 @@ main(int argc, char *argv[])
 				if (!inhome && !str8_match(mnttype, str8_lit("9p"), 0))
 				{
 					fprintf(stderr, "9umount: %.*s: refusing to unmount non-9p fs\n", str8_varg(path));
-					ret = 1;
 				}
-				else if (!inhome && !mountedby(arena, mntopts, user))
+				else if (!inhome && !mountedby(scratch.arena, mntopts, user))
 				{
 					fprintf(stderr, "9umount: %.*s: not mounted by you\n", str8_varg(path));
-					ret = 1;
 				}
 				else if (umount(mnt->mnt_dir))
 				{
 					fprintf(stderr, "9umount: umount %.*s: %s\n", str8_varg(mntdir), strerror(errno));
-					ret = 1;
 				}
 				break;
 			}
@@ -102,9 +90,7 @@ main(int argc, char *argv[])
 		if (!ok)
 		{
 			fprintf(stderr, "9umount: %.*s not found in /proc/mounts\n", str8_varg(path));
-			ret = 1;
 		}
 	}
-	arena_release(arena);
-	return ret;
+	scratch_end(scratch);
 }

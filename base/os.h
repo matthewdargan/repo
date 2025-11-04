@@ -103,7 +103,4 @@ static DateTime os_universal_time_from_local(DateTime *local_time);
 static DateTime os_local_time_from_universal(DateTime *universal_time);
 static void os_sleep_milliseconds(u32 msec);
 
-// Process
-static String8List os_args(Arena *arena, int argc, char **argv);
-
 #endif  // OS_H

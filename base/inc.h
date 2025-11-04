@@ -6,10 +6,12 @@
 #include "core.h"
 #include "arena.h"
 #include "string.h"
+#include "thread_context.h"
 #include "command_line.h"
 #include "os.h"
 #include "socket.h"
 #include "json.h"
+#include "entry_point.h"
 // clang-format on
 
 #endif  // INC_H

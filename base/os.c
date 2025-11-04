@@ -481,15 +481,22 @@ os_sleep_milliseconds(u32 msec)
 	usleep(msec * 1000);
 }
 
-// Process
-static String8List
-os_args(Arena *arena, int argc, char **argv)
+// Entry Point
+int
+main(int argc, char **argv)
 {
-	String8List list = {0};
-	for (int i = 0; i < argc; i++)
+	// set up OS layer
 	{
-		String8 s = str8_cstring(argv[i]);
-		str8_list_push(arena, &list, s);
+		OS_SystemInfo *info           = os_get_system_info();
+		info->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
+		info->page_size               = sysconf(_SC_PAGESIZE);
+		info->large_page_size         = MB(2);
 	}
-	return list;
+
+	// set up thread context
+	TCTX *tctx = tctx_alloc();
+	tctx_select(tctx);
+
+	// call into base entry point
+	main_thread_base_entry_point(argc, argv);
 }

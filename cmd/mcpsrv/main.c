@@ -959,15 +959,11 @@ mcprequest(Arena *a, String8 line)
 	}
 }
 
-int
-main(void)
+static void
+entry_point(CmdLine *cmd_line)
 {
-	OS_SystemInfo *sysinfo           = os_get_system_info();
-	sysinfo->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
-	sysinfo->page_size               = sysconf(_SC_PAGESIZE);
-	sysinfo->large_page_size         = 0x200000;
-	Arena *arena                     = arena_alloc();
-	char line[8192]                  = {0};
+	Temp scratch    = scratch_begin(NULL, 0);
+	char line[8192] = {0};
 	while (fgets(line, sizeof(line), stdin))
 	{
 		size_t size = strlen(line);
@@ -977,10 +973,9 @@ main(void)
 			size--;
 		}
 		String8 input = str8((u8 *)line, size);
-		Temp temp     = temp_begin(arena);
-		mcprequest(arena, input);
+		Temp temp     = temp_begin(scratch.arena);
+		mcprequest(scratch.arena, input);
 		temp_end(temp);
 	}
-	arena_release(arena);
-	return 0;
+	scratch_end(scratch);
 }

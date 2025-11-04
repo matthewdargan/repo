@@ -11,6 +11,7 @@
 
 // Codebase Keywords
 #define read_only __attribute__((section(".rodata")))
+#define thread_static __thread
 
 // Units
 #define KB(n) (((u64)(n)) << 10)

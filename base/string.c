@@ -511,17 +511,7 @@ str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_
 static String8Node *
 str8_list_push_node(String8List *list, String8Node *node, String8 s)
 {
-	if (list->first == NULL)
-	{
-		list->first = node;
-		list->last  = node;
-	}
-	else
-	{
-		list->last->next = node;
-		list->last       = node;
-	}
-	node->next = NULL;
+	SLLQueuePush(list->first, list->last, node);
 	list->node_count++;
 	list->total_size += s.size;
 	node->string = s;
