@@ -33,14 +33,6 @@ struct String8Array
 	u64 count;
 };
 
-// Range Types
-typedef struct Rng1U64 Rng1U64;
-struct Rng1U64
-{
-	u64 min;
-	u64 max;
-};
-
 // String Matching/Splitting/Joining Types
 typedef u32 StringMatchFlags;
 enum
@@ -97,8 +89,6 @@ static String8 str8(u8 *str, u64 size);
 static String8 str8_range(u8 *first, u8 *one_past_last);
 static String8 str8_zero(void);
 static String8 str8_cstring(char *c);
-static Rng1U64 rng1u64(u64 min, u64 max);
-static u64 dim1u64(Rng1U64 range);
 
 // String Stylization
 static String8 upper_from_str8(Arena *arena, String8 string);

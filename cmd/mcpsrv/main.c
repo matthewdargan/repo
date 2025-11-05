@@ -55,7 +55,7 @@ extractfunctionsignature(Arena *a, String8 source, TSNode node)
 	{
 		return str8_zero();
 	}
-	String8 signature  = str8_substr(source, rng1u64(startbyte, endbyte));
+	String8 signature  = str8_substr(source, rng_1u64(startbyte, endbyte));
 	b32 foundopenbrace = 0;
 	u64 i              = 0;
 	for (; i < signature.size; i++)
@@ -307,7 +307,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 					u32 endbyte   = ts_node_end_byte(child);
 					if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 					{
-						String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+						String8 identifiertext = str8_substr(source, rng_1u64(startbyte, endbyte));
 						if (identifiertext.size > 0)
 						{
 							Symbol symbol = {.name      = str8_copy(a, identifiertext),
@@ -338,7 +338,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 				u32 endbyte        = ts_node_end_byte(structchild);
 				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
-					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+					String8 identifiertext = str8_substr(source, rng_1u64(startbyte, endbyte));
 					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
@@ -350,7 +350,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 						u32 endbyte   = ts_node_end_byte(node);
 						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 nodetext  = str8_substr(source, rng1u64(startbyte, endbyte));
+							String8 nodetext  = str8_substr(source, rng_1u64(startbyte, endbyte));
 							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
 							if (lines.first != NULL)
 							{
@@ -379,7 +379,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 				u32 endbyte        = ts_node_end_byte(enumchild);
 				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
-					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+					String8 identifiertext = str8_substr(source, rng_1u64(startbyte, endbyte));
 					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
@@ -391,7 +391,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 						u32 endbyte   = ts_node_end_byte(node);
 						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 nodetext  = str8_substr(source, rng1u64(startbyte, endbyte));
+							String8 nodetext  = str8_substr(source, rng_1u64(startbyte, endbyte));
 							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
 							if (lines.first != NULL)
 							{
@@ -419,7 +419,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 						u32 endbyte          = ts_node_end_byte(enumnamechild);
 						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+							String8 identifiertext = str8_substr(source, rng_1u64(startbyte, endbyte));
 							if (identifiertext.size > 0)
 							{
 								Symbol symbol = {0};
@@ -431,7 +431,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 								u32 endbyte   = ts_node_end_byte(enumlistchild);
 								if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 								{
-									String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
+									String8 nodetext = str8_substr(source, rng_1u64(startbyte, endbyte));
 									symbol.signature = cleansignature(a, nodetext);
 								}
 								symbollistpush(a, symbols, symbol);
@@ -457,7 +457,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 				u32 endbyte        = ts_node_end_byte(typedefchild);
 				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
-					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+					String8 identifiertext = str8_substr(source, rng_1u64(startbyte, endbyte));
 					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
@@ -469,7 +469,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 						u32 endbyte   = ts_node_end_byte(node);
 						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 nodetext  = str8_substr(source, rng1u64(startbyte, endbyte));
+							String8 nodetext  = str8_substr(source, rng_1u64(startbyte, endbyte));
 							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
 							if (lines.first != NULL)
 							{
@@ -498,7 +498,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 				u32 endbyte        = ts_node_end_byte(child);
 				if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 				{
-					String8 identifiertext = str8_substr(source, rng1u64(startbyte, endbyte));
+					String8 identifiertext = str8_substr(source, rng_1u64(startbyte, endbyte));
 					if (identifiertext.size > 0)
 					{
 						Symbol symbol = {0};
@@ -510,7 +510,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 						u32 endbyte   = ts_node_end_byte(node);
 						if (startbyte < source.size && endbyte <= source.size && endbyte > startbyte)
 						{
-							String8 nodetext = str8_substr(source, rng1u64(startbyte, endbyte));
+							String8 nodetext = str8_substr(source, rng_1u64(startbyte, endbyte));
 							symbol.signature = cleansignature(a, nodetext);
 						}
 						symbollistpush(a, symbols, symbol);
@@ -891,7 +891,7 @@ mcprequest(Arena *a, String8 line)
 				u64 idend = str8_find_needle(line, idstart, str8_lit("\""), 0);
 				if (idend < line.size)
 				{
-					requestid = str8_substr(line, rng1u64(idstart, idend));
+					requestid = str8_substr(line, rng_1u64(idstart, idend));
 				}
 			}
 			else
@@ -903,7 +903,7 @@ mcprequest(Arena *a, String8 line)
 				}
 				if (idend > idstart)
 				{
-					requestid = str8_substr(line, rng1u64(idstart, idend));
+					requestid = str8_substr(line, rng_1u64(idstart, idend));
 				}
 			}
 		}
@@ -925,7 +925,7 @@ mcprequest(Arena *a, String8 line)
 			u64 nameend = str8_find_needle(line, namestart, str8_lit("\""), 0);
 			if (nameend < line.size)
 			{
-				String8 toolname  = str8_substr(line, rng1u64(namestart, nameend));
+				String8 toolname  = str8_substr(line, rng_1u64(namestart, nameend));
 				u64 argsstart     = str8_find_needle(line, 0, str8_lit("\"arguments\":{"), 0);
 				String8 arguments = str8_zero();
 				if (argsstart < line.size)
@@ -949,7 +949,7 @@ mcprequest(Arena *a, String8 line)
 					{
 						if (argsend > argsstart)
 						{
-							arguments = str8_substr(line, rng1u64(argsstart, argsend - 1));
+							arguments = str8_substr(line, rng_1u64(argsstart, argsend - 1));
 						}
 					}
 				}

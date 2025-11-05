@@ -99,25 +99,6 @@ str8_cstring(char *c)
 	return s;
 }
 
-static Rng1U64
-rng1u64(u64 min, u64 max)
-{
-	Rng1U64 r = {.min = min, .max = max};
-	if (r.min > r.max)
-	{
-		u64 t = r.min;
-		r.min = r.max;
-		r.max = t;
-	}
-	return r;
-}
-
-static u64
-dim1u64(Rng1U64 range)
-{
-	return range.max > range.min ? (range.max - range.min) : 0;
-}
-
 // String Stylization
 static String8
 upper_from_str8(Arena *arena, String8 string)
@@ -235,7 +216,7 @@ str8_substr(String8 str, Rng1U64 range)
 	range.min = Min(range.min, str.size);
 	range.max = Min(range.max, str.size);
 	str.str += range.min;
-	str.size = dim1u64(range);
+	str.size = dim_1u64(range);
 	return str;
 }
 

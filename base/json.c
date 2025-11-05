@@ -80,7 +80,7 @@ static Jsonvalue
 jsonparsenull(String8 text, u64 *pos)
 {
 	Jsonvalue result = {0};
-	if (*pos + 4 <= text.size && str8_match(str8_substr(text, rng1u64(*pos, *pos + 4)), str8_lit("null"), 0))
+	if (*pos + 4 <= text.size && str8_match(str8_substr(text, rng_1u64(*pos, *pos + 4)), str8_lit("null"), 0))
 	{
 		result.type = JSON_NULL;
 		*pos += 4;
@@ -92,13 +92,13 @@ static Jsonvalue
 jsonparsebool(String8 text, u64 *pos)
 {
 	Jsonvalue result = {0};
-	if (*pos + 4 <= text.size && str8_match(str8_substr(text, rng1u64(*pos, *pos + 4)), str8_lit("true"), 0))
+	if (*pos + 4 <= text.size && str8_match(str8_substr(text, rng_1u64(*pos, *pos + 4)), str8_lit("true"), 0))
 	{
 		result.type = JSON_BOOL;
 		result.bool = 1;
 		*pos += 4;
 	}
-	else if (*pos + 5 <= text.size && str8_match(str8_substr(text, rng1u64(*pos, *pos + 5)), str8_lit("false"), 0))
+	else if (*pos + 5 <= text.size && str8_match(str8_substr(text, rng_1u64(*pos, *pos + 5)), str8_lit("false"), 0))
 	{
 		result.type = JSON_BOOL;
 		result.bool = 0;
@@ -134,7 +134,7 @@ jsonparsestring(Arena *a, String8 text, u64 *pos)
 	}
 	u64 end = *pos;
 	(*pos)++;
-	String8 unescaped = str8_substr(text, rng1u64(start, end));
+	String8 unescaped = str8_substr(text, rng_1u64(start, end));
 	u8 *dst           = push_array(a, u8, unescaped.size);
 	u64 dstpos        = 0;
 	for (u64 i = 0; i < unescaped.size; i++)
@@ -235,7 +235,7 @@ jsonparsenumber(Arena *a, String8 text, u64 *pos)
 		}
 	}
 	u64 end        = *pos;
-	String8 numstr = str8_substr(text, rng1u64(start, end));
+	String8 numstr = str8_substr(text, rng_1u64(start, end));
 	char *numcstr  = (char *)push_array(a, u8, numstr.size + 1);
 	memcpy(numcstr, numstr.str, numstr.size);
 	numcstr[numstr.size] = '\0';

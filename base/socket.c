@@ -481,7 +481,7 @@ socketreadhttp(Arena *a, u64 fd)
 		u64 end   = str8_find_needle(hdr, start, str8_lit("\r\n"), 0);
 		if (end < hdr.size)
 		{
-			String8 lenstr = str8_substr(hdr, rng1u64(start, end));
+			String8 lenstr = str8_substr(hdr, rng_1u64(start, end));
 			try_u64_from_str8(lenstr, &bodylen);
 		}
 	}

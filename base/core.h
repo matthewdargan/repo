@@ -98,6 +98,13 @@ void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
 #define AlignPow2(x, b) (((x) + (b) - 1) & (~((b) - 1)))
 #define Glue_(A, B) A##B
 #define Glue(A, B) Glue_(A, B)
+#define Swap(T, a, b) \
+	do                  \
+	{                   \
+		T t__ = a;        \
+		a     = b;        \
+		b     = t__;      \
+	} while (0)
 
 // Base Types
 typedef uint8_t u8;

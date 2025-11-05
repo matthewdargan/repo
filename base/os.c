@@ -18,7 +18,7 @@ os_data_from_file_path(Arena *arena, String8 path)
 {
 	OS_Handle file          = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
 	OS_FileProperties props = os_properties_from_file(file);
-	String8 data            = os_string_from_file_range(arena, file, rng1u64(0, props.size));
+	String8 data            = os_string_from_file_range(arena, file, rng_1u64(0, props.size));
 	os_file_close(file);
 	return data;
 }
@@ -30,7 +30,7 @@ os_write_data_to_file_path(String8 path, String8 data)
 	OS_Handle file = os_file_open(OS_AccessFlag_Write, path);
 	if (!os_handle_match(file, os_handle_zero()))
 	{
-		u64 bytes_written = os_file_write(file, rng1u64(0, data.size), data.str);
+		u64 bytes_written = os_file_write(file, rng_1u64(0, data.size), data.str);
 		good              = (bytes_written == data.size);
 		os_file_close(file);
 	}
@@ -47,7 +47,7 @@ os_append_data_to_file_path(String8 path, String8 data)
 		if (!os_handle_match(file, os_handle_zero()))
 		{
 			u64 pos           = os_properties_from_file(file).size;
-			u64 bytes_written = os_file_write(file, rng1u64(pos, pos + data.size), data.str);
+			u64 bytes_written = os_file_write(file, rng_1u64(pos, pos + data.size), data.str);
 			good              = (bytes_written == data.size);
 			os_file_close(file);
 		}
@@ -60,7 +60,7 @@ os_string_from_file_range(Arena *arena, OS_Handle file, Rng1U64 range)
 {
 	u64 pre_pos = arena_pos(arena);
 	String8 result;
-	result.size          = dim1u64(range);
+	result.size          = dim_1u64(range);
 	result.str           = push_array_no_zero(arena, u8, result.size);
 	u64 actual_read_size = os_file_read(file, range, result.str);
 	if (actual_read_size < result.size)
@@ -253,7 +253,7 @@ os_file_read(OS_Handle file, Rng1U64 rng, void *out_data)
 		return 0;
 	}
 	int fd                           = (int)file.u64[0];
-	u64 total_num_bytes_to_read      = dim1u64(rng);
+	u64 total_num_bytes_to_read      = dim_1u64(rng);
 	u64 total_num_bytes_read         = 0;
 	u64 total_num_bytes_left_to_read = total_num_bytes_to_read;
 	for (; total_num_bytes_left_to_read > 0;)
@@ -281,7 +281,7 @@ os_file_write(OS_Handle file, Rng1U64 rng, void *data)
 		return 0;
 	}
 	int fd                            = (int)file.u64[0];
-	u64 total_num_bytes_to_write      = dim1u64(rng);
+	u64 total_num_bytes_to_write      = dim_1u64(rng);
 	u64 total_num_bytes_written       = 0;
 	u64 total_num_bytes_left_to_write = total_num_bytes_to_write;
 	for (; total_num_bytes_left_to_write > 0;)

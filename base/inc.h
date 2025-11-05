@@ -5,6 +5,7 @@
 // clang-format off
 #include "core.h"
 #include "arena.h"
+#include "math.h"
 #include "string.h"
 #include "thread_context.h"
 #include "command_line.h"
