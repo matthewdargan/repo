@@ -33,7 +33,6 @@ This is a systems programming monorepo implemented in C99 (ISO/IEC 9899:1999) wi
 - **`command_line.c/h`** - Command-line parsing
 - **`os.c/h`** - OS operations
 - **`socket.c/h`** - Network operations
-- **`json.c/h`** - JSON parsing and generation
 - **`log.c/h`** - Logging operations
 - **`entry_point.c/h`** - Program entry point abstraction
 
@@ -42,7 +41,6 @@ This is a systems programming monorepo implemented in C99 (ISO/IEC 9899:1999) wi
 - `9bind/`, `9mount/`, `9umount/` - 9P utilities
 - `9p/` - 9P protocol tool
 - `ramfs/` - 9P server
-- `mcpsrv/` - MCP server
 
 ### `9p/` - 9P Protocol
 

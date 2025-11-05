@@ -8,7 +8,6 @@
 #include "command_line.c"
 #include "os.c"
 #include "socket.c"
-#include "json.c"
 #include "log.c"
 #include "entry_point.c"
 // clang-format on

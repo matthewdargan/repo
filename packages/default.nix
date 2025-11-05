@@ -5,7 +5,6 @@
     ./9p.nix
     ./9umount.nix
     ./installer-image.nix
-    ./mcpsrv.nix
     ./neovim.nix
     ./ramfs.nix
   ];
