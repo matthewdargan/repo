@@ -80,7 +80,7 @@ extractfunctionsignature(Arena *a, String8 source, TSNode node)
 static b32
 symbolexists(SymbolList *list, Symbol symbol)
 {
-	for (SymbolNode *node = list->first; node != NULL; node = node->next)
+	for (SymbolNode *node = list->first; node != 0; node = node->next)
 	{
 		if (str8_match(node->symbol.name, symbol.name, 0) && str8_match(node->symbol.type, symbol.type, 0) &&
 		    str8_match(node->symbol.file, symbol.file, 0) && node->symbol.line == symbol.line)
@@ -99,8 +99,8 @@ symbollistpush(Arena *a, SymbolList *list, Symbol symbol)
 		return;
 	}
 	SymbolNode *node = push_array(a, SymbolNode, 1);
-	*node            = (SymbolNode){.symbol = symbol, .next = NULL};
-	if (list->last == NULL)
+	*node            = (SymbolNode){.symbol = symbol, .next = 0};
+	if (list->last == 0)
 	{
 		list->first = node;
 		list->last  = node;
@@ -120,12 +120,12 @@ listcfiles(Arena *a, String8 dirpath)
 	String8List files   = {0};
 	String8 dirpathcpy  = str8_copy(a, dirpath);
 	DIR *dp             = opendir((char *)dirpathcpy.str);
-	if (dp == NULL)
+	if (dp == 0)
 	{
 		return result;
 	}
-	struct dirent *entry = NULL;
-	while ((entry = readdir(dp)) != NULL)
+	struct dirent *entry = 0;
+	while ((entry = readdir(dp)) != 0)
 	{
 		if (entry->d_type != DT_REG)
 		{
@@ -135,7 +135,7 @@ listcfiles(Arena *a, String8 dirpath)
 		String8 ext  = str8_skip_last_dot(name);
 		if (!str8_match(ext, str8_lit(".c"), 0) || !str8_match(ext, str8_lit(".h"), 0))
 		{
-			String8 fullpath = str8f(a, "%.*s/%.*s", str8_varg(dirpath), str8_varg(name));
+			String8 fullpath = str8f(a, "%S/%S", dirpath, name);
 			str8_list_push(a, &files, fullpath);
 		}
 	}
@@ -146,7 +146,7 @@ listcfiles(Arena *a, String8 dirpath)
 	}
 	result.v = push_array(a, String8, files.node_count);
 	u64 i    = 0;
-	for (String8Node *node = files.first; node != NULL; node = node->next)
+	for (String8Node *node = files.first; node != 0; node = node->next)
 	{
 		result.v[i++] = node->string;
 	}
@@ -173,7 +173,7 @@ symbolresult(Arena *a, Jsonbuilder *b, SymbolList *symbols)
 	jsonbobjkey(&textbuilder, str8_lit("symbols"));
 	jsonbarrstart(&textbuilder);
 
-	for (SymbolNode *node = symbols->first; node != NULL; node = node->next)
+	for (SymbolNode *node = symbols->first; node != 0; node = node->next)
 	{
 		Symbol *sym = &node->symbol;
 		if (node != symbols->first)
@@ -352,7 +352,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 						{
 							String8 nodetext  = str8_substr(source, rng_1u64(startbyte, endbyte));
 							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
-							if (lines.first != NULL)
+							if (lines.first != 0)
 							{
 								symbol.signature = str8_copy(a, lines.first->string);
 							}
@@ -393,7 +393,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 						{
 							String8 nodetext  = str8_substr(source, rng_1u64(startbyte, endbyte));
 							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
-							if (lines.first != NULL)
+							if (lines.first != 0)
 							{
 								symbol.signature = str8_copy(a, lines.first->string);
 							}
@@ -471,7 +471,7 @@ extractsymbolsfromnode(Arena *a, SymbolList *symbols, TSNode node, String8 filep
 						{
 							String8 nodetext  = str8_substr(source, rng_1u64(startbyte, endbyte));
 							String8List lines = str8_split(a, nodetext, (u8 *)"\n", 1, 0);
-							if (lines.first != NULL)
+							if (lines.first != 0)
 							{
 								symbol.signature = str8_copy(a, lines.first->string);
 							}
@@ -540,10 +540,10 @@ parsecfiletreesitter(Arena *a, String8 filepath, String8 source)
 		return symbols;
 	}
 	char *sourcecstr = (char *)push_array(a, u8, source.size + 1);
-	memcpy(sourcecstr, source.str, source.size);
+	MemoryCopy(sourcecstr, source.str, source.size);
 	sourcecstr[source.size] = '\0';
-	TSTree *tree            = ts_parser_parse_string(parser, NULL, sourcecstr, source.size);
-	if (tree == NULL)
+	TSTree *tree            = ts_parser_parse_string(parser, 0, sourcecstr, source.size);
+	if (tree == 0)
 	{
 		fprintf(stderr, "mcpsrv: failed to parse source file '%.*s'\n", str8_varg(filepath));
 		ts_parser_delete(parser);
@@ -567,7 +567,7 @@ symbolsearch(Arena *a, String8 pattern)
 		for (u64 i = 0; i < files.count; i++)
 		{
 			String8 source = os_data_from_file_path(a, files.v[i]);
-			if (source.size > 0 && source.str != NULL)
+			if (source.size > 0 && source.str != 0)
 			{
 				SymbolList filesymbols = parsecfiletreesitter(a, files.v[i], source);
 				if (filesymbols.count == 0)
@@ -576,7 +576,7 @@ symbolsearch(Arena *a, String8 pattern)
 				}
 				else
 				{
-					for (SymbolNode *symnode = filesymbols.first; symnode != NULL; symnode = symnode->next)
+					for (SymbolNode *symnode = filesymbols.first; symnode != 0; symnode = symnode->next)
 					{
 						symbollistpush(a, &allsymbols, symnode->symbol);
 					}
@@ -584,7 +584,7 @@ symbolsearch(Arena *a, String8 pattern)
 			}
 		}
 	}
-	for (SymbolNode *node = allsymbols.first; node != NULL; node = node->next)
+	for (SymbolNode *node = allsymbols.first; node != 0; node = node->next)
 	{
 		Symbol *sym = &node->symbol;
 		if (pattern.size == 0 ||
@@ -761,12 +761,12 @@ symbolinfo(Arena *a, String8 symbolname)
 		for (u64 i = 0; i < files.count; i++)
 		{
 			String8 source = os_data_from_file_path(a, files.v[i]);
-			if (source.size > 0 && source.str != NULL)
+			if (source.size > 0 && source.str != 0)
 			{
 				SymbolList filesymbols = parsecfiletreesitter(a, files.v[i], source);
 				if (filesymbols.count > 0)
 				{
-					for (SymbolNode *symnode = filesymbols.first; symnode != NULL; symnode = symnode->next)
+					for (SymbolNode *symnode = filesymbols.first; symnode != 0; symnode = symnode->next)
 					{
 						symbollistpush(a, &allsymbols, symnode->symbol);
 					}
@@ -774,7 +774,7 @@ symbolinfo(Arena *a, String8 symbolname)
 			}
 		}
 	}
-	for (SymbolNode *node = allsymbols.first; node != NULL; node = node->next)
+	for (SymbolNode *node = allsymbols.first; node != 0; node = node->next)
 	{
 		Symbol *sym = &node->symbol;
 		if (str8_match(sym->name, symbolname, 0))
@@ -793,7 +793,7 @@ filesymbols(Arena *a, String8 filepath)
 {
 	SymbolList symbols = {0};
 	String8 source     = os_data_from_file_path(a, filepath);
-	if (source.size == 0 || source.str == NULL)
+	if (source.size == 0 || source.str == 0)
 	{
 		Jsonbuilder b = jsonbuilder(a, 512);
 		jsonbobjstart(&b);
@@ -871,7 +871,7 @@ toolcall(Arena *a, String8 requestid, String8 toolname, String8 arguments)
 	}
 	else
 	{
-		printmcperror(a, requestid, -32601, str8f(a, "Unknown tool: %.*s", str8_varg(toolname)));
+		printmcperror(a, requestid, -32601, str8f(a, "Unknown tool: %S", toolname));
 	}
 }
 
@@ -962,7 +962,7 @@ mcprequest(Arena *a, String8 line)
 static void
 entry_point(CmdLine *cmd_line)
 {
-	Temp scratch    = scratch_begin(NULL, 0);
+	Temp scratch    = scratch_begin(0, 0);
 	char line[8192] = {0};
 	while (fgets(line, sizeof(line), stdin))
 	{

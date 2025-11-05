@@ -12,6 +12,7 @@
 #include "os.h"
 #include "socket.h"
 #include "json.h"
+#include "log.h"
 #include "entry_point.h"
 // clang-format on
 

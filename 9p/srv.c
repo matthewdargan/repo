@@ -2,19 +2,19 @@ static void
 setfcallerror(Fcall *f, String8 err)
 {
 	f->ename = err;
-	f->type = Rerror;
+	f->type  = Rerror;
 }
 
 static void
 changemsize(Srv *srv, u32 msize)
 {
-	if (srv->rbuf != NULL && srv->wbuf != NULL && srv->msize == msize)
+	if (srv->rbuf != 0 && srv->wbuf != 0 && srv->msize == msize)
 	{
 		return;
 	}
 	srv->msize = msize;
-	srv->rbuf = push_array(srv->arena, u8, msize);
-	srv->wbuf = push_array(srv->arena, u8, msize);
+	srv->rbuf  = push_array(srv->arena, u8, msize);
+	srv->wbuf  = push_array(srv->arena, u8, msize);
 }
 
 static Req *
@@ -23,31 +23,31 @@ getreq(Srv *srv)
 	String8 msg = read9pmsg(srv->arena, srv->infd);
 	if (msg.size <= 0)
 	{
-		return NULL;
+		return 0;
 	}
 	Fcall f = fcalldecode(msg);
 	if (f.type == 0)
 	{
-		return NULL;
+		return 0;
 	}
 	Req *r = allocreq(srv, f.tag);
-	if (r == NULL)
+	if (r == 0)
 	{
-		r = push_array(srv->arena, Req, 1);
-		r->tag = f.tag;
-		r->ifcall = f;
-		r->error = Eduptag;
-		r->buf = msg.str;
+		r            = push_array(srv->arena, Req, 1);
+		r->tag       = f.tag;
+		r->ifcall    = f;
+		r->error     = Eduptag;
+		r->buf       = msg.str;
 		r->responded = 0;
-		r->srv = srv;
+		r->srv       = srv;
 		// TODO: logging
 		return r;
 	}
-	r->srv = srv;
+	r->srv       = srv;
 	r->responded = 0;
-	r->buf = msg.str;
-	r->ifcall = f;
-	r->ofcall = (Fcall){0};
+	r->buf       = msg.str;
+	r->ifcall    = f;
+	r->ofcall    = (Fcall){0};
 	// TODO: logging
 	return r;
 }
@@ -62,7 +62,7 @@ sversion(Srv *srv, Req *r)
 		return;
 	}
 	r->ofcall.version = version9p;
-	r->ofcall.msize = r->ifcall.msize;
+	r->ofcall.msize   = r->ifcall.msize;
 	respond(r, str8_zero());
 }
 
@@ -80,12 +80,12 @@ static void
 sauth(Srv *srv, Req *r)
 {
 	r->afid = allocfid(srv, r->ifcall.afid);
-	if (r->afid == NULL)
+	if (r->afid == 0)
 	{
 		respond(r, Edupfid);
 		return;
 	}
-	if (srv->auth != NULL)
+	if (srv->auth != 0)
 	{
 		srv->auth(r);
 	}
@@ -99,7 +99,7 @@ sauth(Srv *srv, Req *r)
 static void
 rauth(Req *r, String8 err)
 {
-	if (err.size > 0 && r->afid != NULL)
+	if (err.size > 0 && r->afid != 0)
 	{
 		closefid(removefid(r->srv, r->afid->fid));
 	}
@@ -109,23 +109,23 @@ static void
 sattach(Srv *srv, Req *r)
 {
 	r->fid = allocfid(srv, r->ifcall.fid);
-	if (r->fid == NULL)
+	if (r->fid == 0)
 	{
 		respond(r, Edupfid);
 		return;
 	}
-	r->afid = NULL;
+	r->afid = 0;
 	if (r->ifcall.afid != NOFID)
 	{
 		r->afid = lookupfid(srv, r->ifcall.afid);
-		if (r->afid == NULL)
+		if (r->afid == 0)
 		{
 			respond(r, Eunknownfid);
 			return;
 		}
 	}
 	r->fid->uid = str8_copy(srv->arena, r->ifcall.uname);
-	if (srv->attach != NULL)
+	if (srv->attach != 0)
 	{
 		srv->attach(r);
 	}
@@ -138,7 +138,7 @@ sattach(Srv *srv, Req *r)
 static void
 rattach(Req *r, String8 err)
 {
-	if (err.size > 0 && r->fid != NULL)
+	if (err.size > 0 && r->fid != 0)
 	{
 		closefid(removefid(r->srv, r->fid->fid));
 	}
@@ -148,11 +148,11 @@ static void
 sflush(Srv *srv, Req *r)
 {
 	r->oldreq = lookupreq(srv, r->ifcall.oldtag);
-	if (r->oldreq == NULL || r->oldreq == r)
+	if (r->oldreq == 0 || r->oldreq == r)
 	{
 		respond(r, str8_zero());
 	}
-	else if (srv->flush != NULL)
+	else if (srv->flush != 0)
 	{
 		srv->flush(r);
 	}
@@ -170,17 +170,17 @@ rflush(Req *r, String8 err)
 		return 0;
 	}
 	Req *or = r->oldreq;
-	if (or != NULL)
+	if (or != 0)
 	{
 		if (or->responded == 0)
 		{
-			or->flush = push_array(r->srv->arena, Req *, or->nflush + 1);
+			or->flush               = push_array(r->srv->arena, Req *, or->nflush + 1);
 			or->flush[or->nflush++] = r;
 			return 1;
 		}
 		closereq(or);
 	}
-	r->oldreq = NULL;
+	r->oldreq = 0;
 	return 0;
 }
 
@@ -188,7 +188,7 @@ static void
 swalk(Srv *srv, Req *r)
 {
 	r->fid = lookupfid(srv, r->ifcall.fid);
-	if (r->fid == NULL)
+	if (r->fid == 0)
 	{
 		respond(r, Eunknownfid);
 		return;
@@ -206,7 +206,7 @@ swalk(Srv *srv, Req *r)
 	if (r->ifcall.fid != r->ifcall.newfid)
 	{
 		r->newfid = allocfid(srv, r->ifcall.newfid);
-		if (r->newfid == NULL)
+		if (r->newfid == 0)
 		{
 			respond(r, Edupfid);
 			return;
@@ -217,7 +217,7 @@ swalk(Srv *srv, Req *r)
 	{
 		r->newfid = r->fid;
 	}
-	if (srv->walk != NULL)
+	if (srv->walk != 0)
 	{
 		srv->walk(r);
 	}
@@ -232,7 +232,7 @@ rwalk(Req *r, String8 err)
 {
 	if (err.size > 0 || r->ofcall.nwqid < r->ifcall.nwname)
 	{
-		if (r->ifcall.fid != r->ifcall.newfid && r->newfid != NULL)
+		if (r->ifcall.fid != r->ifcall.newfid && r->newfid != 0)
 		{
 			closefid(removefid(r->srv, r->newfid->fid));
 		}
@@ -265,7 +265,7 @@ static void
 sopen(Srv *srv, Req *r)
 {
 	r->fid = lookupfid(srv, r->ifcall.fid);
-	if (r->fid == NULL)
+	if (r->fid == 0)
 	{
 		respond(r, Eunknownfid);
 		return;
@@ -281,7 +281,7 @@ sopen(Srv *srv, Req *r)
 		return;
 	}
 	r->ofcall.qid = r->fid->qid;
-	u32 p = 0;
+	u32 p         = 0;
 	switch (r->ifcall.mode & 3)
 	{
 		case OREAD:
@@ -319,7 +319,7 @@ sopen(Srv *srv, Req *r)
 		respond(r, Eperm);
 		return;
 	}
-	if (srv->open != NULL)
+	if (srv->open != 0)
 	{
 		srv->open(r);
 	}
@@ -337,7 +337,7 @@ ropen(Req *r, String8 err)
 		return;
 	}
 	r->fid->omode = r->ifcall.mode;
-	r->fid->qid = r->ofcall.qid;
+	r->fid->qid   = r->ofcall.qid;
 	if (r->ofcall.qid.type & QTDIR)
 	{
 		r->fid->offset = 0;
@@ -348,7 +348,7 @@ static void
 screate(Srv *srv, Req *r)
 {
 	r->fid = lookupfid(srv, r->ifcall.fid);
-	if (r->fid == NULL)
+	if (r->fid == 0)
 	{
 		respond(r, Eunknownfid);
 	}
@@ -360,7 +360,7 @@ screate(Srv *srv, Req *r)
 	{
 		respond(r, Ecreatenondir);
 	}
-	else if (srv->create != NULL)
+	else if (srv->create != 0)
 	{
 		srv->create(r);
 	}
@@ -378,14 +378,14 @@ rcreate(Req *r, String8 err)
 		return;
 	}
 	r->fid->omode = r->ifcall.mode;
-	r->fid->qid = r->ofcall.qid;
+	r->fid->qid   = r->ofcall.qid;
 }
 
 static void
 sread(Srv *srv, Req *r)
 {
 	r->fid = lookupfid(srv, r->ifcall.fid);
-	if (r->fid == NULL)
+	if (r->fid == 0)
 	{
 		respond(r, Eunknownfid);
 		return;
@@ -405,15 +405,15 @@ sread(Srv *srv, Req *r)
 	{
 		r->ifcall.count = srv->msize - IOHDRSZ;
 	}
-	r->rbuf = push_array(srv->arena, u8, r->ifcall.count);
+	r->rbuf        = push_array(srv->arena, u8, r->ifcall.count);
 	r->ofcall.data = str8(r->rbuf, 0);
-	u32 o = r->fid->omode & 3;
+	u32 o          = r->fid->omode & 3;
 	if (o != OREAD && o != ORDWR && o != OEXEC)
 	{
 		respond(r, Ebotch);
 		return;
 	}
-	if (srv->read != NULL)
+	if (srv->read != 0)
 	{
 		srv->read(r);
 	}
@@ -436,7 +436,7 @@ static void
 swrite(Srv *srv, Req *r)
 {
 	r->fid = lookupfid(srv, r->ifcall.fid);
-	if (r->fid == NULL)
+	if (r->fid == 0)
 	{
 		respond(r, Eunknownfid);
 		return;
@@ -462,7 +462,7 @@ swrite(Srv *srv, Req *r)
 		respond(r, err);
 		return;
 	}
-	if (srv->write != NULL)
+	if (srv->write != 0)
 	{
 		srv->write(r);
 	}
@@ -485,7 +485,7 @@ static void
 sclunk(Srv *srv, Req *r)
 {
 	r->fid = removefid(srv, r->ifcall.fid);
-	if (r->fid == NULL)
+	if (r->fid == 0)
 	{
 		respond(r, Eunknownfid);
 	}
@@ -506,12 +506,12 @@ static void
 sremove(Srv *srv, Req *r)
 {
 	r->fid = removefid(srv, r->ifcall.fid);
-	if (r->fid == NULL)
+	if (r->fid == 0)
 	{
 		respond(r, Eunknownfid);
 		return;
 	}
-	if (srv->remove != NULL)
+	if (srv->remove != 0)
 	{
 		srv->remove(r);
 	}
@@ -532,12 +532,12 @@ static void
 sstat(Srv *srv, Req *r)
 {
 	r->fid = lookupfid(srv, r->ifcall.fid);
-	if (r->fid == NULL)
+	if (r->fid == 0)
 	{
 		respond(r, Eunknownfid);
 		return;
 	}
-	if (srv->stat != NULL)
+	if (srv->stat != 0)
 	{
 		srv->stat(r);
 	}
@@ -558,12 +558,12 @@ static void
 swstat(Srv *srv, Req *r)
 {
 	r->fid = lookupfid(srv, r->ifcall.fid);
-	if (r->fid == NULL)
+	if (r->fid == 0)
 	{
 		respond(r, Eunknownfid);
 		return;
 	}
-	if (srv->wstat == NULL)
+	if (srv->wstat == 0)
 	{
 		respond(r, Enowstat);
 		return;
@@ -581,15 +581,15 @@ rwstat(Req *r, String8 err)
 Srv *
 srvalloc(Arena *a, u64 infd, u64 outfd)
 {
-	Srv *srv = push_array(a, Srv, 1);
-	srv->arena = a;
-	srv->infd = infd;
-	srv->outfd = outfd;
-	srv->msize = 8192 + IOHDRSZ;
-	srv->maxfid = 256;
-	srv->maxreq = 256;
-	srv->fidtab = push_array(a, Fid *, srv->maxfid);
-	srv->reqtab = push_array(a, Req *, srv->maxreq);
+	Srv *srv     = push_array(a, Srv, 1);
+	srv->arena   = a;
+	srv->infd    = infd;
+	srv->outfd   = outfd;
+	srv->msize   = 8192 + IOHDRSZ;
+	srv->maxfid  = 256;
+	srv->maxreq  = 256;
+	srv->fidtab  = push_array(a, Fid *, srv->maxfid);
+	srv->reqtab  = push_array(a, Req *, srv->maxreq);
 	srv->nexttag = 1;
 	changemsize(srv, srv->msize);
 	return srv;
@@ -600,14 +600,14 @@ srvfree(Srv *srv)
 {
 	for (u32 i = 0; i < srv->maxfid; i++)
 	{
-		if (srv->fidtab[i] != NULL)
+		if (srv->fidtab[i] != 0)
 		{
 			closefid(srv->fidtab[i]);
 		}
 	}
 	for (u32 i = 0; i < srv->maxreq; i++)
 	{
-		if (srv->reqtab[i] != NULL)
+		if (srv->reqtab[i] != 0)
 		{
 			closereq(srv->reqtab[i]);
 		}
@@ -617,14 +617,14 @@ srvfree(Srv *srv)
 void
 srvrun(Srv *srv)
 {
-	if (srv->start != NULL)
+	if (srv->start != 0)
 	{
 		srv->start(srv);
 	}
 	for (;;)
 	{
 		Req *r = getreq(srv);
-		if (r == NULL)
+		if (r == 0)
 		{
 			break;
 		}
@@ -707,7 +707,7 @@ srvrun(Srv *srv)
 			break;
 		}
 	}
-	if (srv->end != NULL)
+	if (srv->end != 0)
 	{
 		srv->end(srv);
 	}
@@ -722,7 +722,7 @@ respond(Req *r, String8 err)
 		goto free;
 	}
 	r->responded = 1;
-	r->error = err;
+	r->error     = err;
 	switch (r->ifcall.type)
 	{
 		case Tflush:
@@ -796,7 +796,7 @@ respond(Req *r, String8 err)
 		default:
 			break;
 	}
-	r->ofcall.tag = r->ifcall.tag;
+	r->ofcall.tag  = r->ifcall.tag;
 	r->ofcall.type = r->ifcall.type + 1;
 	if (r->error.size > 0)
 	{
@@ -820,7 +820,7 @@ respond(Req *r, String8 err)
 free:
 	for (u32 i = 0; i < r->nflush; i++)
 	{
-		r->flush[i]->oldreq = NULL;
+		r->flush[i]->oldreq = 0;
 		respond(r->flush[i], str8_zero());
 	}
 	closereq(r);
@@ -832,12 +832,12 @@ allocfid(Srv *srv, u32 fid)
 	u32 hash = fid % srv->maxfid;
 	if (srv->fidtab[hash])
 	{
-		return NULL;
+		return 0;
 	}
-	Fid *f = push_array(srv->arena, Fid, 1);
-	f->fid = fid;
-	f->omode = ~0U;
-	f->srv = srv;
+	Fid *f            = push_array(srv->arena, Fid, 1);
+	f->fid            = fid;
+	f->omode          = ~0U;
+	f->srv            = srv;
 	srv->fidtab[hash] = f;
 	srv->nfid++;
 	return f;
@@ -847,32 +847,32 @@ Fid *
 lookupfid(Srv *srv, u32 fid)
 {
 	u32 hash = fid % srv->maxfid;
-	Fid *f = srv->fidtab[hash];
+	Fid *f   = srv->fidtab[hash];
 	if (f && f->fid == fid)
 	{
 		return f;
 	}
-	return NULL;
+	return 0;
 }
 
 Fid *
 removefid(Srv *srv, u32 fid)
 {
 	u32 hash = fid % srv->maxfid;
-	Fid *f = srv->fidtab[hash];
+	Fid *f   = srv->fidtab[hash];
 	if (f && f->fid == fid)
 	{
-		srv->fidtab[hash] = NULL;
+		srv->fidtab[hash] = 0;
 		srv->nfid--;
 		return f;
 	}
-	return NULL;
+	return 0;
 }
 
 void
 closefid(Fid *fid)
 {
-	if (fid->srv->destroyfid != NULL)
+	if (fid->srv->destroyfid != 0)
 	{
 		fid->srv->destroyfid(fid);
 	}
@@ -884,11 +884,11 @@ allocreq(Srv *srv, u32 tag)
 	u32 hash = tag % srv->maxreq;
 	if (srv->reqtab[hash])
 	{
-		return NULL;
+		return 0;
 	}
-	Req *r = push_array(srv->arena, Req, 1);
-	r->tag = tag;
-	r->srv = srv;
+	Req *r            = push_array(srv->arena, Req, 1);
+	r->tag            = tag;
+	r->srv            = srv;
 	srv->reqtab[hash] = r;
 	srv->nreq++;
 	return r;
@@ -898,32 +898,32 @@ Req *
 lookupreq(Srv *srv, u32 tag)
 {
 	u32 hash = tag % srv->maxreq;
-	Req *r = srv->reqtab[hash];
+	Req *r   = srv->reqtab[hash];
 	if (r && r->tag == tag)
 	{
 		return r;
 	}
-	return NULL;
+	return 0;
 }
 
 Req *
 removereq(Srv *srv, u32 tag)
 {
 	u32 hash = tag % srv->maxreq;
-	Req *r = srv->reqtab[hash];
+	Req *r   = srv->reqtab[hash];
 	if (r && r->tag == tag)
 	{
-		srv->reqtab[hash] = NULL;
+		srv->reqtab[hash] = 0;
 		srv->nreq--;
 		return r;
 	}
-	return NULL;
+	return 0;
 }
 
 void
 closereq(Req *req)
 {
-	if (req->srv->destroyreq != NULL)
+	if (req->srv->destroyreq != 0)
 	{
 		req->srv->destroyreq(req);
 	}

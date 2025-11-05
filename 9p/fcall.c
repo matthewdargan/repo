@@ -5,7 +5,7 @@ putstr(u8 *p, String8 s)
 	p += 2;
 	if (s.size > 0)
 	{
-		memcpy(p, s.str, s.size);
+		MemoryCopy(p, s.str, s.size);
 		p += s.size;
 	}
 	return p;
@@ -28,13 +28,13 @@ getstr(u8 *p, u8 *end, String8 *s)
 {
 	if (p + 2 > end)
 	{
-		return NULL;
+		return 0;
 	}
 	u32 len = getb2(p);
 	p += 2;
 	if (p + len > end)
 	{
-		return NULL;
+		return 0;
 	}
 	s->size = len;
 	if (len > 0)
@@ -44,7 +44,7 @@ getstr(u8 *p, u8 *end, String8 *s)
 	}
 	else
 	{
-		s->str = NULL;
+		s->str = 0;
 	}
 	return p;
 }
@@ -54,7 +54,7 @@ getqid(u8 *p, u8 *end, Qid *qid)
 {
 	if (p + 13 > end)
 	{
-		return NULL;
+		return 0;
 	}
 	qid->type = getb1(p);
 	p += 1;
@@ -223,7 +223,7 @@ fcallencode(Arena *a, Fcall fc)
 		return str8_zero();
 	}
 	String8 msg = {
-	    .str = push_array_no_zero(a, u8, msglen),
+	    .str  = push_array_no_zero(a, u8, msglen),
 	    .size = msglen,
 	};
 	u8 *p = msg.str;
@@ -359,7 +359,7 @@ fcallencode(Arena *a, Fcall fc)
 			p += 4;
 			if (fc.data.size > 0)
 			{
-				memcpy(p, fc.data.str, fc.data.size);
+				MemoryCopy(p, fc.data.str, fc.data.size);
 				p += fc.data.size;
 			}
 		}
@@ -374,7 +374,7 @@ fcallencode(Arena *a, Fcall fc)
 			p += 4;
 			if (fc.data.size > 0)
 			{
-				memcpy(p, fc.data.str, fc.data.size);
+				MemoryCopy(p, fc.data.str, fc.data.size);
 				p += fc.data.size;
 			}
 		}
@@ -407,7 +407,7 @@ fcallencode(Arena *a, Fcall fc)
 			p += 2;
 			if (fc.stat.size > 0)
 			{
-				memcpy(p, fc.stat.str, fc.stat.size);
+				MemoryCopy(p, fc.stat.str, fc.stat.size);
 				p += fc.stat.size;
 			}
 		}
@@ -420,7 +420,7 @@ fcallencode(Arena *a, Fcall fc)
 			p += 2;
 			if (fc.stat.size > 0)
 			{
-				memcpy(p, fc.stat.str, fc.stat.size);
+				MemoryCopy(p, fc.stat.str, fc.stat.size);
 				p += fc.stat.size;
 			}
 		}
@@ -442,14 +442,14 @@ fcallencode(Arena *a, Fcall fc)
 static Fcall
 fcalldecode(String8 msg)
 {
-	Fcall fc = {0};
+	Fcall fc    = {0};
 	Fcall errfc = {0};
 	if (msg.size < 7)
 	{
 		return errfc;
 	}
-	u8 *p = msg.str;
-	u8 *end = msg.str + msg.size;
+	u8 *p    = msg.str;
+	u8 *end  = msg.str + msg.size;
 	u32 size = getb4(p);
 	p += 4;
 	if (size != msg.size)
@@ -472,7 +472,7 @@ fcalldecode(String8 msg)
 			fc.msize = getb4(p);
 			p += 4;
 			p = getstr(p, end, &fc.version);
-			if (p == NULL)
+			if (p == 0)
 			{
 				return errfc;
 			}
@@ -487,12 +487,12 @@ fcalldecode(String8 msg)
 			fc.afid = getb4(p);
 			p += 4;
 			p = getstr(p, end, &fc.uname);
-			if (p == NULL)
+			if (p == 0)
 			{
 				return errfc;
 			}
 			p = getstr(p, end, &fc.aname);
-			if (p == NULL)
+			if (p == 0)
 			{
 				return errfc;
 			}
@@ -501,7 +501,7 @@ fcalldecode(String8 msg)
 		case Rauth:
 		{
 			p = getqid(p, end, &fc.aqid);
-			if (p == NULL)
+			if (p == 0)
 			{
 				return errfc;
 			}
@@ -510,7 +510,7 @@ fcalldecode(String8 msg)
 		case Rerror:
 		{
 			p = getstr(p, end, &fc.ename);
-			if (p == NULL)
+			if (p == 0)
 			{
 				return errfc;
 			}
@@ -539,12 +539,12 @@ fcalldecode(String8 msg)
 			fc.afid = getb4(p);
 			p += 4;
 			p = getstr(p, end, &fc.uname);
-			if (p == NULL)
+			if (p == 0)
 			{
 				return errfc;
 			}
 			p = getstr(p, end, &fc.aname);
-			if (p == NULL)
+			if (p == 0)
 			{
 				return errfc;
 			}
@@ -553,7 +553,7 @@ fcalldecode(String8 msg)
 		case Rattach:
 		{
 			p = getqid(p, end, &fc.qid);
-			if (p == NULL)
+			if (p == 0)
 			{
 				return errfc;
 			}
@@ -578,7 +578,7 @@ fcalldecode(String8 msg)
 			for (u32 i = 0; i < fc.nwname; i++)
 			{
 				p = getstr(p, end, &fc.wname[i]);
-				if (p == NULL)
+				if (p == 0)
 				{
 					return errfc;
 				}
@@ -600,7 +600,7 @@ fcalldecode(String8 msg)
 			for (u32 i = 0; i < fc.nwqid; i++)
 			{
 				p = getqid(p, end, &fc.wqid[i]);
-				if (p == NULL)
+				if (p == 0)
 				{
 					return errfc;
 				}
@@ -623,7 +623,7 @@ fcalldecode(String8 msg)
 		case Rcreate:
 		{
 			p = getqid(p, end, &fc.qid);
-			if (p == NULL)
+			if (p == 0)
 			{
 				return errfc;
 			}
@@ -644,7 +644,7 @@ fcalldecode(String8 msg)
 			fc.fid = getb4(p);
 			p += 4;
 			p = getstr(p, end, &fc.name);
-			if (p == NULL)
+			if (p == 0)
 			{
 				return errfc;
 			}
@@ -691,7 +691,7 @@ fcalldecode(String8 msg)
 			}
 			else
 			{
-				fc.data.str = NULL;
+				fc.data.str = 0;
 			}
 		}
 		break;
@@ -718,7 +718,7 @@ fcalldecode(String8 msg)
 			}
 			else
 			{
-				fc.data.str = NULL;
+				fc.data.str = 0;
 			}
 		}
 		break;
@@ -775,7 +775,7 @@ fcalldecode(String8 msg)
 			}
 			else
 			{
-				fc.stat.str = NULL;
+				fc.stat.str = 0;
 			}
 		}
 		break;
@@ -800,7 +800,7 @@ fcalldecode(String8 msg)
 			}
 			else
 			{
-				fc.stat.str = NULL;
+				fc.stat.str = 0;
 			}
 		}
 		break;
@@ -838,7 +838,7 @@ direncode(Arena *a, Dir d)
 		return str8_zero();
 	}
 	String8 msg = {
-	    .str = push_array_no_zero(a, u8, msglen),
+	    .str  = push_array_no_zero(a, u8, msglen),
 	    .size = msglen,
 	};
 	u8 *p = msg.str;
@@ -876,13 +876,13 @@ direncode(Arena *a, Dir d)
 static Dir
 dirdecode(String8 msg)
 {
-	Dir d = {0};
+	Dir d    = {0};
 	Dir errd = {0};
 	if (msg.size < DIRFIXLEN)
 	{
 		return errd;
 	}
-	u8 *p = msg.str;
+	u8 *p   = msg.str;
 	u8 *end = msg.str + msg.size;
 	p += 2;
 	if (p + 39 > end)
@@ -908,22 +908,22 @@ dirdecode(String8 msg)
 	d.len = getb8(p);
 	p += 8;
 	p = getstr(p, end, &d.name);
-	if (p == NULL)
+	if (p == 0)
 	{
 		return errd;
 	}
 	p = getstr(p, end, &d.uid);
-	if (p == NULL)
+	if (p == 0)
 	{
 		return errd;
 	}
 	p = getstr(p, end, &d.gid);
-	if (p == NULL)
+	if (p == 0)
 	{
 		return errd;
 	}
 	p = getstr(p, end, &d.muid);
-	if (p == NULL)
+	if (p == 0)
 	{
 		return errd;
 	}
@@ -950,12 +950,12 @@ read9pmsg(Arena *a, u64 fd)
 		nread += n;
 		nleft -= n;
 	}
-	u32 msglen = getb4(lenbuf);
+	u32 msglen  = getb4(lenbuf);
 	String8 msg = {
-	    .str = push_array_no_zero(a, u8, msglen),
+	    .str  = push_array_no_zero(a, u8, msglen),
 	    .size = msglen,
 	};
-	memcpy(msg.str, lenbuf, sizeof lenbuf);
+	MemoryCopy(msg.str, lenbuf, sizeof lenbuf);
 	nread = 0;
 	nleft = msg.size - 4;
 	while (nleft > 0)
@@ -975,16 +975,16 @@ static void
 dirlistpush(Arena *a, Dirlist *list, Dir d)
 {
 	Dirnode *node = push_array_no_zero(a, Dirnode, 1);
-	node->dir = d;
-	if (list->start == NULL)
+	node->dir     = d;
+	if (list->start == 0)
 	{
 		list->start = node;
-		list->end = node;
+		list->end   = node;
 	}
 	else
 	{
 		list->end->next = node;
-		list->end = node;
+		list->end       = node;
 	}
 	list->cnt++;
 }

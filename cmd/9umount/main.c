@@ -11,7 +11,7 @@ static b32
 mountedby(Arena *a, String8 mntopts, String8 user)
 {
 	String8List opts = str8_split(a, mntopts, (u8 *)",", 1, 0);
-	for (String8Node *node = opts.first; node != NULL; node = node->next)
+	for (String8Node *node = opts.first; node != 0; node = node->next)
 	{
 		String8 opt = node->string;
 		if (str8_find_needle(opt, 0, str8_lit("uname="), 0) == 0)
@@ -26,7 +26,7 @@ mountedby(Arena *a, String8 mntopts, String8 user)
 static void
 entry_point(CmdLine *cmd_line)
 {
-	Temp scratch = scratch_begin(NULL, 0);
+	Temp scratch = scratch_begin(0, 0);
 	if (cmd_line->inputs.node_count == 0)
 	{
 		fprintf(stderr, "usage: 9umount mtpt...\n");
@@ -34,12 +34,12 @@ entry_point(CmdLine *cmd_line)
 	}
 	uid_t uid         = getuid();
 	struct passwd *pw = getpwuid(uid);
-	if (pw == NULL)
+	if (pw == 0)
 	{
 		fprintf(stderr, "9umount: unknown uid %d\n", uid);
 		return;
 	}
-	for (String8Node *node = cmd_line->inputs.first; node != NULL; node = node->next)
+	for (String8Node *node = cmd_line->inputs.first; node != 0; node = node->next)
 	{
 		String8 mtpt = node->string;
 		String8 path = os_full_path_from_path(scratch.arena, mtpt);
@@ -49,7 +49,7 @@ entry_point(CmdLine *cmd_line)
 			continue;
 		}
 		FILE *fp = setmntent("/proc/mounts", "r");
-		if (fp == NULL)
+		if (fp == 0)
 		{
 			fprintf(stderr, "9umount: could not open /proc/mounts: %s\n", strerror(errno));
 			break;
@@ -58,7 +58,7 @@ entry_point(CmdLine *cmd_line)
 		for (;;)
 		{
 			struct mntent *mnt = getmntent(fp);
-			if (mnt == NULL)
+			if (mnt == 0)
 			{
 				break;
 			}

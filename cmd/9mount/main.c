@@ -14,17 +14,17 @@ resolvehost(Arena *a, String8 host)
 	{
 		return str8_zero();
 	}
-	memcpy(hostbuf, host.str, host.size);
+	MemoryCopy(hostbuf, host.str, host.size);
 	hostbuf[host.size]  = 0;
-	struct addrinfo *ai = NULL;
-	int ret             = getaddrinfo(hostbuf, NULL, NULL, &ai);
+	struct addrinfo *ai = 0;
+	int ret             = getaddrinfo(hostbuf, 0, 0, &ai);
 	if (ret != 0)
 	{
 		fprintf(stderr, "9mount: getaddrinfo %.*s: %s\n", str8_varg(host), gai_strerror(ret));
 		return str8_zero();
 	}
 	char ipbuf[INET6_ADDRSTRLEN] = {0};
-	ret                          = getnameinfo(ai->ai_addr, ai->ai_addrlen, ipbuf, sizeof ipbuf, NULL, 0, NI_NUMERICHOST);
+	ret                          = getnameinfo(ai->ai_addr, ai->ai_addrlen, ipbuf, sizeof ipbuf, 0, 0, NI_NUMERICHOST);
 	if (ret != 0)
 	{
 		fprintf(stderr, "9mount: getnameinfo: %s\n", gai_strerror(ret));
@@ -39,7 +39,7 @@ resolvehost(Arena *a, String8 host)
 static void
 entry_point(CmdLine *cmd_line)
 {
-	Temp scratch     = scratch_begin(NULL, 0);
+	Temp scratch     = scratch_begin(0, 0);
 	b32 dryrun       = cmd_line_has_flag(cmd_line, str8_lit("n"));
 	b32 singleattach = cmd_line_has_flag(cmd_line, str8_lit("s"));
 	b32 exclusive    = cmd_line_has_flag(cmd_line, str8_lit("x"));
@@ -57,7 +57,7 @@ entry_point(CmdLine *cmd_line)
 	uid_t uid         = uidstr.size > 0 ? (uid_t)u64_from_str8(uidstr, 10) : getuid();
 	gid_t gid         = gidstr.size > 0 ? (gid_t)u64_from_str8(gidstr, 10) : getgid();
 	struct passwd *pw = getpwuid(uid);
-	if (pw == NULL)
+	if (pw == 0)
 	{
 		fprintf(stderr, "9mount: unknown uid %d\n", uid);
 		return;
@@ -121,10 +121,10 @@ entry_point(CmdLine *cmd_line)
 		}
 	}
 	String8 user = str8_cstring(pw->pw_name);
-	str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "uname=%.*s", (int)user.size, user.str));
+	str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "uname=%S", user));
 	if (aname.size > 0)
 	{
-		str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "aname=%.*s", (int)aname.size, aname.str));
+		str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "aname=%S", aname));
 	}
 	if (msizestr.size > 0)
 	{

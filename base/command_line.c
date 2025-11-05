@@ -2,7 +2,7 @@
 static CmdLineOpt **
 cmd_line_slot_from_string(CmdLine *cmd_line, String8 string)
 {
-	CmdLineOpt **slot = NULL;
+	CmdLineOpt **slot = 0;
 	if (cmd_line->option_table_size != 0)
 	{
 		u64 hash   = u64_hash_from_str8(string);
@@ -15,8 +15,8 @@ cmd_line_slot_from_string(CmdLine *cmd_line, String8 string)
 static CmdLineOpt *
 cmd_line_opt_from_slot(CmdLineOpt **slot, String8 string)
 {
-	CmdLineOpt *result = NULL;
-	for (CmdLineOpt *opt = *slot; opt != NULL; opt = opt->hash_next)
+	CmdLineOpt *result = 0;
+	for (CmdLineOpt *opt = *slot; opt != 0; opt = opt->hash_next)
 	{
 		if (str8_match(string, opt->string, 0))
 		{
@@ -40,7 +40,7 @@ cmd_line_insert_opt(Arena *arena, CmdLine *cmd_line, String8 string, String8List
 	CmdLineOpt **slot        = cmd_line_slot_from_string(cmd_line, string);
 	CmdLineOpt *existing_opt = cmd_line_opt_from_slot(slot, string);
 	CmdLineOpt *opt;
-	if (existing_opt != NULL)
+	if (existing_opt != 0)
 	{
 		opt = existing_opt;
 	}
@@ -74,7 +74,7 @@ cmd_line_from_string_list(Arena *arena, String8List arguments)
 	// parse options/inputs
 	b32 after_passthrough_option = 0;
 	b32 first_passthrough        = 1;
-	for (String8Node *node = arguments.first->next, *next = NULL; node != NULL; node = next)
+	for (String8Node *node = arguments.first->next, *next = 0; node != 0; node = next)
 	{
 		next = node->next;
 
@@ -160,7 +160,7 @@ cmd_line_from_string_list(Arena *arena, String8List arguments)
 	parsed.argc = arguments.node_count;
 	parsed.argv = push_array(arena, char *, parsed.argc);
 	u64 i       = 0;
-	for (String8Node *node = arguments.first; node != NULL; node = node->next, i++)
+	for (String8Node *node = arguments.first; node != 0; node = node->next, i++)
 	{
 		parsed.argv[i] = (char *)str8_copy(arena, node->string).str;
 	}
@@ -178,7 +178,7 @@ cmd_line_strings(CmdLine *cmd_line, String8 name)
 {
 	String8List result = {0};
 	CmdLineOpt *opt    = cmd_line_opt_from_string(cmd_line, name);
-	if (opt != NULL)
+	if (opt != 0)
 	{
 		result = opt->value_strings;
 	}
@@ -190,7 +190,7 @@ cmd_line_string(CmdLine *cmd_line, String8 name)
 {
 	String8 result  = str8_zero();
 	CmdLineOpt *opt = cmd_line_opt_from_string(cmd_line, name);
-	if (opt != NULL)
+	if (opt != 0)
 	{
 		result = opt->value_string;
 	}
@@ -200,12 +200,12 @@ cmd_line_string(CmdLine *cmd_line, String8 name)
 static b32
 cmd_line_has_flag(CmdLine *cmd_line, String8 name)
 {
-	return cmd_line_opt_from_string(cmd_line, name) != NULL;
+	return cmd_line_opt_from_string(cmd_line, name) != 0;
 }
 
 static b32
 cmd_line_has_argument(CmdLine *cmd_line, String8 name)
 {
 	CmdLineOpt *opt = cmd_line_opt_from_string(cmd_line, name);
-	return opt != NULL && opt->value_strings.node_count > 0;
+	return opt != 0 && opt->value_strings.node_count > 0;
 }

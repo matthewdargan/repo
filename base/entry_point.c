@@ -1,7 +1,7 @@
 static void
 main_thread_base_entry_point(int arguments_count, char **arguments)
 {
-	Temp scratch = scratch_begin(NULL, 0);
+	Temp scratch = scratch_begin(0, 0);
 
 	// parse command line
 	String8List command_line_argument_strings = {0};

@@ -1,3 +1,9 @@
+// Third Party Includes
+#define STB_SPRINTF_IMPLEMENTATION
+#define STB_SPRINTF_STATIC
+#define STB_SPRINTF_DECORATE(name) base_##name
+#include "stb_sprintf.h"
+
 // Bit Functions
 static u16
 bswapu16(u16 x)

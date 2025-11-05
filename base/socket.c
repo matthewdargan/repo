@@ -10,16 +10,16 @@ resolveport(String8 port, String8 proto)
 	{
 		return 0;
 	}
-	memcpy(portbuf, port.str, port.size);
+	MemoryCopy(portbuf, port.str, port.size);
 	portbuf[port.size] = 0;
 	char protobuf[16]  = {0};
 	if (proto.size > 0 && proto.size < sizeof protobuf)
 	{
-		memcpy(protobuf, proto.str, proto.size);
+		MemoryCopy(protobuf, proto.str, proto.size);
 		protobuf[proto.size] = 0;
 	}
 	struct servent *sv = getservbyname(portbuf, protobuf);
-	if (sv != NULL)
+	if (sv != 0)
 	{
 		endservent();
 		return ntohs((u16)sv->s_port);
@@ -117,7 +117,7 @@ socketdial(Netaddr na, Netaddr local)
 		{
 			return 0;
 		}
-		memcpy(hostbuf, na.host.str, na.host.size);
+		MemoryCopy(hostbuf, na.host.str, na.host.size);
 		hostbuf[na.host.size] = 0;
 		int fd                = open(hostbuf, O_RDWR);
 		if (fd >= 0)
@@ -136,7 +136,7 @@ socketdial(Netaddr na, Netaddr local)
 			close(fd);
 			return 0;
 		}
-		memcpy(unaddr.sun_path, na.host.str, na.host.size);
+		MemoryCopy(unaddr.sun_path, na.host.str, na.host.size);
 		if (connect(fd, (struct sockaddr *)&unaddr, sizeof unaddr) < 0)
 		{
 			close(fd);
@@ -155,7 +155,7 @@ socketdial(Netaddr na, Netaddr local)
 	char hostbuf[1024] = {0};
 	if (na.host.size == 0)
 	{
-		memcpy(hostbuf, "localhost", 9);
+		MemoryCopy(hostbuf, "localhost", 9);
 		hostbuf[9] = 0;
 	}
 	else
@@ -164,7 +164,7 @@ socketdial(Netaddr na, Netaddr local)
 		{
 			return 0;
 		}
-		memcpy(hostbuf, na.host.str, na.host.size);
+		MemoryCopy(hostbuf, na.host.str, na.host.size);
 		hostbuf[na.host.size] = 0;
 	}
 	int socktype = 0;
@@ -183,8 +183,8 @@ socketdial(Netaddr na, Netaddr local)
 	struct addrinfo hints = {0};
 	hints.ai_family       = AF_UNSPEC;
 	hints.ai_socktype     = socktype;
-	struct addrinfo *res  = NULL;
-	if (getaddrinfo(hostbuf, NULL, &hints, &res) != 0)
+	struct addrinfo *res  = 0;
+	if (getaddrinfo(hostbuf, 0, &hints, &res) != 0)
 	{
 		return 0;
 	}
@@ -206,7 +206,7 @@ socketdial(Netaddr na, Netaddr local)
 			return 0;
 		}
 	}
-	struct addrinfo *localres = NULL;
+	struct addrinfo *localres = 0;
 	if (local.net.size > 0)
 	{
 		if (local.isunix || local.port == 0)
@@ -217,7 +217,7 @@ socketdial(Netaddr na, Netaddr local)
 		char localhostbuf[1024] = {0};
 		if (local.host.size == 0)
 		{
-			memcpy(localhostbuf, "localhost", 9);
+			MemoryCopy(localhostbuf, "localhost", 9);
 			localhostbuf[9] = 0;
 		}
 		else
@@ -227,10 +227,10 @@ socketdial(Netaddr na, Netaddr local)
 				freeaddrinfo(res);
 				return 0;
 			}
-			memcpy(localhostbuf, local.host.str, local.host.size);
+			MemoryCopy(localhostbuf, local.host.str, local.host.size);
 			localhostbuf[local.host.size] = 0;
 		}
-		if (getaddrinfo(localhostbuf, NULL, &hints, &localres) != 0)
+		if (getaddrinfo(localhostbuf, 0, &hints, &localres) != 0)
 		{
 			freeaddrinfo(res);
 			return 0;
@@ -290,10 +290,10 @@ socketlisten(String8 port, struct addrinfo *hints)
 	{
 		return 0;
 	}
-	memcpy(portbuf, port.str, port.size);
+	MemoryCopy(portbuf, port.str, port.size);
 	portbuf[port.size] = 0;
 	struct addrinfo *res;
-	if (getaddrinfo(NULL, portbuf, hints, &res) != 0)
+	if (getaddrinfo(0, portbuf, hints, &res) != 0)
 	{
 		return 0;
 	}
@@ -328,7 +328,7 @@ socketlisten(String8 port, struct addrinfo *hints)
 static u64
 socketaccept(u64 fd)
 {
-	int connfd = accept(fd, NULL, NULL);
+	int connfd = accept(fd, 0, 0);
 	if (connfd < 0)
 	{
 		return 0;
@@ -350,7 +350,7 @@ socketconnect(String8 host, String8 port, struct addrinfo *hints)
 	{
 		return 0;
 	}
-	memcpy(portbuf, port.str, port.size);
+	MemoryCopy(portbuf, port.str, port.size);
 	portbuf[port.size] = 0;
 	if (host.size == 0)
 	{
@@ -361,7 +361,7 @@ socketconnect(String8 host, String8 port, struct addrinfo *hints)
 	{
 		return 0;
 	}
-	memcpy(hostbuf, host.str, host.size);
+	MemoryCopy(hostbuf, host.str, host.size);
 	hostbuf[host.size] = 0;
 	struct addrinfo *res;
 	if (getaddrinfo(hostbuf, portbuf, hints, &res) != 0)
@@ -431,7 +431,7 @@ socketreadmsg(Arena *a, u64 fd)
 	nread        = socketread(fd, data.str, size);
 	if (nread != size)
 	{
-		data.str = NULL;
+		data.str = 0;
 		return str8_zero();
 	}
 	data.size = size;
@@ -489,13 +489,13 @@ socketreadhttp(Arena *a, u64 fd)
 	    .str  = push_array_no_zero(a, u8, hdrend + bodylen),
 	    .size = hdrend + bodylen,
 	};
-	memcpy(data.str, buf, hdrend);
+	MemoryCopy(data.str, buf, hdrend);
 	u64 bodyinbuf = buflen - hdrend;
 	if (bodyinbuf > bodylen)
 	{
 		bodyinbuf = bodylen;
 	}
-	memcpy(data.str + hdrend, buf + hdrend, bodyinbuf);
+	MemoryCopy(data.str + hdrend, buf + hdrend, bodyinbuf);
 	u64 remaining = bodylen - bodyinbuf;
 	if (remaining > 0)
 	{

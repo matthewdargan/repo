@@ -1,5 +1,5 @@
 // Globals
-thread_static TCTX *tctx_thread_local = NULL;
+thread_static TCTX *tctx_thread_local = 0;
 
 // Thread Context Functions
 static TCTX *
@@ -35,7 +35,7 @@ static Arena *
 tctx_get_scratch(Arena **conflicts, u64 count)
 {
 	TCTX *tctx        = tctx_selected();
-	Arena *result     = NULL;
+	Arena *result     = 0;
 	Arena **arena_ptr = tctx->arenas;
 	for (u64 i = 0; i < ArrayCount(tctx->arenas); i++, arena_ptr++)
 	{

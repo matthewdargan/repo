@@ -237,9 +237,9 @@ jsonparsenumber(Arena *a, String8 text, u64 *pos)
 	u64 end        = *pos;
 	String8 numstr = str8_substr(text, rng_1u64(start, end));
 	char *numcstr  = (char *)push_array(a, u8, numstr.size + 1);
-	memcpy(numcstr, numstr.str, numstr.size);
+	MemoryCopy(numcstr, numstr.str, numstr.size);
 	numcstr[numstr.size] = '\0';
-	char *endptr         = NULL;
+	char *endptr         = 0;
 	f64 value            = strtod(numcstr, &endptr);
 	if (endptr != numcstr)
 	{
@@ -279,7 +279,7 @@ jsonparsearray(Arena *a, String8 text, u64 *pos)
 		{
 			capacity *= 2;
 			vals = push_array(a, Jsonvalue, capacity);
-			memcpy(vals, result.arrvals, count * sizeof(Jsonvalue));
+			MemoryCopy(vals, result.arrvals, count * sizeof(Jsonvalue));
 		}
 		vals[count++] = elem;
 		jsonskipwhitespace(text, pos);
@@ -348,8 +348,8 @@ jsonparseobject(Arena *a, String8 text, u64 *pos)
 			capacity *= 2;
 			keys = push_array(a, String8, capacity);
 			vals = push_array(a, Jsonvalue, capacity);
-			memcpy(keys, result.objkeys, count * sizeof(String8));
-			memcpy(vals, result.objvals, count * sizeof(Jsonvalue));
+			MemoryCopy(keys, result.objkeys, count * sizeof(String8));
+			MemoryCopy(vals, result.objvals, count * sizeof(Jsonvalue));
 		}
 		keys[count] = key.string;
 		vals[count] = val;

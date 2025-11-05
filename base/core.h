@@ -9,6 +9,11 @@
 #include <stdint.h>
 // clang-format on
 
+// Third Party Includes
+#define STB_SPRINTF_DECORATE(name) base_##name
+#define STB_SPRINTF_STATIC
+#include "stb_sprintf.h"
+
 // Codebase Keywords
 #define read_only __attribute__((section(".rodata")))
 #define thread_static __thread
@@ -26,8 +31,12 @@
 // Type -> Alignment
 #define AlignOf(T) __alignof(T)
 
+// For-Loop Construct Macros
+#define DeferLoop(begin, end) for (int _i_ = ((begin), 0); !_i_; _i_ += 1, (end))
+
 // Memory Operation Macros
 #define MemoryCopy(dst, src, size) memmove((dst), (src), (size))
+#define MemoryCopyStruct(d, s) MemoryCopy((d), (s), sizeof(*(d)))
 #define MemoryZero(s, z) memset((s), 0, (z))
 
 // Asserts
@@ -122,20 +131,6 @@ typedef s64 b64;
 typedef float f32;
 typedef double f64;
 
-// Type Limits
-#define U8MAX 0xff
-#define U16MAX 0xffff
-#define U32MAX 0xffffffffu
-#define U64MAX 0xffffffffffffffffull
-#define S8MAX 0x7f
-#define S16MAX 0x7fff
-#define S32MAX 0x7fffffff
-#define S64MAX 0x7fffffffffffffffll
-#define S8MIN (-S8MAX - 1)
-#define S16MIN (-S16MAX - 1)
-#define S32MIN (-S32MAX - 1)
-#define S64MIN (-S64MAX - 1)
-
 // Endianness
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 #define LITTLEENDIAN 1
@@ -160,9 +155,25 @@ typedef double f64;
 typedef struct U64Array U64Array;
 struct U64Array
 {
+	u64 count;
 	u64 *v;
-	u64 cnt;
 };
+
+// Basic Constants
+static u64 max_u64 = 0xffffffffffffffffull;
+static u32 max_u32 = 0xffffffffu;
+static u16 max_u16 = 0xffff;
+static u8 max_u8   = 0xff;
+
+static s64 max_s64 = 0x7fffffffffffffffll;
+static s32 max_s32 = 0x7fffffff;
+static s16 max_s16 = 0x7fff;
+static s8 max_s8   = 0x7f;
+
+static s64 min_s64 = (s64)0x8000000000000000ull;
+static s32 min_s32 = (s32)0x80000000u;
+static s16 min_s16 = (s16)0x8000;
+static s8 min_s8   = (s8)0x80;
 
 // Time Types
 typedef struct DateTime DateTime;

@@ -26,16 +26,16 @@ mkmedia(Arena *a, String8 ipath, String8 opath)
 {
     AVFormatContext *ictx, *mpdctx;
     // Open input file
-    ret = avformat_open_input(&ictx, (char *)ipath.str, NULL, NULL);
+    ret = avformat_open_input(&ictx, (char *)ipath.str, 0, 0);
 
     // Create DASH output
-    ret = avformat_alloc_output_context2(&mpdctx, NULL, "dash",
+    ret = avformat_alloc_output_context2(&mpdctx, 0, "dash",
                                         (char *)mpdpath.str);
 
     // Copy compatible streams
     for (i = 0; i < ictx->nb_streams; i++) {
         if (validstream(ictx->streams[i])) {
-            mpdstream = avformat_new_stream(mpdctx, NULL);
+            mpdstream = avformat_new_stream(mpdctx, 0);
             avcodec_parameters_copy(mpdstream->codecpar,
                                    ictx->streams[i]->codecpar);
         }

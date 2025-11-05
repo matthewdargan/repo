@@ -34,6 +34,7 @@ This is a systems programming monorepo implemented in C99 (ISO/IEC 9899:1999) wi
 - **`os.c/h`** - OS operations
 - **`socket.c/h`** - Network operations
 - **`json.c/h`** - JSON parsing and generation
+- **`log.c/h`** - Logging operations
 - **`entry_point.c/h`** - Program entry point abstraction
 
 ### `cmd/` - Binaries

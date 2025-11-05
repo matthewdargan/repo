@@ -25,13 +25,13 @@ arena_alloc_(ArenaParams params)
 		commit_size  = AlignPow2(commit_size, sysinfo->page_size);
 	}
 	void *base = params.optional_backing_buffer;
-	if (base == NULL)
+	if (base == 0)
 	{
 		base = (params.flags & ArenaFlag_LargePages) ? os_reserve_large(reserve_size) : os_reserve(reserve_size);
 		os_commit(base, commit_size);
 	}
 	Arena *arena    = (Arena *)base;
-	arena->prev     = NULL;
+	arena->prev     = 0;
 	arena->current  = arena;
 	arena->flags    = params.flags;
 	arena->cmt_size = params.commit_size;
@@ -41,7 +41,7 @@ arena_alloc_(ArenaParams params)
 	arena->cmt      = commit_size;
 	arena->res      = reserve_size;
 #if ARENA_FREE_LIST
-	arena->free_last = NULL;
+	arena->free_last = 0;
 #endif
 	AsanPoisonMemoryRegion(base, commit_size);
 	AsanUnpoisonMemoryRegion(base, ARENA_HEADER_SIZE);
@@ -51,7 +51,7 @@ arena_alloc_(ArenaParams params)
 static void
 arena_release(Arena *arena)
 {
-	for (Arena *curr = arena->current, *prev = NULL; curr != NULL; curr = prev)
+	for (Arena *curr = arena->current, *prev = 0; curr != 0; curr = prev)
 	{
 		prev = curr->prev;
 		os_release(curr, curr->res);
@@ -68,12 +68,12 @@ arena_push(Arena *arena, u64 size, u64 align, b32 zero)
 	// chain if needed
 	if (current->res < pos_pst && !(arena->flags & ArenaFlag_NoChain))
 	{
-		Arena *new_block = NULL;
+		Arena *new_block = 0;
 
 #if ARENA_FREE_LIST
 		{
-			Arena *prev_block = NULL;
-			for (new_block = arena->free_last; new_block != NULL; prev_block = new_block, new_block = new_block->prev)
+			Arena *prev_block = 0;
+			for (new_block = arena->free_last; new_block != 0; prev_block = new_block, new_block = new_block->prev)
 			{
 				if (new_block->res >= AlignPow2(new_block->pos, align) + size)
 				{
@@ -91,7 +91,7 @@ arena_push(Arena *arena, u64 size, u64 align, b32 zero)
 		}
 #endif
 
-		if (new_block == NULL)
+		if (new_block == 0)
 		{
 			u64 res_size = current->res_size;
 			u64 cmt_size = current->cmt_size;
@@ -132,7 +132,7 @@ arena_push(Arena *arena, u64 size, u64 align, b32 zero)
 	}
 
 	// push onto current block
-	void *result = NULL;
+	void *result = 0;
 	if (current->cmt >= pos_pst)
 	{
 		result       = (u8 *)current + pos_pre;
@@ -161,7 +161,7 @@ arena_pop_to(Arena *arena, u64 pos)
 	Arena *current = arena->current;
 
 #if ARENA_FREE_LIST
-	for (Arena *prev = NULL; current->base_pos >= big_pos; current = prev)
+	for (Arena *prev = 0; current->base_pos >= big_pos; current = prev)
 	{
 		prev         = current->prev;
 		current->pos = ARENA_HEADER_SIZE;
@@ -169,7 +169,7 @@ arena_pop_to(Arena *arena, u64 pos)
 		AsanPoisonMemoryRegion((u8 *)current + ARENA_HEADER_SIZE, current->res - ARENA_HEADER_SIZE);
 	}
 #else
-	for (Arena *prev = NULL; current->base_pos >= big_pos; current = prev)
+	for (Arena *prev = 0; current->base_pos >= big_pos; current = prev)
 	{
 		prev = current->prev;
 		os_release(current, current->res);

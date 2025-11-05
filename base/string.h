@@ -105,6 +105,7 @@ static String8 str8_prefix(String8 str, u64 size);
 static String8 str8_skip(String8 str, u64 amt);
 static String8 str8_postfix(String8 str, u64 size);
 static String8 str8_chop(String8 str, u64 amt);
+static String8 str8_skip_chop_whitespace(String8 string);
 
 // String Formatting/Copying
 static String8 str8_cat(Arena *arena, String8 s1, String8 s2);
@@ -120,7 +121,9 @@ static b32 try_u64_from_str8(String8 string, u64 *x);
 static String8 str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_separator);
 
 // String List Construction Functions
+static String8Node *str8_list_push_node(String8List *list, String8Node *node, String8 string);
 static String8Node *str8_list_push(Arena *arena, String8List *list, String8 string);
+static String8Node *str8_list_pushf(Arena *arena, String8List *list, char *fmt, ...);
 
 // String Splitting/Joining
 static String8List str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count,
@@ -136,6 +139,9 @@ static String8 str8_chop_last_slash(String8 string);
 static String8 str8_skip_last_slash(String8 string);
 static String8 str8_chop_last_dot(String8 string);
 static String8 str8_skip_last_dot(String8 string);
+
+// Basic Text Indentation
+static String8 indented_from_string(Arena *arena, String8 string);
 
 // Basic String Hashes
 static u64 u64_hash_from_str8(String8 string);

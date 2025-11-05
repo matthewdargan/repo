@@ -8,7 +8,7 @@
 static void
 entry_point(CmdLine *cmd_line)
 {
-	Temp scratch = scratch_begin(NULL, 0);
+	Temp scratch = scratch_begin(0, 0);
 	if (cmd_line->inputs.node_count != 2)
 	{
 		fprintf(stderr, "usage: 9bind old new\n");
@@ -27,7 +27,7 @@ entry_point(CmdLine *cmd_line)
 		fprintf(stderr, "9bind: refusing to bind over sticky directory %.*s\n", str8_varg(new));
 		return;
 	}
-	if (mount((char *)old.str, (char *)new.str, NULL, MS_BIND, NULL))
+	if (mount((char *)old.str, (char *)new.str, 0, MS_BIND, 0))
 	{
 		fprintf(stderr, "9bind: bind failed: %s\n", strerror(errno));
 		return;

@@ -201,7 +201,7 @@ os_reserve_large(u64 size)
 static OS_Handle
 os_file_open(OS_AccessFlags flags, String8 path)
 {
-	Temp scratch      = temp_begin(NULL);
+	Temp scratch      = scratch_begin(0, 0);
 	String8 path_copy = str8_copy(scratch.arena, path);
 	int lnx_flags     = 0;
 	if (flags & OS_AccessFlag_Read && flags & OS_AccessFlag_Write)
@@ -230,7 +230,7 @@ os_file_open(OS_AccessFlags flags, String8 path)
 	{
 		handle.u64[0] = fd;
 	}
-	temp_end(scratch);
+	scratch_end(scratch);
 	return handle;
 }
 
@@ -337,33 +337,33 @@ os_properties_from_file(OS_Handle file)
 static b32
 os_delete_file_at_path(String8 path)
 {
-	Temp scratch      = temp_begin(NULL);
+	Temp scratch      = scratch_begin(0, 0);
 	b32 result        = 0;
 	String8 path_copy = str8_copy(scratch.arena, path);
 	if (remove((char *)path_copy.str) != -1)
 	{
 		result = 1;
 	}
-	temp_end(scratch);
+	scratch_end(scratch);
 	return result;
 }
 
 static String8
 os_full_path_from_path(Arena *arena, String8 path)
 {
-	Temp scratch          = temp_begin(arena);
+	Temp scratch          = scratch_begin(&arena, 1);
 	String8 path_copy     = str8_copy(scratch.arena, path);
 	char buffer[PATH_MAX] = {0};
 	realpath((char *)path_copy.str, buffer);
 	String8 result = str8_copy(arena, str8_cstring(buffer));
-	temp_end(scratch);
+	scratch_end(scratch);
 	return result;
 }
 
 static b32
 os_file_path_exists(String8 path)
 {
-	Temp scratch      = temp_begin(NULL);
+	Temp scratch      = scratch_begin(0, 0);
 	String8 path_copy = str8_copy(scratch.arena, path);
 	int access_result = access((char *)path_copy.str, F_OK);
 	b32 result        = 0;
@@ -371,14 +371,14 @@ os_file_path_exists(String8 path)
 	{
 		result = 1;
 	}
-	temp_end(scratch);
+	scratch_end(scratch);
 	return result;
 }
 
 static b32
 os_directory_path_exists(String8 path)
 {
-	Temp scratch      = temp_begin(NULL);
+	Temp scratch      = scratch_begin(0, 0);
 	b32 exists        = 0;
 	String8 path_copy = str8_copy(scratch.arena, path);
 	DIR *handle       = opendir((char *)path_copy.str);
@@ -387,14 +387,14 @@ os_directory_path_exists(String8 path)
 		closedir(handle);
 		exists = 1;
 	}
-	temp_end(scratch);
+	scratch_end(scratch);
 	return exists;
 }
 
 static OS_FileProperties
 os_properties_from_file_path(String8 path)
 {
-	Temp scratch            = temp_begin(NULL);
+	Temp scratch            = scratch_begin(0, 0);
 	String8 path_copy       = str8_copy(scratch.arena, path);
 	struct stat f_stat      = {0};
 	int stat_result         = stat((char *)path_copy.str, &f_stat);
@@ -403,21 +403,21 @@ os_properties_from_file_path(String8 path)
 	{
 		props = os_file_properties_from_stat(&f_stat);
 	}
-	temp_end(scratch);
+	scratch_end(scratch);
 	return props;
 }
 
 static b32
 os_make_directory(String8 path)
 {
-	Temp scratch      = temp_begin(NULL);
+	Temp scratch      = scratch_begin(0, 0);
 	b32 result        = 0;
 	String8 path_copy = str8_copy(scratch.arena, path);
 	if (mkdir((char *)path_copy.str, 0755) != -1)
 	{
 		result = 1;
 	}
-	temp_end(scratch);
+	scratch_end(scratch);
 	return result;
 }
 

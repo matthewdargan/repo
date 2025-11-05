@@ -253,6 +253,31 @@ str8_chop(String8 str, u64 amt)
 	return str;
 }
 
+static String8
+str8_skip_chop_whitespace(String8 string)
+{
+	u8 *first = string.str;
+	u8 *opl   = first + string.size;
+	for (; first < opl; first++)
+	{
+		if (!char_is_space(*first))
+		{
+			break;
+		}
+	}
+	for (; opl > first;)
+	{
+		opl--;
+		if (!char_is_space(*opl))
+		{
+			opl++;
+			break;
+		}
+	}
+	String8 result = str8_range(first, opl);
+	return result;
+}
+
 // String Formatting/Copying
 static String8
 str8_cat(Arena *arena, String8 s1, String8 s2)
@@ -261,8 +286,8 @@ str8_cat(Arena *arena, String8 s1, String8 s2)
 	    .str  = push_array_no_zero(arena, u8, s1.size + s2.size + 1),
 	    .size = s1.size + s2.size,
 	};
-	memmove(str.str, s1.str, s1.size);
-	memmove(str.str + s1.size, s2.str, s2.size);
+	MemoryCopy(str.str, s1.str, s1.size);
+	MemoryCopy(str.str + s1.size, s2.str, s2.size);
 	str.str[str.size] = 0;
 	return str;
 }
@@ -274,7 +299,7 @@ str8_copy(Arena *arena, String8 s)
 	    .str  = push_array_no_zero(arena, u8, s.size + 1),
 	    .size = s.size,
 	};
-	memcpy(str.str, s.str, s.size);
+	MemoryCopy(str.str, s.str, s.size);
 	str.str[str.size] = 0;
 	return str;
 }
@@ -284,11 +309,11 @@ str8fv(Arena *arena, char *fmt, va_list args)
 {
 	va_list args2;
 	va_copy(args2, args);
-	u32 nbytes = vsnprintf(0, 0, fmt, args) + 1;
+	u32 nbytes = base_vsnprintf(0, 0, fmt, args) + 1;
 	u8 *str    = push_array_no_zero(arena, u8, nbytes);
 	String8 s  = {
 	     .str  = str,
-	     .size = vsnprintf((char *)str, nbytes, fmt, args2),
+	     .size = base_vsnprintf((char *)str, nbytes, fmt, args2),
   };
 	s.str[s.size] = 0;
 	va_end(args2);
@@ -483,19 +508,19 @@ str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_
 	}
 	if (pre.size != 0)
 	{
-		memcpy(s.str, pre.str, pre.size);
+		MemoryCopy(s.str, pre.str, pre.size);
 	}
 	return s;
 }
 
 // String List Construction Functions
 static String8Node *
-str8_list_push_node(String8List *list, String8Node *node, String8 s)
+str8_list_push_node(String8List *list, String8Node *node, String8 string)
 {
 	SLLQueuePush(list->first, list->last, node);
 	list->node_count++;
-	list->total_size += s.size;
-	node->string = s;
+	list->total_size += string.size;
+	node->string = string;
 	return node;
 }
 
@@ -505,6 +530,17 @@ str8_list_push(Arena *arena, String8List *list, String8 string)
 	String8Node *node = push_array_no_zero(arena, String8Node, 1);
 	str8_list_push_node(list, node, string);
 	return node;
+}
+
+static String8Node *
+str8_list_pushf(Arena *arena, String8List *list, char *fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	String8 string      = str8fv(arena, fmt, args);
+	String8Node *result = str8_list_push(arena, list, string);
+	va_end(args);
+	return result;
 }
 
 // String Splitting/Joining
@@ -547,9 +583,9 @@ static String8
 str8_list_join(Arena *arena, String8List *list, StringJoin *optional_params)
 {
 	StringJoin join = {0};
-	if (optional_params != NULL)
+	if (optional_params != 0)
 	{
-		memcpy(&join, optional_params, sizeof join);
+		MemoryCopyStruct(&join, optional_params);
 	}
 	u64 nsep = 0;
 	if (list->node_count > 0)
@@ -562,19 +598,19 @@ str8_list_join(Arena *arena, String8List *list, StringJoin *optional_params)
 	    .size = join.pre.size + join.post.size + nsep * join.sep.size + list->total_size,
 	};
 	u8 *p = s.str;
-	memcpy(p, join.pre.str, join.pre.size);
+	MemoryCopy(p, join.pre.str, join.pre.size);
 	p += join.pre.size;
-	for (String8Node *node = list->first; node != NULL; node = node->next)
+	for (String8Node *node = list->first; node != 0; node = node->next)
 	{
-		memcpy(p, node->string.str, node->string.size);
+		MemoryCopy(p, node->string.str, node->string.size);
 		p += node->string.size;
-		if (node->next != NULL)
+		if (node->next != 0)
 		{
-			memcpy(p, join.sep.str, join.sep.size);
+			MemoryCopy(p, join.sep.str, join.sep.size);
 			p += join.sep.size;
 		}
 	}
-	memcpy(p, join.post.str, join.post.size);
+	MemoryCopy(p, join.post.str, join.post.size);
 	p += join.post.size;
 	*p = 0;
 	return s;
@@ -589,7 +625,7 @@ str8_array_from_list(Arena *arena, String8List *list)
 	    .count = list->node_count,
 	};
 	u64 i = 0;
-	for (String8Node *node = list->first; node != NULL; node = node->next, i++)
+	for (String8Node *node = list->first; node != 0; node = node->next, i++)
 	{
 		array.v[i] = node->string;
 	}
@@ -682,6 +718,65 @@ str8_skip_last_dot(String8 string)
 			break;
 		}
 	}
+	return result;
+}
+
+// Basic Text Indentation
+static String8
+indented_from_string(Arena *arena, String8 string)
+{
+	Temp scratch = scratch_begin(&arena, 1);
+	read_only static u8 indentation_bytes[] =
+	    "                                                                                                                "
+	    "                ";
+	String8List indented_strings = {0};
+	s64 depth                    = 0;
+	s64 next_depth               = 0;
+	u64 line_begin_off           = 0;
+	for (u64 off = 0; off <= string.size; off++)
+	{
+		u8 byte = off < string.size ? string.str[off] : 0;
+		switch (byte)
+		{
+			case '{':
+			case '[':
+			case '(':
+			{
+				next_depth++;
+				next_depth = Max(0, next_depth);
+			}
+			break;
+			case '}':
+			case ']':
+			case ')':
+			{
+				next_depth--;
+				next_depth = Max(0, next_depth);
+				depth      = next_depth;
+			}
+			break;
+			case '\n':
+			case 0:
+			{
+				String8 line = str8_skip_chop_whitespace(str8_substr(string, rng_1u64(line_begin_off, off)));
+				if (line.size != 0)
+				{
+					str8_list_pushf(scratch.arena, &indented_strings, "%.*s%S\n", (int)depth * 2, indentation_bytes, line);
+				}
+				if (line.size == 0 && indented_strings.node_count != 0 && off < string.size)
+				{
+					str8_list_pushf(scratch.arena, &indented_strings, "\n");
+				}
+				line_begin_off = off + 1;
+				depth          = next_depth;
+			}
+			break;
+			default:
+				break;
+		}
+	}
+	String8 result = str8_list_join(arena, &indented_strings, 0);
+	scratch_end(scratch);
 	return result;
 }
 

@@ -30,27 +30,27 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 	if (addr.size == 0)
 	{
 		fprintf(stderr, "9p: namespace mounting not implemented\n");
-		return NULL;
+		return 0;
 	}
 	Netaddr na = netaddr(a, addr, str8_lit("tcp"), str8_lit("9pfs"));
 	if (na.net.size == 0)
 	{
 		fprintf(stderr, "9p: failed to parse address '%.*s'\n", str8_varg(addr));
-		return NULL;
+		return 0;
 	}
 	Netaddr local = {0};
 	u64 fd        = socketdial(na, local);
 	if (fd == 0)
 	{
 		fprintf(stderr, "9p: dial failed for '%.*s'\n", str8_varg(addr));
-		return NULL;
+		return 0;
 	}
 	Cfsys *fs = fs9mount(a, fd, aname);
-	if (fs == NULL)
+	if (fs == 0)
 	{
 		close(fd);
 		fprintf(stderr, "9p: mount failed\n");
-		return NULL;
+		return 0;
 	}
 	return fs;
 }
@@ -58,7 +58,7 @@ fsconnect(Arena *a, String8 addr, String8 aname)
 static void
 entry_point(CmdLine *cmd_line)
 {
-	Temp scratch  = scratch_begin(NULL, 0);
+	Temp scratch  = scratch_begin(0, 0);
 	String8 addr  = str8_zero();
 	String8 aname = str8_zero();
 	if (cmd_line_has_argument(cmd_line, str8_lit("a")))
@@ -80,15 +80,15 @@ entry_point(CmdLine *cmd_line)
 	if (str8_match(cmd, str8_lit("create"), 0))
 	{
 		Cfsys *fs = fsconnect(scratch.arena, addr, aname);
-		if (fs == NULL)
+		if (fs == 0)
 		{
 			return;
 		}
-		for (String8Node *node = cmd_line->inputs.first->next; node != NULL; node = node->next)
+		for (String8Node *node = cmd_line->inputs.first->next; node != 0; node = node->next)
 		{
 			String8 name = node->string;
 			Cfid *fid    = fscreate(scratch.arena, fs, name, OREAD, 0666);
-			if (fid == NULL)
+			if (fid == 0)
 			{
 				fprintf(stderr, "9p: failed to create '%.*s'\n", str8_varg(name));
 			}
@@ -104,12 +104,12 @@ entry_point(CmdLine *cmd_line)
 	{
 		String8 name = cmd_line->inputs.first->next->string;
 		Cfsys *fs    = fsconnect(scratch.arena, addr, aname);
-		if (fs == NULL)
+		if (fs == 0)
 		{
 			return;
 		}
 		Cfid *fid = fs9open(scratch.arena, fs, name, OREAD);
-		if (fid == NULL)
+		if (fid == 0)
 		{
 			fprintf(stderr, "9p: failed to open '%.*s'\n", str8_varg(name));
 			fs9unmount(scratch.arena, fs);
@@ -141,12 +141,12 @@ entry_point(CmdLine *cmd_line)
 	{
 		String8 name = cmd_line->inputs.first->next->string;
 		Cfsys *fs    = fsconnect(scratch.arena, addr, aname);
-		if (fs == NULL)
+		if (fs == 0)
 		{
 			return;
 		}
 		Cfid *fid = fs9open(scratch.arena, fs, name, OWRITE | OTRUNC);
-		if (fid == NULL)
+		if (fid == 0)
 		{
 			fprintf(stderr, "9p: failed to open '%.*s'\n", str8_varg(name));
 			fs9unmount(scratch.arena, fs);
@@ -178,11 +178,11 @@ entry_point(CmdLine *cmd_line)
 	else if (str8_match(cmd, str8_lit("remove"), 0))
 	{
 		Cfsys *fs = fsconnect(scratch.arena, addr, aname);
-		if (fs == NULL)
+		if (fs == 0)
 		{
 			return;
 		}
-		for (String8Node *node = cmd_line->inputs.first->next; node != NULL; node = node->next)
+		for (String8Node *node = cmd_line->inputs.first->next; node != 0; node = node->next)
 		{
 			String8 name = node->string;
 			if (fsremove(scratch.arena, fs, name) < 0)
@@ -197,7 +197,7 @@ entry_point(CmdLine *cmd_line)
 	{
 		String8 name = cmd_line->inputs.first->next->string;
 		Cfsys *fs    = fsconnect(scratch.arena, addr, aname);
-		if (fs == NULL)
+		if (fs == 0)
 		{
 			return;
 		}
@@ -215,12 +215,12 @@ entry_point(CmdLine *cmd_line)
 	else if (str8_match(cmd, str8_lit("ls"), 0))
 	{
 		Cfsys *fs = fsconnect(scratch.arena, addr, aname);
-		if (fs == NULL)
+		if (fs == 0)
 		{
 			return;
 		}
 		String8Node *namenode = cmd_line->inputs.first->next;
-		if (namenode == NULL)
+		if (namenode == 0)
 		{
 			String8 name = str8_lit(".");
 			Dir d        = fsdirstat(scratch.arena, fs, name);
@@ -233,7 +233,7 @@ entry_point(CmdLine *cmd_line)
 			if (d.mode & DMDIR)
 			{
 				Cfid *fid = fs9open(scratch.arena, fs, name, OREAD);
-				if (fid == NULL)
+				if (fid == 0)
 				{
 					fprintf(stderr, "9p: failed to open directory '%.*s'\n", str8_varg(name));
 					fs9unmount(scratch.arena, fs);
@@ -248,7 +248,7 @@ entry_point(CmdLine *cmd_line)
 					return;
 				}
 				fsclose(scratch.arena, fid);
-				for (Dirnode *node = list.start; node != NULL; node = node->next)
+				for (Dirnode *node = list.start; node != 0; node = node->next)
 				{
 					printf("%.*s\n", str8_varg(node->dir.name));
 				}
@@ -260,7 +260,7 @@ entry_point(CmdLine *cmd_line)
 		}
 		else
 		{
-			for (; namenode != NULL; namenode = namenode->next)
+			for (; namenode != 0; namenode = namenode->next)
 			{
 				String8 name = namenode->string;
 				Dir d        = fsdirstat(scratch.arena, fs, name);
@@ -272,7 +272,7 @@ entry_point(CmdLine *cmd_line)
 				if (d.mode & DMDIR)
 				{
 					Cfid *fid = fs9open(scratch.arena, fs, name, OREAD);
-					if (fid == NULL)
+					if (fid == 0)
 					{
 						fprintf(stderr, "9p: failed to open '%.*s'\n", str8_varg(name));
 						continue;
@@ -285,7 +285,7 @@ entry_point(CmdLine *cmd_line)
 						continue;
 					}
 					fsclose(scratch.arena, fid);
-					for (Dirnode *node = list.start; node != NULL; node = node->next)
+					for (Dirnode *node = list.start; node != 0; node = node->next)
 					{
 						printf("%.*s\n", str8_varg(node->dir.name));
 					}
