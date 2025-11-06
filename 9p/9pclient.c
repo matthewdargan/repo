@@ -54,159 +54,160 @@ fs9unmount(Arena *a, Cfsys *fs)
 }
 
 static void
-debug9pprint(String8 dir, Fcall fc)
+debug9pprint(Arena *a, String8 dir, Fcall fc)
 {
 	if (!debug9pclient)
 	{
 		return;
 	}
-	fprintf(stderr, "%.*s ", str8_varg(dir));
 	switch (fc.type)
 	{
 		case Tversion:
 		{
-			fprintf(stderr, "Tversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, str8_varg(fc.version));
+			log_infof("%S Tversion tag=%u msize=%u version='%.*s'\n", dir, fc.tag, fc.msize, str8_varg(fc.version));
 		}
 		break;
 		case Rversion:
 		{
-			fprintf(stderr, "Rversion tag=%u msize=%u version='%.*s'\n", fc.tag, fc.msize, str8_varg(fc.version));
+			log_infof("%S Rversion tag=%u msize=%u version='%.*s'\n", dir, fc.tag, fc.msize, str8_varg(fc.version));
 		}
 		break;
 		case Tauth:
 		{
-			fprintf(stderr, "Tauth tag=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.afid, str8_varg(fc.uname),
-			        str8_varg(fc.aname));
+			log_infof("%S Tauth tag=%u afid=%u uname='%.*s' aname='%.*s'\n", dir, fc.tag, fc.afid, str8_varg(fc.uname),
+			          str8_varg(fc.aname));
 		}
 		break;
 		case Rauth:
 		{
-			fprintf(stderr, "Rauth tag=%u qid=(type=%u vers=%u path=%lu)\n", fc.tag, fc.aqid.type, fc.aqid.vers,
-			        fc.aqid.path);
+			log_infof("%S Rauth tag=%u qid=(type=%u vers=%u path=%llu)\n", dir, fc.tag, fc.aqid.type, fc.aqid.vers,
+			          fc.aqid.path);
 		}
 		break;
 		case Rerror:
 		{
-			fprintf(stderr, "Rerror tag=%u ename='%.*s'\n", fc.tag, str8_varg(fc.ename));
+			log_infof("%S Rerror tag=%u ename='%.*s'\n", dir, fc.tag, str8_varg(fc.ename));
 		}
 		break;
 		case Tattach:
 		{
-			fprintf(stderr, "Tattach tag=%u fid=%u afid=%u uname='%.*s' aname='%.*s'\n", fc.tag, fc.fid, fc.afid,
-			        str8_varg(fc.uname), str8_varg(fc.aname));
+			log_infof("%S Tattach tag=%u fid=%u afid=%u uname='%.*s' aname='%.*s'\n", dir, fc.tag, fc.fid, fc.afid,
+			          str8_varg(fc.uname), str8_varg(fc.aname));
 		}
 		break;
 		case Rattach:
 		{
-			fprintf(stderr, "Rattach tag=%u qid=(type=%u vers=%u path=%lu)\n", fc.tag, fc.qid.type, fc.qid.vers, fc.qid.path);
+			log_infof("%S Rattach tag=%u qid=(type=%u vers=%u path=%llu)\n", dir, fc.tag, fc.qid.type, fc.qid.vers,
+			          fc.qid.path);
 		}
 		break;
 		case Twalk:
 		{
-			fprintf(stderr, "Twalk tag=%u fid=%u newfid=%u nwname=%u", fc.tag, fc.fid, fc.newfid, fc.nwname);
+			String8 msg = str8f(a, "%S Twalk tag=%u fid=%u newfid=%u nwname=%u", dir, fc.tag, fc.fid, fc.newfid, fc.nwname);
 			for (u32 i = 0; i < fc.nwname; i++)
 			{
-				fprintf(stderr, " '%.*s'", str8_varg(fc.wname[i]));
+				msg = str8f(a, "%S '%.*s'", msg, str8_varg(fc.wname[i]));
 			}
-			fprintf(stderr, "\n");
+			log_infof("%S\n", msg);
 		}
 		break;
 		case Rwalk:
 		{
-			fprintf(stderr, "Rwalk tag=%u nwqid=%u", fc.tag, fc.nwqid);
+			String8 msg = str8f(a, "%S Rwalk tag=%u nwqid=%u", dir, fc.tag, fc.nwqid);
 			for (u32 i = 0; i < fc.nwqid; i++)
 			{
-				fprintf(stderr, " qid%u=(type=%u vers=%u path=%lu)", i, fc.wqid[i].type, fc.wqid[i].vers, fc.wqid[i].path);
+				msg =
+				    str8f(a, "%S qid%u=(type=%u vers=%u path=%llu)", msg, i, fc.wqid[i].type, fc.wqid[i].vers, fc.wqid[i].path);
 			}
-			fprintf(stderr, "\n");
+			log_infof("%S\n", msg);
 		}
 		break;
 		case Topen:
 		{
-			fprintf(stderr, "Topen tag=%u fid=%u mode=%u\n", fc.tag, fc.fid, fc.mode);
+			log_infof("%S Topen tag=%u fid=%u mode=%u\n", dir, fc.tag, fc.fid, fc.mode);
 		}
 		break;
 		case Ropen:
 		{
-			fprintf(stderr, "Ropen tag=%u qid=(type=%u vers=%u path=%lu) iounit=%u\n", fc.tag, fc.qid.type, fc.qid.vers,
-			        fc.qid.path, fc.iounit);
+			log_infof("%S Ropen tag=%u qid=(type=%u vers=%u path=%llu) iounit=%u\n", dir, fc.tag, fc.qid.type, fc.qid.vers,
+			          fc.qid.path, fc.iounit);
 		}
 		break;
 		case Tcreate:
 		{
-			fprintf(stderr, "Tcreate tag=%u fid=%u name='%.*s' perm=%u mode=%u\n", fc.tag, fc.fid, str8_varg(fc.name),
-			        fc.perm, fc.mode);
+			log_infof("%S Tcreate tag=%u fid=%u name='%.*s' perm=%u mode=%u\n", dir, fc.tag, fc.fid, str8_varg(fc.name),
+			          fc.perm, fc.mode);
 		}
 		break;
 		case Rcreate:
 		{
-			fprintf(stderr, "Rcreate tag=%u qid=(type=%u vers=%u path=%lu) iounit=%u\n", fc.tag, fc.qid.type, fc.qid.vers,
-			        fc.qid.path, fc.iounit);
+			log_infof("%S Rcreate tag=%u qid=(type=%u vers=%u path=%llu) iounit=%u\n", dir, fc.tag, fc.qid.type, fc.qid.vers,
+			          fc.qid.path, fc.iounit);
 		}
 		break;
 		case Tread:
 		{
-			fprintf(stderr, "Tread tag=%u fid=%u offset=%lu count=%u\n", fc.tag, fc.fid, fc.offset, fc.count);
+			log_infof("%S Tread tag=%u fid=%u offset=%llu count=%u\n", dir, fc.tag, fc.fid, fc.offset, fc.count);
 		}
 		break;
 		case Rread:
 		{
-			fprintf(stderr, "Rread tag=%u count=%lu\n", fc.tag, fc.data.size);
+			log_infof("%S Rread tag=%u count=%llu\n", dir, fc.tag, fc.data.size);
 		}
 		break;
 		case Twrite:
 		{
-			fprintf(stderr, "Twrite tag=%u fid=%u offset=%lu count=%lu\n", fc.tag, fc.fid, fc.offset, fc.data.size);
+			log_infof("%S Twrite tag=%u fid=%u offset=%llu count=%llu\n", dir, fc.tag, fc.fid, fc.offset, fc.data.size);
 		}
 		break;
 		case Rwrite:
 		{
-			fprintf(stderr, "Rwrite tag=%u count=%u\n", fc.tag, fc.count);
+			log_infof("%S Rwrite tag=%u count=%u\n", dir, fc.tag, fc.count);
 		}
 		break;
 		case Tclunk:
 		{
-			fprintf(stderr, "Tclunk tag=%u fid=%u\n", fc.tag, fc.fid);
+			log_infof("%S Tclunk tag=%u fid=%u\n", dir, fc.tag, fc.fid);
 		}
 		break;
 		case Rclunk:
 		{
-			fprintf(stderr, "Rclunk tag=%u\n", fc.tag);
+			log_infof("%S Rclunk tag=%u\n", dir, fc.tag);
 		}
 		break;
 		case Tremove:
 		{
-			fprintf(stderr, "Tremove tag=%u fid=%u\n", fc.tag, fc.fid);
+			log_infof("%S Tremove tag=%u fid=%u\n", dir, fc.tag, fc.fid);
 		}
 		break;
 		case Rremove:
 		{
-			fprintf(stderr, "Rremove tag=%u\n", fc.tag);
+			log_infof("%S Rremove tag=%u\n", dir, fc.tag);
 		}
 		break;
 		case Tstat:
 		{
-			fprintf(stderr, "Tstat tag=%u fid=%u\n", fc.tag, fc.fid);
+			log_infof("%S Tstat tag=%u fid=%u\n", dir, fc.tag, fc.fid);
 		}
 		break;
 		case Rstat:
 		{
-			fprintf(stderr, "Rstat tag=%u stat.size=%lu\n", fc.tag, fc.stat.size);
+			log_infof("%S Rstat tag=%u stat.size=%llu\n", dir, fc.tag, fc.stat.size);
 		}
 		break;
 		case Twstat:
 		{
-			fprintf(stderr, "Twstat tag=%u fid=%u stat.size=%lu\n", fc.tag, fc.fid, fc.stat.size);
+			log_infof("%S Twstat tag=%u fid=%u stat.size=%llu\n", dir, fc.tag, fc.fid, fc.stat.size);
 		}
 		break;
 		case Rwstat:
 		{
-			fprintf(stderr, "Rwstat tag=%u\n", fc.tag);
+			log_infof("%S Rwstat tag=%u\n", dir, fc.tag);
 		}
 		break;
 		default:
 		{
-			fprintf(stderr, "unknown type=%u tag=%u\n", fc.type, fc.tag);
+			log_infof("%S unknown type=%u tag=%u\n", dir, fc.type, fc.tag);
 		}
 		break;
 	}
@@ -224,7 +225,7 @@ fsrpc(Arena *a, Cfsys *fs, Fcall tx)
 			fs->nexttag = 1;
 		}
 	}
-	debug9pprint(str8_lit("<-"), tx);
+	debug9pprint(a, str8_lit("<-"), tx);
 	String8 txmsg = fcallencode(a, tx);
 	if (txmsg.size == 0)
 	{
@@ -241,7 +242,7 @@ fsrpc(Arena *a, Cfsys *fs, Fcall tx)
 		return errfc;
 	}
 	Fcall rx = fcalldecode(rxmsg);
-	debug9pprint(str8_lit("->"), rx);
+	debug9pprint(a, str8_lit("->"), rx);
 	if (rx.type == 0 || rx.type == Rerror || rx.type != tx.type + 1)
 	{
 		return errfc;

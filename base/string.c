@@ -660,6 +660,10 @@ str8_chop_last_slash(String8 string)
 		{
 			string.size = p - string.str;
 		}
+		else
+		{
+			string.size = 0;
+		}
 	}
 	return string;
 }

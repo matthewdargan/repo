@@ -318,9 +318,14 @@ ramfs_open(Req *r)
 static void
 entry_point(CmdLine *cmd_line)
 {
+	Temp scratch = scratch_begin(0, 0);
+	Log *log     = log_alloc();
+	log_select(log);
+	log_scope_begin();
 	Arena *arena    = arena_alloc();
 	String8 srvname = str8_zero();
 	String8 address = str8_zero();
+
 	if (cmd_line_has_argument(cmd_line, str8_lit("s")))
 	{
 		srvname = cmd_line_string(cmd_line, str8_lit("s"));
@@ -331,81 +336,98 @@ entry_point(CmdLine *cmd_line)
 	}
 	if (srvname.size == 0 && address.size == 0)
 	{
-		fprintf(stderr, "usage: ramfs [-s srvname] [-a address]\n");
-		arena_release(arena);
-		return;
-	}
-	if (address.size > 0)
-	{
-		Netaddr na = netaddr(arena, address, str8_lit("tcp"), str8_lit("9pfs"));
-		if (na.net.size == 0)
-		{
-			fprintf(stderr, "ramfs: failed to parse address '%.*s'\n", str8_varg(address));
-			arena_release(arena);
-			return;
-		}
-		String8 portstr = str8f(arena, "%llu", na.port);
-		u64 listenfd    = socketlisten(portstr, 0);
-		if (listenfd == 0)
-		{
-			fprintf(stderr, "ramfs: failed to listen on port %.*s\n", str8_varg(portstr));
-			arena_release(arena);
-			return;
-		}
-		printf("ramfs: listening on %.*s (port %.*s)\n", str8_varg(address), str8_varg(portstr));
-		for (;;)
-		{
-			u64 connfd = socketaccept(listenfd);
-			if (connfd == 0)
-			{
-				fprintf(stderr, "ramfs: failed to accept connection\n");
-				continue;
-			}
-			printf("ramfs: accepted connection\n");
-			u64 infd  = connfd;
-			u64 outfd = connfd;
-			Srv *srv  = srvalloc(arena, infd, outfd);
-			if (srv == 0)
-			{
-				fprintf(stderr, "ramfs: failed to allocate server\n");
-				close(connfd);
-				continue;
-			}
-			srv->attach = ramfs_attach;
-			srv->read   = ramfs_read;
-			srv->write  = ramfs_write;
-			srv->create = ramfs_create;
-			srv->open   = ramfs_open;
-			srv->walk   = ramfs_walk;
-			srv->stat   = ramfs_stat;
-			srv->remove = ramfs_remove;
-			srvrun(srv);
-			srvfree(srv);
-			close(connfd);
-			printf("ramfs: connection closed\n");
-		}
+		log_error(str8_lit("usage: ramfs [-s srvname] [-a address]\n"));
 	}
 	else
 	{
-		u64 infd  = STDIN_FILENO;
-		u64 outfd = STDOUT_FILENO;
-		Srv *srv  = srvalloc(arena, infd, outfd);
-		if (srv == 0)
+		if (address.size > 0)
 		{
-			fprintf(stderr, "ramfs: failed to allocate server\n");
-			arena_release(arena);
-			return;
+			Netaddr na = netaddr(arena, address, str8_lit("tcp"), str8_lit("9pfs"));
+			if (na.net.size == 0)
+			{
+				log_errorf("ramfs: failed to parse address '%S'\n", address);
+			}
+			else
+			{
+				String8 portstr = str8f(arena, "%llu", na.port);
+				u64 listenfd    = socketlisten(portstr, 0);
+				if (listenfd == 0)
+				{
+					log_errorf("ramfs: failed to listen on port %S\n", portstr);
+				}
+				else
+				{
+					log_infof("ramfs: listening on %S (port %S)\n", address, portstr);
+					for (;;)
+					{
+						u64 connfd = socketaccept(listenfd);
+						if (connfd == 0)
+						{
+							log_error(str8_lit("ramfs: failed to accept connection\n"));
+							continue;
+						}
+						log_info(str8_lit("ramfs: accepted connection\n"));
+						u64 infd  = connfd;
+						u64 outfd = connfd;
+						Srv *srv  = srvalloc(arena, infd, outfd);
+						if (srv == 0)
+						{
+							log_error(str8_lit("ramfs: failed to allocate server\n"));
+							close(connfd);
+							continue;
+						}
+						srv->attach = ramfs_attach;
+						srv->read   = ramfs_read;
+						srv->write  = ramfs_write;
+						srv->create = ramfs_create;
+						srv->open   = ramfs_open;
+						srv->walk   = ramfs_walk;
+						srv->stat   = ramfs_stat;
+						srv->remove = ramfs_remove;
+						srvrun(srv);
+						srvfree(srv);
+						close(connfd);
+						log_info(str8_lit("ramfs: connection closed\n"));
+					}
+				}
+			}
 		}
-		srv->attach = ramfs_attach;
-		srv->read   = ramfs_read;
-		srv->write  = ramfs_write;
-		srv->create = ramfs_create;
-		srv->open   = ramfs_open;
-		srv->walk   = ramfs_walk;
-		srv->stat   = ramfs_stat;
-		srv->remove = ramfs_remove;
-		srvrun(srv);
-		srvfree(srv);
+		else
+		{
+			u64 infd  = STDIN_FILENO;
+			u64 outfd = STDOUT_FILENO;
+			Srv *srv  = srvalloc(arena, infd, outfd);
+			if (srv == 0)
+			{
+				log_error(str8_lit("ramfs: failed to allocate server\n"));
+			}
+			else
+			{
+				srv->attach = ramfs_attach;
+				srv->read   = ramfs_read;
+				srv->write  = ramfs_write;
+				srv->create = ramfs_create;
+				srv->open   = ramfs_open;
+				srv->walk   = ramfs_walk;
+				srv->stat   = ramfs_stat;
+				srv->remove = ramfs_remove;
+				srvrun(srv);
+				srvfree(srv);
+			}
+		}
 	}
 	arena_release(arena);
+
+	LogScopeResult result = log_scope_end(scratch.arena);
+	if (result.strings[LogMsgKind_Info].size > 0)
+	{
+		fwrite(result.strings[LogMsgKind_Info].str, 1, result.strings[LogMsgKind_Info].size, stdout);
+		fflush(stdout);
+	}
+	if (result.strings[LogMsgKind_Error].size > 0)
+	{
+		fwrite(result.strings[LogMsgKind_Error].str, 1, result.strings[LogMsgKind_Error].size, stderr);
+		fflush(stderr);
+	}
+	scratch_end(scratch);
 }
