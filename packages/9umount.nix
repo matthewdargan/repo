@@ -8,7 +8,7 @@
       "9umount" = pkgs.clangStdenv.mkDerivation {
         buildPhase = ''
           clang -O3 -I. -g -fdiagnostics-absolute-paths -Wall -Wextra \
-             cmd/9umount/main.c -o 9umount
+             -DBUILD_DEBUG=0 cmd/9umount/main.c -o 9umount
         '';
         installPhase = ''
           mkdir -p "$out/bin"
@@ -28,7 +28,7 @@
         buildPhase = ''
           clang -O0 -g -fsanitize=address -fno-omit-frame-pointer \
              -I. -fdiagnostics-absolute-paths -Wall -Wextra \
-             -DBUILD_DEBUG cmd/9umount/main.c -o 9umount
+             -DBUILD_DEBUG=1 cmd/9umount/main.c -o 9umount
         '';
         dontStrip = true;
         installPhase = ''

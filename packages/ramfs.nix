@@ -8,7 +8,7 @@
       "ramfs" = pkgs.clangStdenv.mkDerivation {
         buildPhase = ''
           clang -O3 -I. -g -fdiagnostics-absolute-paths -Wall -Wextra \
-             cmd/ramfs/main.c -o ramfs
+             -DBUILD_DEBUG=0 cmd/ramfs/main.c -o ramfs
         '';
         installPhase = ''
           mkdir -p "$out/bin"
@@ -28,7 +28,7 @@
         buildPhase = ''
           clang -O0 -g -fsanitize=address -fno-omit-frame-pointer \
              -I. -fdiagnostics-absolute-paths -Wall -Wextra \
-             -DBUILD_DEBUG cmd/ramfs/main.c -o ramfs
+             -DBUILD_DEBUG=1 cmd/ramfs/main.c -o ramfs
         '';
         dontStrip = true;
         installPhase = ''

@@ -364,7 +364,7 @@ fswalk(Arena *a, Cfid *fid, String8 path)
 		while (node != 0 && i < MAXWELEM)
 		{
 			String8 part = node->string;
-			if (part.str[0] == '.' && part.size == 1)
+			if (str8_match(part, str8_lit("."), 0))
 			{
 				node = node->next;
 				continue;
@@ -654,7 +654,7 @@ dirpackage(Arena *a, u8 *buf, s64 ts, Dirlist *list)
 		{
 			return -1;
 		}
-		u64 m = 2 + getb2(&buf[i]);
+		u64 m = 2 + from_le_u16(read_u16(&buf[i]));
 		if (i + m > (u64)ts)
 		{
 			return -1;

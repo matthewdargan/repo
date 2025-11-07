@@ -136,26 +136,6 @@ typedef s64 b64;
 typedef float f32;
 typedef double f64;
 
-// Endianness
-#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
-#define LITTLEENDIAN 1
-#elif defined(__LITTLE_ENDIAN__) || defined(__ARMEL__) || defined(_WIN32) || defined(__i386__) || \
-    defined(__x86_64__) || defined(_M_IX86) || defined(_M_X64) || defined(__aarch64__) || defined(_M_ARM64)
-#define LITTLEENDIAN 1
-#else
-#define LITTLEENDIAN 0
-#endif
-
-#if LITTLEENDIAN
-#define fromleu16(x) (x)
-#define fromleu32(x) (x)
-#define fromleu64(x) (x)
-#else
-#define fromleu16(x) bswapu16((x))
-#define fromleu32(x) bswapu32((x))
-#define fromleu64(x) bswapu64((x))
-#endif
-
 // Array Types
 typedef struct U64Array U64Array;
 struct U64Array
@@ -200,10 +180,34 @@ enum
 	ISDIR = 1 << 0,
 };
 
-// Bit Functions
-static u16 bswapu16(u16 x);
-static u32 bswapu32(u32 x);
-static u64 bswapu64(u64 x);
+// Bit Patterns
+static u16 bswap_u16(u16 x);
+static u32 bswap_u32(u32 x);
+static u64 bswap_u64(u64 x);
+
+#if ARCH_LITTLE_ENDIAN
+#define from_be_u16(x) bswap_u16(x)
+#define from_be_u32(x) bswap_u32(x)
+#define from_be_u64(x) bswap_u64(x)
+#define from_le_u16(x) (x)
+#define from_le_u32(x) (x)
+#define from_le_u64(x) (x)
+#else
+#define from_be_u16(x) (x)
+#define from_be_u32(x) (x)
+#define from_be_u64(x) (x)
+#define from_le_u16(x) bswap_u16(x)
+#define from_le_u32(x) bswap_u32(x)
+#define from_le_u64(x) bswap_u64(x)
+#endif
+
+// Raw byte IO
+static u16 read_u16(void const *ptr);
+static u32 read_u32(void const *ptr);
+static u64 read_u64(void const *ptr);
+static void write_u16(void *ptr, u16 x);
+static void write_u32(void *ptr, u32 x);
+static void write_u64(void *ptr, u64 x);
 
 // Time Functions
 static DenseTime dense_time_from_date_time(DateTime dt);

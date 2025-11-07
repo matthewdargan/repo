@@ -8,7 +8,7 @@
       "9mount" = pkgs.clangStdenv.mkDerivation {
         buildPhase = ''
           clang -O3 -I. -g -fdiagnostics-absolute-paths -Wall -Wextra \
-             cmd/9mount/main.c -o 9mount
+             -DBUILD_DEBUG=0 cmd/9mount/main.c -o 9mount
         '';
         installPhase = ''
           mkdir -p "$out/bin"
@@ -28,7 +28,7 @@
         buildPhase = ''
           clang -O0 -g -fsanitize=address -fno-omit-frame-pointer \
              -I. -fdiagnostics-absolute-paths -Wall -Wextra \
-             -DBUILD_DEBUG cmd/9mount/main.c -o 9mount
+             -DBUILD_DEBUG=1 cmd/9mount/main.c -o 9mount
         '';
         dontStrip = true;
         installPhase = ''

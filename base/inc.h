@@ -3,6 +3,7 @@
 
 // Base Includes
 // clang-format off
+#include "context_cracking.h"
 #include "core.h"
 #include "arena.h"
 #include "math.h"

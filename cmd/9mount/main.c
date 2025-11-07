@@ -9,15 +9,9 @@
 static String8
 resolvehost(Arena *a, String8 host)
 {
-	char hostbuf[1024] = {0};
-	if (host.size >= sizeof hostbuf)
-	{
-		return str8_zero();
-	}
-	MemoryCopy(hostbuf, host.str, host.size);
-	hostbuf[host.size]  = 0;
+	String8 host_copy   = str8_copy(a, host);
 	struct addrinfo *ai = 0;
-	int ret             = getaddrinfo(hostbuf, 0, 0, &ai);
+	int ret             = getaddrinfo((char *)host_copy.str, 0, 0, &ai);
 	if (ret != 0)
 	{
 		log_errorf("9mount: getaddrinfo %S: %s\n", host, gai_strerror(ret));
@@ -59,6 +53,7 @@ entry_point(CmdLine *cmd_line)
 	{
 		String8 dial      = cmd_line->inputs.first->string;
 		String8 mtpt      = cmd_line->inputs.first->next->string;
+		String8 mtpt_copy = str8_copy(scratch.arena, mtpt);
 		uid_t uid         = uidstr.size > 0 ? (uid_t)u64_from_str8(uidstr, 10) : getuid();
 		gid_t gid         = gidstr.size > 0 ? (gid_t)u64_from_str8(gidstr, 10) : getgid();
 		struct passwd *pw = getpwuid(uid);
@@ -69,7 +64,7 @@ entry_point(CmdLine *cmd_line)
 		else
 		{
 			struct stat st = {0};
-			if (stat((char *)mtpt.str, &st) || access((char *)mtpt.str, W_OK))
+			if (stat((char *)mtpt_copy.str, &st) || access((char *)mtpt_copy.str, W_OK))
 			{
 				log_errorf("9mount: %S: %s\n", mtpt, strerror(errno));
 			}
@@ -162,16 +157,17 @@ entry_point(CmdLine *cmd_line)
 						{
 							str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "access=%d", uid));
 						}
-						StringJoin join = {0};
-						join.pre        = str8_zero();
-						join.sep        = str8_lit(",");
-						join.post       = str8_zero();
-						String8 optstr  = str8_list_join(scratch.arena, &opts, &join);
+						StringJoin join   = {0};
+						join.pre          = str8_zero();
+						join.sep          = str8_lit(",");
+						join.post         = str8_zero();
+						String8 optstr    = str8_list_join(scratch.arena, &opts, &join);
+						String8 addr_copy = str8_copy(scratch.arena, addr);
 						if (dryrun)
 						{
 							log_infof("mount -t 9p -o %S %S %S\n", optstr, addr, mtpt);
 						}
-						else if (mount((char *)addr.str, (char *)mtpt.str, "9p", 0, (char *)optstr.str))
+						else if (mount((char *)addr_copy.str, (char *)mtpt_copy.str, "9p", 0, (char *)optstr.str))
 						{
 							log_errorf("9mount: mount failed: %s\n", strerror(errno));
 						}

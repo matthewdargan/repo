@@ -1,7 +1,7 @@
 static u8 *
 putstr(u8 *p, String8 s)
 {
-	putb2(p, s.size);
+	write_u16((p), from_le_u16(s.size));
 	p += 2;
 	if (s.size > 0)
 	{
@@ -14,11 +14,11 @@ putstr(u8 *p, String8 s)
 static u8 *
 putqid(u8 *p, Qid qid)
 {
-	putb1(p, qid.type);
+	(p)[0] = (u8)(qid.type);
 	p++;
-	putb4(p, qid.vers);
+	write_u32((p), from_le_u32(qid.vers));
 	p += 4;
-	putb8(p, qid.path);
+	write_u64((p), from_le_u64(qid.path));
 	p += 8;
 	return p;
 }
@@ -30,7 +30,7 @@ getstr(u8 *p, u8 *end, String8 *s)
 	{
 		return 0;
 	}
-	u32 len = getb2(p);
+	u32 len = ((u32)from_le_u16(read_u16(p)));
 	p += 2;
 	if (p + len > end)
 	{
@@ -56,11 +56,11 @@ getqid(u8 *p, u8 *end, Qid *qid)
 	{
 		return 0;
 	}
-	qid->type = getb1(p);
+	qid->type = ((u32)(p)[0]);
 	p++;
-	qid->vers = getb4(p);
+	qid->vers = ((u32)from_le_u32(read_u32(p)));
 	p += 4;
-	qid->path = getb8(p);
+	qid->path = ((u64)from_le_u64(read_u64(p)));
 	p += 8;
 	return p;
 }
@@ -227,25 +227,25 @@ fcallencode(Arena *a, Fcall fc)
 	    .size = msglen,
 	};
 	u8 *p = msg.str;
-	putb4(p, msg.size);
+	write_u32((p), from_le_u32(msg.size));
 	p += 4;
-	putb1(p, fc.type);
+	(p)[0] = (u8)(fc.type);
 	p++;
-	putb2(p, fc.tag);
+	write_u16((p), from_le_u16(fc.tag));
 	p += 2;
 	switch (fc.type)
 	{
 		case Tversion:
 		case Rversion:
 		{
-			putb4(p, fc.msize);
+			write_u32((p), from_le_u32(fc.msize));
 			p += 4;
 			p = putstr(p, fc.version);
 		}
 		break;
 		case Tauth:
 		{
-			putb4(p, fc.afid);
+			write_u32((p), from_le_u32(fc.afid));
 			p += 4;
 			p = putstr(p, fc.uname);
 			p = putstr(p, fc.aname);
@@ -263,7 +263,7 @@ fcallencode(Arena *a, Fcall fc)
 		break;
 		case Tflush:
 		{
-			putb2(p, fc.oldtag);
+			write_u16((p), from_le_u16(fc.oldtag));
 			p += 2;
 		}
 		break;
@@ -271,9 +271,9 @@ fcallencode(Arena *a, Fcall fc)
 			break;
 		case Tattach:
 		{
-			putb4(p, fc.fid);
+			write_u32((p), from_le_u32(fc.fid));
 			p += 4;
-			putb4(p, fc.afid);
+			write_u32((p), from_le_u32(fc.afid));
 			p += 4;
 			p = putstr(p, fc.uname);
 			p = putstr(p, fc.aname);
@@ -286,11 +286,11 @@ fcallencode(Arena *a, Fcall fc)
 		break;
 		case Twalk:
 		{
-			putb4(p, fc.fid);
+			write_u32((p), from_le_u32(fc.fid));
 			p += 4;
-			putb4(p, fc.newfid);
+			write_u32((p), from_le_u32(fc.newfid));
 			p += 4;
-			putb2(p, fc.nwname);
+			write_u16((p), from_le_u16(fc.nwname));
 			p += 2;
 			if (fc.nwname > MAXWELEM)
 			{
@@ -304,7 +304,7 @@ fcallencode(Arena *a, Fcall fc)
 		break;
 		case Rwalk:
 		{
-			putb2(p, fc.nwqid);
+			write_u16((p), from_le_u16(fc.nwqid));
 			p += 2;
 			if (fc.nwqid > MAXWELEM)
 			{
@@ -318,9 +318,9 @@ fcallencode(Arena *a, Fcall fc)
 		break;
 		case Topen:
 		{
-			putb4(p, fc.fid);
+			write_u32((p), from_le_u32(fc.fid));
 			p += 4;
-			putb1(p, fc.mode);
+			(p)[0] = (u8)(fc.mode);
 			p++;
 		}
 		break;
@@ -328,34 +328,34 @@ fcallencode(Arena *a, Fcall fc)
 		case Rcreate:
 		{
 			p = putqid(p, fc.qid);
-			putb4(p, fc.iounit);
+			write_u32((p), from_le_u32(fc.iounit));
 			p += 4;
 		}
 		break;
 		case Tcreate:
 		{
-			putb4(p, fc.fid);
+			write_u32((p), from_le_u32(fc.fid));
 			p += 4;
 			p = putstr(p, fc.name);
-			putb4(p, fc.perm);
+			write_u32((p), from_le_u32(fc.perm));
 			p += 4;
-			putb1(p, fc.mode);
+			(p)[0] = (u8)(fc.mode);
 			p++;
 		}
 		break;
 		case Tread:
 		{
-			putb4(p, fc.fid);
+			write_u32((p), from_le_u32(fc.fid));
 			p += 4;
-			putb8(p, fc.offset);
+			write_u64((p), from_le_u64(fc.offset));
 			p += 8;
-			putb4(p, fc.count);
+			write_u32((p), from_le_u32(fc.count));
 			p += 4;
 		}
 		break;
 		case Rread:
 		{
-			putb4(p, fc.data.size);
+			write_u32((p), from_le_u32(fc.data.size));
 			p += 4;
 			if (fc.data.size > 0)
 			{
@@ -366,11 +366,11 @@ fcallencode(Arena *a, Fcall fc)
 		break;
 		case Twrite:
 		{
-			putb4(p, fc.fid);
+			write_u32((p), from_le_u32(fc.fid));
 			p += 4;
-			putb8(p, fc.offset);
+			write_u64((p), from_le_u64(fc.offset));
 			p += 8;
-			putb4(p, fc.data.size);
+			write_u32((p), from_le_u32(fc.data.size));
 			p += 4;
 			if (fc.data.size > 0)
 			{
@@ -381,14 +381,14 @@ fcallencode(Arena *a, Fcall fc)
 		break;
 		case Rwrite:
 		{
-			putb4(p, fc.count);
+			write_u32((p), from_le_u32(fc.count));
 			p += 4;
 		}
 		break;
 		case Tclunk:
 		case Tremove:
 		{
-			putb4(p, fc.fid);
+			write_u32((p), from_le_u32(fc.fid));
 			p += 4;
 		}
 		break;
@@ -397,13 +397,13 @@ fcallencode(Arena *a, Fcall fc)
 			break;
 		case Tstat:
 		{
-			putb4(p, fc.fid);
+			write_u32((p), from_le_u32(fc.fid));
 			p += 4;
 		}
 		break;
 		case Rstat:
 		{
-			putb2(p, fc.stat.size);
+			write_u16((p), from_le_u16(fc.stat.size));
 			p += 2;
 			if (fc.stat.size > 0)
 			{
@@ -414,9 +414,9 @@ fcallencode(Arena *a, Fcall fc)
 		break;
 		case Twstat:
 		{
-			putb4(p, fc.fid);
+			write_u32((p), from_le_u32(fc.fid));
 			p += 4;
-			putb2(p, fc.stat.size);
+			write_u16((p), from_le_u16(fc.stat.size));
 			p += 2;
 			if (fc.stat.size > 0)
 			{
@@ -450,15 +450,15 @@ fcalldecode(String8 msg)
 	}
 	u8 *p    = msg.str;
 	u8 *end  = msg.str + msg.size;
-	u32 size = getb4(p);
+	u32 size = ((u32)from_le_u32(read_u32(p)));
 	p += 4;
 	if (size != msg.size)
 	{
 		return errfc;
 	}
-	fc.type = getb1(p);
+	fc.type = ((u32)(p)[0]);
 	p++;
-	fc.tag = getb2(p);
+	fc.tag = ((u32)from_le_u16(read_u16(p)));
 	p += 2;
 	switch (fc.type)
 	{
@@ -469,7 +469,7 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.msize = getb4(p);
+			fc.msize = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
 			p = getstr(p, end, &fc.version);
 			if (p == 0)
@@ -484,7 +484,7 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.afid = getb4(p);
+			fc.afid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
 			p = getstr(p, end, &fc.uname);
 			if (p == 0)
@@ -522,7 +522,7 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.oldtag = getb2(p);
+			fc.oldtag = ((u32)from_le_u16(read_u16(p)));
 			p += 2;
 		}
 		break;
@@ -534,9 +534,9 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.fid = getb4(p);
+			fc.fid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
-			fc.afid = getb4(p);
+			fc.afid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
 			p = getstr(p, end, &fc.uname);
 			if (p == 0)
@@ -565,11 +565,11 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.fid = getb4(p);
+			fc.fid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
-			fc.newfid = getb4(p);
+			fc.newfid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
-			fc.nwname = getb2(p);
+			fc.nwname = ((u32)from_le_u16(read_u16(p)));
 			p += 2;
 			if (fc.nwname > MAXWELEM)
 			{
@@ -591,7 +591,7 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.nwqid = getb2(p);
+			fc.nwqid = ((u32)from_le_u16(read_u16(p)));
 			p += 2;
 			if (fc.nwqid > MAXWELEM)
 			{
@@ -613,9 +613,9 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.fid = getb4(p);
+			fc.fid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
-			fc.mode = getb1(p);
+			fc.mode = ((u32)(p)[0]);
 			p++;
 		}
 		break;
@@ -631,7 +631,7 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.iounit = getb4(p);
+			fc.iounit = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
 		}
 		break;
@@ -641,7 +641,7 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.fid = getb4(p);
+			fc.fid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
 			p = getstr(p, end, &fc.name);
 			if (p == 0)
@@ -652,9 +652,9 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.perm = getb4(p);
+			fc.perm = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
-			fc.mode = getb1(p);
+			fc.mode = ((u32)(p)[0]);
 			p++;
 		}
 		break;
@@ -664,11 +664,11 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.fid = getb4(p);
+			fc.fid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
-			fc.offset = getb8(p);
+			fc.offset = ((u64)from_le_u64(read_u64(p)));
 			p += 8;
-			fc.count = getb4(p);
+			fc.count = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
 		}
 		break;
@@ -678,7 +678,7 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.data.size = getb4(p);
+			fc.data.size = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
 			if (p + fc.data.size > end)
 			{
@@ -701,11 +701,11 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.fid = getb4(p);
+			fc.fid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
-			fc.offset = getb8(p);
+			fc.offset = ((u64)from_le_u64(read_u64(p)));
 			p += 8;
-			fc.data.size = getb4(p);
+			fc.data.size = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
 			if (p + fc.data.size > end)
 			{
@@ -728,7 +728,7 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.count = getb4(p);
+			fc.count = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
 		}
 		break;
@@ -739,7 +739,7 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.fid = getb4(p);
+			fc.fid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
 		}
 		break;
@@ -752,7 +752,7 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.fid = getb4(p);
+			fc.fid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
 		}
 		break;
@@ -762,7 +762,7 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.stat.size = getb2(p);
+			fc.stat.size = ((u32)from_le_u16(read_u16(p)));
 			p += 2;
 			if (p + fc.stat.size > end)
 			{
@@ -785,9 +785,9 @@ fcalldecode(String8 msg)
 			{
 				return errfc;
 			}
-			fc.fid = getb4(p);
+			fc.fid = ((u32)from_le_u32(read_u32(p)));
 			p += 4;
-			fc.stat.size = getb2(p);
+			fc.stat.size = ((u32)from_le_u16(read_u16(p)));
 			p += 2;
 			if (p + fc.stat.size > end)
 			{
@@ -842,25 +842,25 @@ direncode(Arena *a, Dir d)
 	    .size = msglen,
 	};
 	u8 *p = msg.str;
-	putb2(p, msg.size - 2);
+	write_u16((p), from_le_u16(msg.size - 2));
 	p += 2;
-	putb2(p, d.type);
+	write_u16((p), from_le_u16(d.type));
 	p += 2;
-	putb4(p, d.dev);
+	write_u32((p), from_le_u32(d.dev));
 	p += 4;
-	putb1(p, d.qid.type);
+	(p)[0] = (u8)(d.qid.type);
 	p++;
-	putb4(p, d.qid.vers);
+	write_u32((p), from_le_u32(d.qid.vers));
 	p += 4;
-	putb8(p, d.qid.path);
+	write_u64((p), from_le_u64(d.qid.path));
 	p += 8;
-	putb4(p, d.mode);
+	write_u32((p), from_le_u32(d.mode));
 	p += 4;
-	putb4(p, d.atime);
+	write_u32((p), from_le_u32(d.atime));
 	p += 4;
-	putb4(p, d.mtime);
+	write_u32((p), from_le_u32(d.mtime));
 	p += 4;
-	putb8(p, d.len);
+	write_u64((p), from_le_u64(d.len));
 	p += 8;
 	p = putstr(p, d.name);
 	p = putstr(p, d.uid);
@@ -889,23 +889,23 @@ dirdecode(String8 msg)
 	{
 		return errd;
 	}
-	d.type = getb2(p);
+	d.type = ((u32)from_le_u16(read_u16(p)));
 	p += 2;
-	d.dev = getb4(p);
+	d.dev = ((u32)from_le_u32(read_u32(p)));
 	p += 4;
-	d.qid.type = getb1(p);
+	d.qid.type = ((u32)(p)[0]);
 	p++;
-	d.qid.vers = getb4(p);
+	d.qid.vers = ((u32)from_le_u32(read_u32(p)));
 	p += 4;
-	d.qid.path = getb8(p);
+	d.qid.path = ((u64)from_le_u64(read_u64(p)));
 	p += 8;
-	d.mode = getb4(p);
+	d.mode = ((u32)from_le_u32(read_u32(p)));
 	p += 4;
-	d.atime = getb4(p);
+	d.atime = ((u32)from_le_u32(read_u32(p)));
 	p += 4;
-	d.mtime = getb4(p);
+	d.mtime = ((u32)from_le_u32(read_u32(p)));
 	p += 4;
-	d.len = getb8(p);
+	d.len = ((u64)from_le_u64(read_u64(p)));
 	p += 8;
 	p = getstr(p, end, &d.name);
 	if (p == 0)
@@ -950,7 +950,7 @@ read9pmsg(Arena *a, u64 fd)
 		nread += n;
 		nleft -= n;
 	}
-	u32 msglen  = getb4(lenbuf);
+	u32 msglen  = ((u32)from_le_u32(read_u32(lenbuf)));
 	String8 msg = {
 	    .str  = push_array_no_zero(a, u8, msglen),
 	    .size = msglen,
