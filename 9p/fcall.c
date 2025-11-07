@@ -15,7 +15,7 @@ static u8 *
 putqid(u8 *p, Qid qid)
 {
 	putb1(p, qid.type);
-	p += 1;
+	p++;
 	putb4(p, qid.vers);
 	p += 4;
 	putb8(p, qid.path);
@@ -57,7 +57,7 @@ getqid(u8 *p, u8 *end, Qid *qid)
 		return 0;
 	}
 	qid->type = getb1(p);
-	p += 1;
+	p++;
 	qid->vers = getb4(p);
 	p += 4;
 	qid->path = getb8(p);
@@ -849,7 +849,7 @@ direncode(Arena *a, Dir d)
 	putb4(p, d.dev);
 	p += 4;
 	putb1(p, d.qid.type);
-	p += 1;
+	p++;
 	putb4(p, d.qid.vers);
 	p += 4;
 	putb8(p, d.qid.path);
@@ -894,7 +894,7 @@ dirdecode(String8 msg)
 	d.dev = getb4(p);
 	p += 4;
 	d.qid.type = getb1(p);
-	p += 1;
+	p++;
 	d.qid.vers = getb4(p);
 	p += 4;
 	d.qid.path = getb8(p);

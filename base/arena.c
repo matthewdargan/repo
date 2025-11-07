@@ -2,34 +2,47 @@
 static Arena *
 arena_alloc(void)
 {
-	ArenaParams params = {.flags        = arena_default_flags,
-	                      .reserve_size = arena_default_reserve_size,
-	                      .commit_size  = arena_default_commit_size};
+	ArenaParams params  = {0};
+	params.flags        = arena_default_flags;
+	params.reserve_size = arena_default_reserve_size;
+	params.commit_size  = arena_default_commit_size;
 	return arena_alloc_(params);
 }
 
 static Arena *
 arena_alloc_(ArenaParams params)
 {
-	OS_SystemInfo *sysinfo = os_get_system_info();
-	u64 reserve_size       = params.reserve_size;
-	u64 commit_size        = params.commit_size;
+	// round up reserve/commit sizes
+	u64 reserve_size = params.reserve_size;
+	u64 commit_size  = params.commit_size;
 	if (params.flags & ArenaFlag_LargePages)
 	{
-		reserve_size = AlignPow2(reserve_size, sysinfo->large_page_size);
-		commit_size  = AlignPow2(commit_size, sysinfo->large_page_size);
+		reserve_size = AlignPow2(reserve_size, os_get_system_info()->large_page_size);
+		commit_size  = AlignPow2(commit_size, os_get_system_info()->large_page_size);
 	}
 	else
 	{
-		reserve_size = AlignPow2(reserve_size, sysinfo->page_size);
-		commit_size  = AlignPow2(commit_size, sysinfo->page_size);
+		reserve_size = AlignPow2(reserve_size, os_get_system_info()->page_size);
+		commit_size  = AlignPow2(commit_size, os_get_system_info()->page_size);
 	}
+
+	// reserve/commit initial block
 	void *base = params.optional_backing_buffer;
 	if (base == 0)
 	{
-		base = (params.flags & ArenaFlag_LargePages) ? os_reserve_large(reserve_size) : os_reserve(reserve_size);
-		os_commit(base, commit_size);
+		if (params.flags & ArenaFlag_LargePages)
+		{
+			base = os_reserve_large(reserve_size);
+			os_commit(base, commit_size);
+		}
+		else
+		{
+			base = os_reserve(reserve_size);
+			os_commit(base, commit_size);
+		}
 	}
+
+	// extract arena header and fill
 	Arena *arena    = (Arena *)base;
 	arena->prev     = 0;
 	arena->current  = arena;
@@ -51,10 +64,10 @@ arena_alloc_(ArenaParams params)
 static void
 arena_release(Arena *arena)
 {
-	for (Arena *curr = arena->current, *prev = 0; curr != 0; curr = prev)
+	for (Arena *n = arena->current, *prev = 0; n != 0; n = prev)
 	{
-		prev = curr->prev;
-		os_release(curr, curr->res);
+		prev = n->prev;
+		os_release(n, n->res);
 	}
 }
 
@@ -65,15 +78,16 @@ arena_push(Arena *arena, u64 size, u64 align, b32 zero)
 	u64 pos_pre    = AlignPow2(current->pos, align);
 	u64 pos_pst    = pos_pre + size;
 
-	// chain if needed
+	// chain, if needed
 	if (current->res < pos_pst && !(arena->flags & ArenaFlag_NoChain))
 	{
 		Arena *new_block = 0;
 
 #if ARENA_FREE_LIST
 		{
-			Arena *prev_block = 0;
-			for (new_block = arena->free_last; new_block != 0; prev_block = new_block, new_block = new_block->prev)
+			Arena *prev_block;
+			for (new_block = arena->free_last, prev_block = 0; new_block != 0;
+			     prev_block = new_block, new_block = new_block->prev)
 			{
 				if (new_block->res >= AlignPow2(new_block->pos, align) + size)
 				{
@@ -100,8 +114,11 @@ arena_push(Arena *arena, u64 size, u64 align, b32 zero)
 				res_size = AlignPow2(size + ARENA_HEADER_SIZE, align);
 				cmt_size = AlignPow2(size + ARENA_HEADER_SIZE, align);
 			}
-			ArenaParams params = {.flags = current->flags, .reserve_size = res_size, .commit_size = cmt_size};
-			new_block          = arena_alloc_(params);
+			ArenaParams params  = {0};
+			params.flags        = current->flags;
+			params.reserve_size = res_size;
+			params.commit_size  = cmt_size;
+			new_block           = arena_alloc_(params);
 		}
 
 		new_block->base_pos = current->base_pos + current->res;
@@ -119,16 +136,16 @@ arena_push(Arena *arena, u64 size, u64 align, b32 zero)
 		size_to_zero = Min(current->cmt, pos_pst) - pos_pre;
 	}
 
-	// commit new pages if needed
+	// commit new pages, if needed
 	if (current->cmt < pos_pst)
 	{
-		u64 cmt_post_aligned = pos_pst + current->cmt_size - 1;
-		cmt_post_aligned -= cmt_post_aligned % current->cmt_size;
-		u64 cmt_post_clamped = Min(cmt_post_aligned, current->res);
-		u64 cmt_size         = cmt_post_clamped - current->cmt;
-		u8 *cmt_ptr          = (u8 *)current + current->cmt;
+		u64 cmt_pst_aligned = pos_pst + current->cmt_size - 1;
+		cmt_pst_aligned -= cmt_pst_aligned % current->cmt_size;
+		u64 cmt_pst_clamped = Min(cmt_pst_aligned, current->res);
+		u64 cmt_size        = cmt_pst_clamped - current->cmt;
+		u8 *cmt_ptr         = (u8 *)current + current->cmt;
 		os_commit(cmt_ptr, cmt_size);
-		current->cmt = cmt_post_clamped;
+		current->cmt = cmt_pst_clamped;
 	}
 
 	// push onto current block
@@ -203,7 +220,8 @@ arena_pop(Arena *arena, u64 amt)
 static Temp
 temp_begin(Arena *arena)
 {
-	Temp temp = {.arena = arena, .pos = arena_pos(arena)};
+	u64 pos   = arena_pos(arena);
+	Temp temp = {arena, pos};
 	return temp;
 }
 

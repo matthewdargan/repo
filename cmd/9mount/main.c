@@ -162,12 +162,11 @@ entry_point(CmdLine *cmd_line)
 						{
 							str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "access=%d", uid));
 						}
-						StringJoin join = {
-						    .pre  = str8_zero(),
-						    .sep  = str8_lit(","),
-						    .post = str8_zero(),
-						};
-						String8 optstr = str8_list_join(scratch.arena, &opts, &join);
+						StringJoin join = {0};
+						join.pre        = str8_zero();
+						join.sep        = str8_lit(",");
+						join.post       = str8_zero();
+						String8 optstr  = str8_list_join(scratch.arena, &opts, &join);
 						if (dryrun)
 						{
 							log_infof("mount -t 9p -o %S %S %S\n", optstr, addr, mtpt);

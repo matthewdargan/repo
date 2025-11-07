@@ -116,7 +116,7 @@ os_dense_time_from_timespec(timespec in)
 	{
 		tm tm_time = {0};
 		gmtime_r(&in.tv_sec, &tm_time);
-		DateTime date_time = os_date_time_from_tm(tm_time, in.tv_nsec / 1000000);
+		DateTime date_time = os_date_time_from_tm(tm_time, in.tv_nsec / Million(1));
 		result             = dense_time_from_date_time(date_time);
 	}
 	return result;
@@ -256,7 +256,7 @@ os_file_read(OS_Handle file, Rng1U64 rng, void *out_data)
 	u64 total_num_bytes_to_read      = dim_1u64(rng);
 	u64 total_num_bytes_read         = 0;
 	u64 total_num_bytes_left_to_read = total_num_bytes_to_read;
-	for (; total_num_bytes_left_to_read > 0;)
+	while (total_num_bytes_left_to_read > 0)
 	{
 		int read_result =
 		    pread(fd, (u8 *)out_data + total_num_bytes_read, total_num_bytes_left_to_read, rng.min + total_num_bytes_read);
@@ -284,7 +284,7 @@ os_file_write(OS_Handle file, Rng1U64 rng, void *data)
 	u64 total_num_bytes_to_write      = dim_1u64(rng);
 	u64 total_num_bytes_written       = 0;
 	u64 total_num_bytes_left_to_write = total_num_bytes_to_write;
-	for (; total_num_bytes_left_to_write > 0;)
+	while (total_num_bytes_left_to_write > 0)
 	{
 		int write_result = pwrite(fd, (u8 *)data + total_num_bytes_written, total_num_bytes_left_to_write,
 		                          rng.min + total_num_bytes_written);
@@ -427,7 +427,7 @@ os_now_microseconds(void)
 {
 	timespec t;
 	clock_gettime(CLOCK_MONOTONIC, &t);
-	u64 result = t.tv_sec * 1000000 + (t.tv_nsec / 1000);
+	u64 result = t.tv_sec * Million(1) + (t.tv_nsec / Thousand(1));
 	return result;
 }
 
@@ -478,7 +478,7 @@ os_local_time_from_universal(DateTime *date_time)
 static void
 os_sleep_milliseconds(u32 msec)
 {
-	usleep(msec * 1000);
+	usleep(msec * Thousand(1));
 }
 
 // Entry Point

@@ -93,7 +93,7 @@ ramfs_read(Req *r)
 					dirdata.size = dirdata.size + entrylen;
 				}
 			}
-			pos += 1;
+			pos++;
 		}
 		r->ofcall.data = dirdata;
 		respond(r, str8_zero());

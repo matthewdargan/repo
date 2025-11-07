@@ -61,42 +61,41 @@ upper_from_char(u8 c)
 static u64
 cstring8_length(u8 *c)
 {
-	u8 *p = c;
-	while (*p != 0)
+	u8 *ptr = c;
+	while (*ptr != 0)
 	{
-		p++;
+		ptr++;
 	}
-	return p - c;
+	return ptr - c;
 }
 
 // String Constructors
 static String8
 str8(u8 *str, u64 size)
 {
-	String8 s = {.str = str, .size = size};
-	return s;
+	String8 result = {str, size};
+	return result;
 }
 
 static String8
 str8_range(u8 *first, u8 *one_past_last)
 {
-	String8 s = {.str = first, .size = one_past_last - first};
-	return s;
+	String8 result = {first, (u64)(one_past_last - first)};
+	return result;
 }
 
 static String8
 str8_zero(void)
 {
-	String8 s = {0};
-	return s;
+	String8 result = {0};
+	return result;
 }
 
 static String8
 str8_cstring(char *c)
 {
-	u8 *str   = (u8 *)c;
-	String8 s = {.str = str, .size = cstring8_length(str)};
-	return s;
+	String8 result = {(u8 *)c, cstring8_length((u8 *)c)};
+	return result;
 }
 
 // String Stylization
@@ -126,87 +125,89 @@ lower_from_str8(Arena *arena, String8 string)
 static b32
 str8_match(String8 a, String8 b, StringMatchFlags flags)
 {
-	b32 ok = 0;
+	b32 result = 0;
 	if (a.size == b.size && flags == 0)
 	{
-		ok = memcmp(a.str, b.str, b.size) == 0;
+		result = MemoryMatch(a.str, b.str, b.size);
 	}
 	else if (a.size == b.size || (flags & StringMatchFlag_RightSideSloppy))
 	{
-		u64 size = Min(a.size, b.size);
-		ok       = 1;
+		b32 case_insensitive = (flags & StringMatchFlag_CaseInsensitive);
+		u64 size             = Min(a.size, b.size);
+		result               = 1;
 		for (u64 i = 0; i < size; i++)
 		{
 			u8 at = a.str[i];
 			u8 bt = b.str[i];
-			if (flags & StringMatchFlag_CaseInsensitive)
+			if (case_insensitive)
 			{
 				at = upper_from_char(at);
 				bt = upper_from_char(bt);
 			}
 			if (at != bt)
 			{
-				ok = 0;
+				result = 0;
 				break;
 			}
 		}
 	}
-	return ok;
+	return result;
 }
 
 static u64
 str8_find_needle(String8 string, u64 start_pos, String8 needle, StringMatchFlags flags)
 {
-	if (needle.size == 0)
+	u8 *ptr         = string.str + start_pos;
+	u64 stop_offset = Max(string.size + 1, needle.size) - needle.size;
+	u8 *stop_ptr    = string.str + stop_offset;
+	if (needle.size > 0)
 	{
-		return string.size;
-	}
-	u8 *p                     = string.str + start_pos;
-	u64 stoplen               = string.size - needle.size;
-	u8 *end                   = string.str + string.size;
-	String8 tail              = str8_skip(needle, 1);
-	StringMatchFlags adjflags = flags | StringMatchFlag_RightSideSloppy;
-	u8 n0adj                  = needle.str[0];
-	if (adjflags & StringMatchFlag_CaseInsensitive)
-	{
-		n0adj = upper_from_char(n0adj);
-	}
-	for (; (u64)(p - string.str) <= stoplen; p++)
-	{
-		u8 c = *p;
-		if (adjflags & StringMatchFlag_CaseInsensitive)
+		u8 *string_opl                  = string.str + string.size;
+		String8 needle_tail             = str8_skip(needle, 1);
+		StringMatchFlags adjusted_flags = flags | StringMatchFlag_RightSideSloppy;
+		u8 needle_first_char_adjusted   = needle.str[0];
+		if (adjusted_flags & StringMatchFlag_CaseInsensitive)
 		{
-			c = upper_from_char(c);
+			needle_first_char_adjusted = upper_from_char(needle_first_char_adjusted);
 		}
-		if (c == n0adj)
+		for (; ptr < stop_ptr; ptr++)
 		{
-			String8 hay = str8_range(p + 1, end);
-			if (str8_match(hay, tail, adjflags))
+			u8 haystack_char_adjusted = *ptr;
+			if (adjusted_flags & StringMatchFlag_CaseInsensitive)
 			{
-				break;
+				haystack_char_adjusted = upper_from_char(haystack_char_adjusted);
+			}
+			if (haystack_char_adjusted == needle_first_char_adjusted)
+			{
+				if (str8_match(str8_range(ptr + 1, string_opl), needle_tail, adjusted_flags))
+				{
+					break;
+				}
 			}
 		}
 	}
-	u64 i = string.size;
-	if ((u64)(p - string.str) <= stoplen)
+	u64 result = string.size;
+	if (ptr < stop_ptr)
 	{
-		i = p - string.str;
+		result = (u64)(ptr - string.str);
 	}
-	return i;
+	return result;
 }
 
 static u64
 str8_find_needle_reverse(String8 string, u64 start_pos, String8 needle, StringMatchFlags flags)
 {
+	u64 result = 0;
 	for (s64 i = string.size - start_pos - needle.size; i >= 0; i--)
 	{
-		String8 hay = str8(string.str + i, needle.size);
-		if (str8_match(hay, needle, flags))
+		String8 haystack = str8_substr(string, rng_1u64(i, i + needle.size));
+		if (str8_match(haystack, needle, flags))
 		{
-			return i;
+			result = (u64)i + needle.size;
+			break;
 		}
 	}
-	return 0;
+	return result;
 }
 
 // String Slicing
@@ -282,10 +283,9 @@ str8_skip_chop_whitespace(String8 string)
 static String8
 str8_cat(Arena *arena, String8 s1, String8 s2)
 {
-	String8 str = {
-	    .str  = push_array_no_zero(arena, u8, s1.size + s2.size + 1),
-	    .size = s1.size + s2.size,
-	};
+	String8 str;
+	str.size = s1.size + s2.size;
+	str.str  = push_array_no_zero(arena, u8, str.size + 1);
 	MemoryCopy(str.str, s1.str, s1.size);
 	MemoryCopy(str.str + s1.size, s2.str, s2.size);
 	str.str[str.size] = 0;
@@ -295,10 +295,9 @@ str8_cat(Arena *arena, String8 s1, String8 s2)
 static String8
 str8_copy(Arena *arena, String8 s)
 {
-	String8 str = {
-	    .str  = push_array_no_zero(arena, u8, s.size + 1),
-	    .size = s.size,
-	};
+	String8 str;
+	str.size = s.size;
+	str.str  = push_array_no_zero(arena, u8, str.size + 1);
 	MemoryCopy(str.str, s.str, s.size);
 	str.str[str.size] = 0;
 	return str;
@@ -309,15 +308,13 @@ str8fv(Arena *arena, char *fmt, va_list args)
 {
 	va_list args2;
 	va_copy(args2, args);
-	u32 nbytes = base_vsnprintf(0, 0, fmt, args) + 1;
-	u8 *str    = push_array_no_zero(arena, u8, nbytes);
-	String8 s  = {
-	     .str  = str,
-	     .size = base_vsnprintf((char *)str, nbytes, fmt, args2),
-  };
-	s.str[s.size] = 0;
+	u32 needed_bytes        = base_vsnprintf(0, 0, fmt, args) + 1;
+	String8 result          = {0};
+	result.str              = push_array_no_zero(arena, u8, needed_bytes);
+	result.size             = base_vsnprintf((char *)result.str, needed_bytes, fmt, args2);
+	result.str[result.size] = 0;
 	va_end(args2);
-	return s;
+	return result;
 }
 
 static String8
@@ -380,137 +377,150 @@ u32_from_str8(String8 string, u32 radix)
 static b32
 try_u64_from_str8(String8 string, u64 *x)
 {
-	b32 ok = 0;
-	if (str8_is_integer(string, 10))
+	// unpack radix / prefix size based on string prefix
+	u64 radix       = 0;
+	u64 prefix_size = 0;
 	{
-		ok = 1;
-		*x = u64_from_str8(string, 10);
-	}
-	else
-	{
-		if (string.size >= 2 && str8_match(str8_prefix(string, 2), str8_lit("0x"), 0))
+		// hex
+		if (str8_match(str8_prefix(string, 2), str8_lit("0x"), StringMatchFlag_CaseInsensitive))
 		{
-			String8 hex = str8_skip(string, 2);
-			if (str8_is_integer(hex, 16))
-			{
-				ok = 1;
-				*x = u64_from_str8(hex, 16);
-			}
+			radix = 0x10, prefix_size = 2;
 		}
-		else if (string.size >= 2 && str8_match(str8_prefix(string, 2), str8_lit("0b"), 0))
+		// binary
+		else if (str8_match(str8_prefix(string, 2), str8_lit("0b"), StringMatchFlag_CaseInsensitive))
 		{
-			String8 bin = str8_skip(string, 2);
-			if (str8_is_integer(bin, 2))
-			{
-				ok = 1;
-				*x = u64_from_str8(bin, 2);
-			}
+			radix = 2, prefix_size = 2;
 		}
-		else if (string.size >= 1 && string.str[0] == '0')
+		// octal
+		else if (str8_match(str8_prefix(string, 1), str8_lit("0"), StringMatchFlag_CaseInsensitive) && string.size > 1)
 		{
-			String8 oct = str8_skip(string, 1);
-			if (str8_is_integer(oct, 8))
-			{
-				ok = 1;
-				*x = u64_from_str8(oct, 8);
-			}
+			radix = 010, prefix_size = 1;
+		}
+		// decimal
+		else
+		{
+			radix = 10, prefix_size = 0;
 		}
 	}
-	return ok;
+
+	// convert if we can
+	String8 integer = str8_skip(string, prefix_size);
+	b32 is_integer  = str8_is_integer(integer, radix);
+	if (is_integer)
+	{
+		*x = u64_from_str8(integer, radix);
+	}
+
+	return is_integer;
 }
 
 static String8
 str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_separator)
 {
-	String8 pre = str8_zero();
-	switch (radix)
+	String8 result = str8_zero();
 	{
-		case 2:
+		// prefix
+		String8 prefix = {0};
+		switch (radix)
 		{
-			pre = str8_lit("0b");
-		}
-		break;
-		case 8:
-		{
-			pre = str8_lit("0");
-		}
-		break;
-		case 16:
-		{
-			pre = str8_lit("0x");
-		}
-		break;
-		default:
+			case 16:
+			{
+				prefix = str8_lit("0x");
+			}
 			break;
-	}
-	u64 group = 3;
-	switch (radix)
-	{
-		case 2:
-		case 8:
-		case 16:
-		{
-			group = 4;
-		}
-		break;
-		default:
+			case 8:
+			{
+				prefix = str8_lit("0o");
+			}
 			break;
-	}
-	u64 ndigits = 1;
-	u64 rem     = value;
-	for (;;)
-	{
-		rem /= radix;
-		if (rem == 0)
-		{
+			case 2:
+			{
+				prefix = str8_lit("0b");
+			}
 			break;
 		}
-		ndigits++;
-	}
-	u64 nleadz = (min_digits > ndigits) ? min_digits - ndigits : 0;
-	u64 nseps  = 0;
-	if (digit_group_separator != 0)
-	{
-		nseps = (ndigits + nleadz) / group;
-		if (nseps > 0 && (ndigits + nleadz) % group == 0)
+
+		// determine # of chars between separators
+		u8 digit_group_size = 3;
+		switch (radix)
 		{
-			nseps--;
-		}
-	}
-	String8 s = {
-	    .str  = push_array_no_zero(arena, u8, pre.size + nleadz + nseps + ndigits + 1),
-	    .size = pre.size + nleadz + nseps + ndigits,
-	};
-	s.str[s.size] = 0;
-	rem           = value;
-	u64 digtosep  = group;
-	for (u64 i = 0; i < s.size; i++)
-	{
-		if (digtosep == 0 && digit_group_separator != 0)
-		{
-			s.str[s.size - i - 1] = digit_group_separator;
-			digtosep              = group + 1;
-		}
-		else
-		{
-			s.str[s.size - i - 1] = lower_from_char(integer_symbols[rem % radix]);
-			rem /= radix;
-		}
-		digtosep--;
-		if (rem == 0)
-		{
+			case 2:
+			case 8:
+			case 16:
+			{
+				digit_group_size = 4;
+			}
 			break;
+			default:
+				break;
+		}
+
+		// prep
+		u64 needed_leading_0s = 0;
+		{
+			u64 needed_digits = 1;
+			{
+				u64 u64_reduce = value;
+				for (;;)
+				{
+					u64_reduce /= radix;
+					if (u64_reduce == 0)
+					{
+						break;
+					}
+					needed_digits++;
+				}
+			}
+			needed_leading_0s     = (min_digits > needed_digits) ? min_digits - needed_digits : 0;
+			u64 needed_separators = 0;
+			if (digit_group_separator != 0)
+			{
+				needed_separators = (needed_digits + needed_leading_0s) / digit_group_size;
+				if (needed_separators > 0 && (needed_digits + needed_leading_0s) % digit_group_size == 0)
+				{
+					needed_separators--;
+				}
+			}
+			result.size             = prefix.size + needed_leading_0s + needed_separators + needed_digits;
+			result.str              = push_array_no_zero(arena, u8, result.size + 1);
+			result.str[result.size] = 0;
+		}
+
+		// fill contents
+		{
+			u64 u64_reduce             = value;
+			u64 digits_until_separator = digit_group_size;
+			for (u64 i = 0; i < result.size; i++)
+			{
+				if (digits_until_separator == 0 && digit_group_separator != 0)
+				{
+					result.str[result.size - i - 1] = digit_group_separator;
+					digits_until_separator          = digit_group_size + 1;
+				}
+				else
+				{
+					result.str[result.size - i - 1] = lower_from_char(integer_symbols[u64_reduce % radix]);
+					u64_reduce /= radix;
+				}
+				digits_until_separator--;
+				if (u64_reduce == 0)
+				{
+					break;
+				}
+			}
+			for (u64 i = 0; i < needed_leading_0s; i++)
+			{
+				result.str[prefix.size + i] = '0';
+			}
+		}
+
+		// fill prefix
+		if (prefix.size != 0)
+		{
+			MemoryCopy(result.str, prefix.str, prefix.size);
 		}
 	}
-	for (u64 leadzidx = 0; leadzidx < nleadz; leadzidx++)
-	{
-		s.str[pre.size + leadzidx] = '0';
-	}
-	if (pre.size != 0)
-	{
-		MemoryCopy(s.str, pre.str, pre.size);
-	}
-	return s;
+	return result;
 }
 
 // String List Construction Functions
@@ -548,13 +558,13 @@ static String8List
 str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count, StringSplitFlags flags)
 {
 	String8List list = {0};
-	u8 *end          = string.str + string.size;
-	for (u8 *p = string.str; p < end;)
+	u8 *opl          = string.str + string.size;
+	for (u8 *ptr = string.str; ptr < opl;)
 	{
-		u8 *start = p;
-		for (; p < end; p++)
+		u8 *first = ptr;
+		for (; ptr < opl; ptr++)
 		{
-			u8 c        = *p;
+			u8 c        = *ptr;
 			b32 issplit = 0;
 			for (u64 i = 0; i < split_char_count; i++)
 			{
@@ -569,12 +579,12 @@ str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count, 
 				break;
 			}
 		}
-		String8 ss = str8_range(start, p);
+		String8 ss = str8_range(first, ptr);
 		if ((flags & StringSplitFlag_KeepEmpties) || ss.size > 0)
 		{
 			str8_list_push(arena, &list, ss);
 		}
-		p++;
+		ptr++;
 	}
 	return list;
 }
@@ -587,44 +597,40 @@ str8_list_join(Arena *arena, String8List *list, StringJoin *optional_params)
 	{
 		MemoryCopyStruct(&join, optional_params);
 	}
-	u64 nsep = 0;
+	u64 sep_count = 0;
 	if (list->node_count > 0)
 	{
-		nsep = list->node_count - 1;
+		sep_count = list->node_count - 1;
 	}
-	String8 s = {
-	    .str =
-	        push_array_no_zero(arena, u8, join.pre.size + join.post.size + nsep * join.sep.size + list->total_size + 1),
-	    .size = join.pre.size + join.post.size + nsep * join.sep.size + list->total_size,
-	};
-	u8 *p = s.str;
-	MemoryCopy(p, join.pre.str, join.pre.size);
-	p += join.pre.size;
+	String8 result;
+	result.size = join.pre.size + join.post.size + sep_count * join.sep.size + list->total_size;
+	u8 *ptr = result.str = push_array_no_zero(arena, u8, result.size + 1);
+	MemoryCopy(ptr, join.pre.str, join.pre.size);
+	ptr += join.pre.size;
 	for (String8Node *node = list->first; node != 0; node = node->next)
 	{
-		MemoryCopy(p, node->string.str, node->string.size);
-		p += node->string.size;
+		MemoryCopy(ptr, node->string.str, node->string.size);
+		ptr += node->string.size;
 		if (node->next != 0)
 		{
-			MemoryCopy(p, join.sep.str, join.sep.size);
-			p += join.sep.size;
+			MemoryCopy(ptr, join.sep.str, join.sep.size);
+			ptr += join.sep.size;
 		}
 	}
-	MemoryCopy(p, join.post.str, join.post.size);
-	p += join.post.size;
-	*p = 0;
-	return s;
+	MemoryCopy(ptr, join.post.str, join.post.size);
+	ptr += join.post.size;
+	*ptr = 0;
+	return result;
 }
 
 // String Arrays
 static String8Array
 str8_array_from_list(Arena *arena, String8List *list)
 {
-	String8Array array = {
-	    .v     = push_array_no_zero(arena, String8, list->node_count),
-	    .count = list->node_count,
-	};
-	u64 i = 0;
+	String8Array array;
+	array.count = list->node_count;
+	array.v     = push_array_no_zero(arena, String8, array.count);
+	u64 i       = 0;
 	for (String8Node *node = list->first; node != 0; node = node->next, i++)
 	{
 		array.v[i] = node->string;
@@ -635,10 +641,9 @@ str8_array_from_list(Arena *arena, String8List *list)
 static String8Array
 str8_array_reserve(Arena *arena, u64 count)
 {
-	String8Array array = {
-	    .v     = push_array(arena, String8, count),
-	    .count = 0,
-	};
+	String8Array array;
+	array.count = 0;
+	array.v     = push_array(arena, String8, count);
 	return array;
 }
 
@@ -648,17 +653,17 @@ str8_chop_last_slash(String8 string)
 {
 	if (string.size > 0)
 	{
-		u8 *p = string.str + string.size - 1;
-		for (; p >= string.str; p--)
+		u8 *ptr = string.str + string.size - 1;
+		for (; ptr >= string.str; ptr--)
 		{
-			if (*p == '/')
+			if (*ptr == '/')
 			{
 				break;
 			}
 		}
-		if (p >= string.str)
+		if (ptr >= string.str)
 		{
-			string.size = p - string.str;
+			string.size = ptr - string.str;
 		}
 		else
 		{
@@ -673,19 +678,19 @@ str8_skip_last_slash(String8 string)
 {
 	if (string.size > 0)
 	{
-		u8 *p = string.str + string.size - 1;
-		for (; p >= string.str; p--)
+		u8 *ptr = string.str + string.size - 1;
+		for (; ptr >= string.str; ptr--)
 		{
-			if (*p == '/')
+			if (*ptr == '/')
 			{
 				break;
 			}
 		}
-		if (p >= string.str)
+		if (ptr >= string.str)
 		{
-			p++;
-			string.size = string.str + string.size - p;
-			string.str  = p;
+			ptr++;
+			string.size = string.str + string.size - ptr;
+			string.str  = ptr;
 		}
 	}
 	return string;

@@ -16,11 +16,11 @@ static CmdLineOpt *
 cmd_line_opt_from_slot(CmdLineOpt **slot, String8 string)
 {
 	CmdLineOpt *result = 0;
-	for (CmdLineOpt *opt = *slot; opt != 0; opt = opt->hash_next)
+	for (CmdLineOpt *var = *slot; var != 0; var = var->hash_next)
 	{
-		if (str8_match(string, opt->string, 0))
+		if (str8_match(string, var->string, 0))
 		{
-			result = opt;
+			result = var;
 			break;
 		}
 	}
@@ -37,30 +37,29 @@ cmd_line_push_opt(CmdLineOptList *list, CmdLineOpt *opt)
 static CmdLineOpt *
 cmd_line_insert_opt(Arena *arena, CmdLine *cmd_line, String8 string, String8List values)
 {
+	CmdLineOpt *var          = 0;
 	CmdLineOpt **slot        = cmd_line_slot_from_string(cmd_line, string);
-	CmdLineOpt *existing_opt = cmd_line_opt_from_slot(slot, string);
-	CmdLineOpt *opt;
-	if (existing_opt != 0)
+	CmdLineOpt *existing_var = cmd_line_opt_from_slot(slot, string);
+	if (existing_var != 0)
 	{
-		opt = existing_opt;
+		var = existing_var;
 	}
 	else
 	{
-		opt                = push_array(arena, CmdLineOpt, 1);
-		opt->hash_next     = *slot;
-		opt->hash          = u64_hash_from_str8(string);
-		opt->string        = str8_copy(arena, string);
-		opt->value_strings = values;
-		StringJoin join    = {
-		       .pre  = str8_lit(""),
-		       .sep  = str8_lit(","),
-		       .post = str8_lit(""),
-    };
-		opt->value_string = str8_list_join(arena, &opt->value_strings, &join);
-		*slot             = opt;
-		cmd_line_push_opt(&cmd_line->options, opt);
+		var                = push_array(arena, CmdLineOpt, 1);
+		var->hash_next     = *slot;
+		var->hash          = u64_hash_from_str8(string);
+		var->string        = str8_copy(arena, string);
+		var->value_strings = values;
+		StringJoin join    = {0};
+		join.pre           = str8_lit("");
+		join.sep           = str8_lit(",");
+		join.post          = str8_lit("");
+		var->value_string  = str8_list_join(arena, &var->value_strings, &join);
+		*slot              = var;
+		cmd_line_push_opt(&cmd_line->options, var);
 	}
-	return opt;
+	return var;
 }
 
 static CmdLine
@@ -160,9 +159,9 @@ cmd_line_from_string_list(Arena *arena, String8List arguments)
 	parsed.argc = arguments.node_count;
 	parsed.argv = push_array(arena, char *, parsed.argc);
 	u64 i       = 0;
-	for (String8Node *node = arguments.first; node != 0; node = node->next, i++)
+	for (String8Node *n = arguments.first; n != 0; n = n->next, i++)
 	{
-		parsed.argv[i] = (char *)str8_copy(arena, node->string).str;
+		parsed.argv[i] = (char *)str8_copy(arena, n->string).str;
 	}
 	return parsed;
 }
@@ -177,10 +176,10 @@ static String8List
 cmd_line_strings(CmdLine *cmd_line, String8 name)
 {
 	String8List result = {0};
-	CmdLineOpt *opt    = cmd_line_opt_from_string(cmd_line, name);
-	if (opt != 0)
+	CmdLineOpt *var    = cmd_line_opt_from_string(cmd_line, name);
+	if (var != 0)
 	{
-		result = opt->value_strings;
+		result = var->value_strings;
 	}
 	return result;
 }
@@ -189,10 +188,10 @@ static String8
 cmd_line_string(CmdLine *cmd_line, String8 name)
 {
 	String8 result  = str8_zero();
-	CmdLineOpt *opt = cmd_line_opt_from_string(cmd_line, name);
-	if (opt != 0)
+	CmdLineOpt *var = cmd_line_opt_from_string(cmd_line, name);
+	if (var != 0)
 	{
-		result = opt->value_string;
+		result = var->value_string;
 	}
 	return result;
 }
@@ -206,6 +205,6 @@ cmd_line_has_flag(CmdLine *cmd_line, String8 name)
 static b32
 cmd_line_has_argument(CmdLine *cmd_line, String8 name)
 {
-	CmdLineOpt *opt = cmd_line_opt_from_string(cmd_line, name);
-	return opt != 0 && opt->value_strings.node_count > 0;
+	CmdLineOpt *var = cmd_line_opt_from_string(cmd_line, name);
+	return var != 0 && var->value_strings.node_count > 0;
 }

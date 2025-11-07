@@ -485,10 +485,9 @@ socketreadhttp(Arena *a, u64 fd)
 			try_u64_from_str8(lenstr, &bodylen);
 		}
 	}
-	String8 data = {
-	    .str  = push_array_no_zero(a, u8, hdrend + bodylen),
-	    .size = hdrend + bodylen,
-	};
+	String8 data;
+	data.size = hdrend + bodylen;
+	data.str  = push_array_no_zero(a, u8, data.size);
 	MemoryCopy(data.str, buf, hdrend);
 	u64 bodyinbuf = buflen - hdrend;
 	if (bodyinbuf > bodylen)

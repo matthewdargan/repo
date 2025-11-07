@@ -23,6 +23,9 @@
 #define MB(n) (((u64)(n)) << 20)
 #define GB(n) (((u64)(n)) << 30)
 #define TB(n) (((u64)(n)) << 40)
+#define Thousand(n) ((n) * 1000)
+#define Million(n) ((n) * 1000000)
+#define Billion(n) ((n) * 1000000000)
 
 // Clamps, Mins, Maxes
 #define Min(A, B) (((A) < (B)) ? (A) : (B))
@@ -36,8 +39,10 @@
 
 // Memory Operation Macros
 #define MemoryCopy(dst, src, size) memmove((dst), (src), (size))
+#define MemoryCompare(a, b, size) memcmp((a), (b), (size))
 #define MemoryCopyStruct(d, s) MemoryCopy((d), (s), sizeof(*(d)))
 #define MemoryZero(s, z) memset((s), 0, (z))
+#define MemoryMatch(a, b, z) (MemoryCompare((a), (b), (z)) == 0)
 
 // Asserts
 #define Trap() __builtin_trap()
