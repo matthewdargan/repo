@@ -18,4 +18,4 @@ static Arena *tctx_get_scratch(Arena **conflicts, u64 count);
 #define scratch_begin(conflicts, count) temp_begin(tctx_get_scratch((conflicts), (count)))
 #define scratch_end(scratch) temp_end(scratch)
 
-#endif  // THREAD_CONTEXT_H
+#endif // THREAD_CONTEXT_H

@@ -45,4 +45,4 @@ static String8 cmd_line_string(CmdLine *cmd_line, String8 name);
 static b32 cmd_line_has_flag(CmdLine *cmd_line, String8 name);
 static b32 cmd_line_has_argument(CmdLine *cmd_line, String8 name);
 
-#endif  // COMMAND_LINE_H
+#endif // COMMAND_LINE_H

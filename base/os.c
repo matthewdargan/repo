@@ -16,9 +16,9 @@ os_handle_match(OS_Handle a, OS_Handle b)
 static String8
 os_data_from_file_path(Arena *arena, String8 path)
 {
-	OS_Handle file          = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
+	OS_Handle file = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
 	OS_FileProperties props = os_properties_from_file(file);
-	String8 data            = os_string_from_file_range(arena, file, rng_1u64(0, props.size));
+	String8 data = os_string_from_file_range(arena, file, rng_1u64(0, props.size));
 	os_file_close(file);
 	return data;
 }
@@ -26,12 +26,12 @@ os_data_from_file_path(Arena *arena, String8 path)
 static b32
 os_write_data_to_file_path(String8 path, String8 data)
 {
-	b32 good       = 0;
+	b32 good = 0;
 	OS_Handle file = os_file_open(OS_AccessFlag_Write, path);
-	if (!os_handle_match(file, os_handle_zero()))
+	if(!os_handle_match(file, os_handle_zero()))
 	{
 		u64 bytes_written = os_file_write(file, rng_1u64(0, data.size), data.str);
-		good              = (bytes_written == data.size);
+		good = (bytes_written == data.size);
 		os_file_close(file);
 	}
 	return good;
@@ -41,14 +41,14 @@ static b32
 os_append_data_to_file_path(String8 path, String8 data)
 {
 	b32 good = 0;
-	if (data.size != 0)
+	if(data.size != 0)
 	{
 		OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append, path);
-		if (!os_handle_match(file, os_handle_zero()))
+		if(!os_handle_match(file, os_handle_zero()))
 		{
-			u64 pos           = os_properties_from_file(file).size;
+			u64 pos = os_properties_from_file(file).size;
 			u64 bytes_written = os_file_write(file, rng_1u64(pos, pos + data.size), data.str);
-			good              = (bytes_written == data.size);
+			good = (bytes_written == data.size);
 			os_file_close(file);
 		}
 	}
@@ -60,10 +60,10 @@ os_string_from_file_range(Arena *arena, OS_Handle file, Rng1U64 range)
 {
 	u64 pre_pos = arena_pos(arena);
 	String8 result;
-	result.size          = dim_1u64(range);
-	result.str           = push_array_no_zero(arena, u8, result.size);
+	result.size = dim_1u64(range);
+	result.str = push_array_no_zero(arena, u8, result.size);
 	u64 actual_read_size = os_file_read(file, range, result.str);
-	if (actual_read_size < result.size)
+	if(actual_read_size < result.size)
 	{
 		arena_pop_to(arena, pre_pos + actual_read_size);
 		result.size = actual_read_size;
@@ -76,25 +76,25 @@ static DateTime
 os_date_time_from_tm(tm in, u32 msec)
 {
 	DateTime dt = {0};
-	dt.sec      = in.tm_sec;
-	dt.min      = in.tm_min;
-	dt.hour     = in.tm_hour;
-	dt.day      = in.tm_mday - 1;
-	dt.mon      = in.tm_mon;
-	dt.year     = in.tm_year + 1900;
-	dt.msec     = msec;
+	dt.sec = in.tm_sec;
+	dt.min = in.tm_min;
+	dt.hour = in.tm_hour;
+	dt.day = in.tm_mday - 1;
+	dt.mon = in.tm_mon;
+	dt.year = in.tm_year + 1900;
+	dt.msec = msec;
 	return dt;
 }
 
 static tm
 os_tm_from_date_time(DateTime dt)
 {
-	tm result      = {0};
-	result.tm_sec  = dt.sec;
-	result.tm_min  = dt.min;
+	tm result = {0};
+	result.tm_sec = dt.sec;
+	result.tm_min = dt.min;
 	result.tm_hour = dt.hour;
 	result.tm_mday = dt.day + 1;
-	result.tm_mon  = dt.mon;
+	result.tm_mon = dt.mon;
 	result.tm_year = dt.year - 1900;
 	return result;
 }
@@ -102,10 +102,10 @@ os_tm_from_date_time(DateTime dt)
 static timespec
 os_timespec_from_date_time(DateTime dt)
 {
-	tm tm_val       = os_tm_from_date_time(dt);
-	time_t seconds  = timegm(&tm_val);
+	tm tm_val = os_tm_from_date_time(dt);
+	time_t seconds = timegm(&tm_val);
 	timespec result = {0};
-	result.tv_sec   = seconds;
+	result.tv_sec = seconds;
 	return result;
 }
 
@@ -117,7 +117,7 @@ os_dense_time_from_timespec(timespec in)
 		tm tm_time = {0};
 		gmtime_r(&in.tv_sec, &tm_time);
 		DateTime date_time = os_date_time_from_tm(tm_time, in.tv_nsec / Million(1));
-		result             = dense_time_from_date_time(date_time);
+		result = dense_time_from_date_time(date_time);
 	}
 	return result;
 }
@@ -126,10 +126,10 @@ static OS_FileProperties
 os_file_properties_from_stat(struct stat *s)
 {
 	OS_FileProperties props = {0};
-	props.size              = s->st_size;
-	props.created           = os_dense_time_from_timespec(s->st_ctim);
-	props.modified          = os_dense_time_from_timespec(s->st_mtim);
-	if (s->st_mode & S_IFDIR)
+	props.size = s->st_size;
+	props.created = os_dense_time_from_timespec(s->st_ctim);
+	props.modified = os_dense_time_from_timespec(s->st_mtim);
+	if(s->st_mode & S_IFDIR)
 	{
 		props.flags |= OS_FilePropertyFlag_Directory;
 	}
@@ -148,7 +148,7 @@ os_get_system_info(void)
 static String8
 os_get_current_path(Arena *arena)
 {
-	char *cwdir    = getcwd(0, 0);
+	char *cwdir = getcwd(0, 0);
 	String8 string = str8_copy(arena, str8_cstring(cwdir));
 	free(cwdir);
 	return string;
@@ -159,7 +159,7 @@ static void *
 os_reserve(u64 size)
 {
 	void *result = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (result == MAP_FAILED)
+	if(result == MAP_FAILED)
 	{
 		result = 0;
 	}
@@ -190,7 +190,7 @@ static void *
 os_reserve_large(u64 size)
 {
 	void *result = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
-	if (result == MAP_FAILED)
+	if(result == MAP_FAILED)
 	{
 		result = 0;
 	}
@@ -201,32 +201,32 @@ os_reserve_large(u64 size)
 static OS_Handle
 os_file_open(OS_AccessFlags flags, String8 path)
 {
-	Temp scratch      = scratch_begin(0, 0);
+	Temp scratch = scratch_begin(0, 0);
 	String8 path_copy = str8_copy(scratch.arena, path);
-	int lnx_flags     = 0;
-	if (flags & OS_AccessFlag_Read && flags & OS_AccessFlag_Write)
+	int lnx_flags = 0;
+	if(flags & OS_AccessFlag_Read && flags & OS_AccessFlag_Write)
 	{
 		lnx_flags = O_RDWR;
 	}
-	else if (flags & OS_AccessFlag_Write)
+	else if(flags & OS_AccessFlag_Write)
 	{
 		lnx_flags = O_WRONLY;
 	}
-	else if (flags & OS_AccessFlag_Read)
+	else if(flags & OS_AccessFlag_Read)
 	{
 		lnx_flags = O_RDONLY;
 	}
-	if (flags & OS_AccessFlag_Append)
+	if(flags & OS_AccessFlag_Append)
 	{
 		lnx_flags |= O_APPEND;
 	}
-	if (flags & (OS_AccessFlag_Write | OS_AccessFlag_Append))
+	if(flags & (OS_AccessFlag_Write | OS_AccessFlag_Append))
 	{
 		lnx_flags |= O_CREAT;
 	}
-	int fd           = open((char *)path_copy.str, lnx_flags, 0755);
+	int fd = open((char *)path_copy.str, lnx_flags, 0755);
 	OS_Handle handle = {0};
-	if (fd != -1)
+	if(fd != -1)
 	{
 		handle.u64[0] = fd;
 	}
@@ -237,7 +237,7 @@ os_file_open(OS_AccessFlags flags, String8 path)
 static void
 os_file_close(OS_Handle file)
 {
-	if (os_handle_match(file, os_handle_zero()))
+	if(os_handle_match(file, os_handle_zero()))
 	{
 		return;
 	}
@@ -248,24 +248,24 @@ os_file_close(OS_Handle file)
 static u64
 os_file_read(OS_Handle file, Rng1U64 rng, void *out_data)
 {
-	if (os_handle_match(file, os_handle_zero()))
+	if(os_handle_match(file, os_handle_zero()))
 	{
 		return 0;
 	}
-	int fd                           = (int)file.u64[0];
-	u64 total_num_bytes_to_read      = dim_1u64(rng);
-	u64 total_num_bytes_read         = 0;
+	int fd = (int)file.u64[0];
+	u64 total_num_bytes_to_read = dim_1u64(rng);
+	u64 total_num_bytes_read = 0;
 	u64 total_num_bytes_left_to_read = total_num_bytes_to_read;
-	while (total_num_bytes_left_to_read > 0)
+	for(; total_num_bytes_left_to_read > 0;)
 	{
 		int read_result =
 		    pread(fd, (u8 *)out_data + total_num_bytes_read, total_num_bytes_left_to_read, rng.min + total_num_bytes_read);
-		if (read_result >= 0)
+		if(read_result >= 0)
 		{
 			total_num_bytes_read += read_result;
 			total_num_bytes_left_to_read -= read_result;
 		}
-		else if (errno != EINTR)
+		else if(errno != EINTR)
 		{
 			break;
 		}
@@ -276,24 +276,24 @@ os_file_read(OS_Handle file, Rng1U64 rng, void *out_data)
 static u64
 os_file_write(OS_Handle file, Rng1U64 rng, void *data)
 {
-	if (os_handle_match(file, os_handle_zero()))
+	if(os_handle_match(file, os_handle_zero()))
 	{
 		return 0;
 	}
-	int fd                            = (int)file.u64[0];
-	u64 total_num_bytes_to_write      = dim_1u64(rng);
-	u64 total_num_bytes_written       = 0;
+	int fd = (int)file.u64[0];
+	u64 total_num_bytes_to_write = dim_1u64(rng);
+	u64 total_num_bytes_written = 0;
 	u64 total_num_bytes_left_to_write = total_num_bytes_to_write;
-	while (total_num_bytes_left_to_write > 0)
+	for(; total_num_bytes_left_to_write > 0;)
 	{
 		int write_result = pwrite(fd, (u8 *)data + total_num_bytes_written, total_num_bytes_left_to_write,
 		                          rng.min + total_num_bytes_written);
-		if (write_result >= 0)
+		if(write_result >= 0)
 		{
 			total_num_bytes_written += write_result;
 			total_num_bytes_left_to_write -= write_result;
 		}
-		else if (errno != EINTR)
+		else if(errno != EINTR)
 		{
 			break;
 		}
@@ -304,30 +304,30 @@ os_file_write(OS_Handle file, Rng1U64 rng, void *data)
 static b32
 os_file_set_times(OS_Handle file, DateTime date_time)
 {
-	if (os_handle_match(file, os_handle_zero()))
+	if(os_handle_match(file, os_handle_zero()))
 	{
 		return 0;
 	}
-	int fd              = (int)file.u64[0];
-	timespec time       = os_timespec_from_date_time(date_time);
-	timespec times[2]   = {time, time};
+	int fd = (int)file.u64[0];
+	timespec time = os_timespec_from_date_time(date_time);
+	timespec times[2] = {time, time};
 	int futimens_result = futimens(fd, times);
-	b32 good            = (futimens_result != -1);
+	b32 good = (futimens_result != -1);
 	return good;
 }
 
 static OS_FileProperties
 os_properties_from_file(OS_Handle file)
 {
-	if (os_handle_match(file, os_handle_zero()))
+	if(os_handle_match(file, os_handle_zero()))
 	{
 		return (OS_FileProperties){0};
 	}
-	int fd                  = (int)file.u64[0];
-	struct stat fd_stat     = {0};
-	int fstat_result        = fstat(fd, &fd_stat);
+	int fd = (int)file.u64[0];
+	struct stat fd_stat = {0};
+	int fstat_result = fstat(fd, &fd_stat);
 	OS_FileProperties props = {0};
-	if (fstat_result != -1)
+	if(fstat_result != -1)
 	{
 		props = os_file_properties_from_stat(&fd_stat);
 	}
@@ -337,10 +337,10 @@ os_properties_from_file(OS_Handle file)
 static b32
 os_delete_file_at_path(String8 path)
 {
-	Temp scratch      = scratch_begin(0, 0);
-	b32 result        = 0;
+	Temp scratch = scratch_begin(0, 0);
+	b32 result = 0;
 	String8 path_copy = str8_copy(scratch.arena, path);
-	if (remove((char *)path_copy.str) != -1)
+	if(remove((char *)path_copy.str) != -1)
 	{
 		result = 1;
 	}
@@ -351,8 +351,8 @@ os_delete_file_at_path(String8 path)
 static String8
 os_full_path_from_path(Arena *arena, String8 path)
 {
-	Temp scratch          = scratch_begin(&arena, 1);
-	String8 path_copy     = str8_copy(scratch.arena, path);
+	Temp scratch = scratch_begin(&arena, 1);
+	String8 path_copy = str8_copy(scratch.arena, path);
 	char buffer[PATH_MAX] = {0};
 	realpath((char *)path_copy.str, buffer);
 	String8 result = str8_copy(arena, str8_cstring(buffer));
@@ -363,11 +363,11 @@ os_full_path_from_path(Arena *arena, String8 path)
 static b32
 os_file_path_exists(String8 path)
 {
-	Temp scratch      = scratch_begin(0, 0);
+	Temp scratch = scratch_begin(0, 0);
 	String8 path_copy = str8_copy(scratch.arena, path);
 	int access_result = access((char *)path_copy.str, F_OK);
-	b32 result        = 0;
-	if (access_result == 0)
+	b32 result = 0;
+	if(access_result == 0)
 	{
 		result = 1;
 	}
@@ -378,11 +378,11 @@ os_file_path_exists(String8 path)
 static b32
 os_directory_path_exists(String8 path)
 {
-	Temp scratch      = scratch_begin(0, 0);
-	b32 exists        = 0;
+	Temp scratch = scratch_begin(0, 0);
+	b32 exists = 0;
 	String8 path_copy = str8_copy(scratch.arena, path);
-	DIR *handle       = opendir((char *)path_copy.str);
-	if (handle)
+	DIR *handle = opendir((char *)path_copy.str);
+	if(handle)
 	{
 		closedir(handle);
 		exists = 1;
@@ -394,12 +394,12 @@ os_directory_path_exists(String8 path)
 static OS_FileProperties
 os_properties_from_file_path(String8 path)
 {
-	Temp scratch            = scratch_begin(0, 0);
-	String8 path_copy       = str8_copy(scratch.arena, path);
-	struct stat f_stat      = {0};
-	int stat_result         = stat((char *)path_copy.str, &f_stat);
+	Temp scratch = scratch_begin(0, 0);
+	String8 path_copy = str8_copy(scratch.arena, path);
+	struct stat f_stat = {0};
+	int stat_result = stat((char *)path_copy.str, &f_stat);
 	OS_FileProperties props = {0};
-	if (stat_result != -1)
+	if(stat_result != -1)
 	{
 		props = os_file_properties_from_stat(&f_stat);
 	}
@@ -410,10 +410,10 @@ os_properties_from_file_path(String8 path)
 static b32
 os_make_directory(String8 path)
 {
-	Temp scratch      = scratch_begin(0, 0);
-	b32 result        = 0;
+	Temp scratch = scratch_begin(0, 0);
+	b32 result = 0;
 	String8 path_copy = str8_copy(scratch.arena, path);
-	if (mkdir((char *)path_copy.str, 0755) != -1)
+	if(mkdir((char *)path_copy.str, 0755) != -1)
 	{
 		result = 1;
 	}
@@ -452,8 +452,8 @@ os_now_universal_time(void)
 static DateTime
 os_universal_time_from_local(DateTime *date_time)
 {
-	tm local_tm        = os_tm_from_date_time(*date_time);
-	local_tm.tm_isdst  = -1;
+	tm local_tm = os_tm_from_date_time(*date_time);
+	local_tm.tm_isdst = -1;
 	time_t universal_t = mktime(&local_tm);
 
 	tm universal_tm = {0};
@@ -465,10 +465,10 @@ os_universal_time_from_local(DateTime *date_time)
 static DateTime
 os_local_time_from_universal(DateTime *date_time)
 {
-	tm universal_tm       = os_tm_from_date_time(*date_time);
+	tm universal_tm = os_tm_from_date_time(*date_time);
 	universal_tm.tm_isdst = -1;
-	time_t universal_t    = timegm(&universal_tm);
-	tm local_tm           = {0};
+	time_t universal_t = timegm(&universal_tm);
+	tm local_tm = {0};
 	localtime_r(&universal_t, &local_tm);
 
 	DateTime result = os_date_time_from_tm(local_tm, 0);
@@ -487,10 +487,10 @@ main(int argc, char **argv)
 {
 	// set up OS layer
 	{
-		OS_SystemInfo *info           = os_get_system_info();
+		OS_SystemInfo *info = os_get_system_info();
 		info->logical_processor_count = sysconf(_SC_NPROCESSORS_ONLN);
-		info->page_size               = sysconf(_SC_PAGESIZE);
-		info->large_page_size         = MB(2);
+		info->page_size = sysconf(_SC_PAGESIZE);
+		info->large_page_size = MB(2);
 	}
 
 	// set up thread context

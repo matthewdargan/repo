@@ -44,8 +44,8 @@ This is a systems programming monorepo implemented in C99 (ISO/IEC 9899:1999) wi
 
 ### `9p/` - 9P Protocol
 
-- **`9pclient.c/h`** - 9P client
-- **`fcall.c/h`** - Protocol message handling
+- **`9p_protocol.c/h`** - Protocol message handling
+- **`9p_client.c/h`** - 9P client
 
 ### `packages/` - Nix Packages
 

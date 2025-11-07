@@ -27,4 +27,4 @@ static String8 socketreadmsg(Arena *a, u64 fd);
 static String8 socketreadhttp(Arena *a, u64 fd);
 static b32 socketwrite(u64 fd, String8 data);
 
-#endif  // SOCKET_H
+#endif // SOCKET_H

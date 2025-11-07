@@ -3,7 +3,7 @@ static Rng1U64
 rng_1u64(u64 min, u64 max)
 {
 	Rng1U64 r = {min, max};
-	if (r.min > r.max)
+	if(r.min > r.max)
 	{
 		Swap(u64, r.min, r.max);
 	}

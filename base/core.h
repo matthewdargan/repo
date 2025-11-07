@@ -35,7 +35,7 @@
 #define AlignOf(T) __alignof(T)
 
 // For-Loop Construct Macros
-#define DeferLoop(begin, end) for (int _i_ = ((begin), 0); !_i_; _i_ += 1, (end))
+#define DeferLoop(begin, end) for(int _i_ = ((begin), 0); !_i_; _i_ += 1, (end))
 
 // Memory Operation Macros
 #define MemoryCopy(dst, src, size) memmove((dst), (src), (size))
@@ -46,14 +46,14 @@
 
 // Asserts
 #define Trap() __builtin_trap()
-#define AssertAlways(x) \
-	do                    \
-	{                     \
-		if (!(x))           \
-		{                   \
-			Trap();           \
-		}                   \
-	} while (0)
+#define AssertAlways(x)                                                                                                \
+	do                                                                                                                   \
+	{                                                                                                                    \
+		if(!(x))                                                                                                           \
+		{                                                                                                                  \
+			Trap();                                                                                                          \
+		}                                                                                                                  \
+	} while(0)
 #if BUILD_DEBUG
 #define Assert(x) AssertAlways(x)
 #else
@@ -68,9 +68,9 @@
 #define SetNil(nil, p) ((p) = nil)
 
 // singly-linked, doubly-headed lists (queues)
-#define SLLQueuePush_NZ(nil, f, l, n, next) \
+#define SLLQueuePush_NZ(nil, f, l, n, next)                                                                            \
 	(CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((l)->next = (n), (l) = (n), SetNil(nil, (n)->next)))
-#define SLLQueuePushFront_NZ(nil, f, l, n, next) \
+#define SLLQueuePushFront_NZ(nil, f, l, n, next)                                                                       \
 	(CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((n)->next = (f), (f) = (n)))
 #define SLLQueuePop_NZ(nil, f, l, next) ((f) == (l) ? (SetNil(nil, f), SetNil(nil, l)) : ((f) = (f)->next))
 
@@ -112,13 +112,13 @@ void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
 #define AlignPow2(x, b) (((x) + (b) - 1) & (~((b) - 1)))
 #define Glue_(A, B) A##B
 #define Glue(A, B) Glue_(A, B)
-#define Swap(T, a, b) \
-	do                  \
-	{                   \
-		T t__ = a;        \
-		a     = b;        \
-		b     = t__;      \
-	} while (0)
+#define Swap(T, a, b)                                                                                                  \
+	do                                                                                                                   \
+	{                                                                                                                    \
+		T t__ = a;                                                                                                         \
+		a = b;                                                                                                             \
+		b = t__;                                                                                                           \
+	} while(0)
 
 // Base Types
 typedef uint8_t u8;
@@ -148,37 +148,32 @@ struct U64Array
 static u64 max_u64 = 0xffffffffffffffffull;
 static u32 max_u32 = 0xffffffffu;
 static u16 max_u16 = 0xffff;
-static u8 max_u8   = 0xff;
+static u8 max_u8 = 0xff;
 
 static s64 max_s64 = 0x7fffffffffffffffll;
 static s32 max_s32 = 0x7fffffff;
 static s16 max_s16 = 0x7fff;
-static s8 max_s8   = 0x7f;
+static s8 max_s8 = 0x7f;
 
 static s64 min_s64 = (s64)0x8000000000000000ull;
 static s32 min_s32 = (s32)0x80000000u;
 static s16 min_s16 = (s16)0x8000;
-static s8 min_s8   = (s8)0x80;
+static s8 min_s8 = (s8)0x80;
 
 // Time Types
 typedef struct DateTime DateTime;
 struct DateTime
 {
-	u16 msec;  // [0,999]
-	u16 sec;   // [0,60]
-	u16 min;   // [0,59]
-	u16 hour;  // [0,24]
-	u16 day;   // [0,30]
+	u16 msec; // [0,999]
+	u16 sec;  // [0,60]
+	u16 min;  // [0,59]
+	u16 hour; // [0,24]
+	u16 day;  // [0,30]
 	u32 mon;
-	u32 year;  // 1 = 1 CE, 0 = 1 BC
+	u32 year; // 1 = 1 CE, 0 = 1 BC
 };
 
 typedef u64 DenseTime;
-
-enum
-{
-	ISDIR = 1 << 0,
-};
 
 // Bit Patterns
 static u16 bswap_u16(u16 x);
@@ -213,4 +208,4 @@ static void write_u64(void *ptr, u64 x);
 static DenseTime dense_time_from_date_time(DateTime dt);
 static DateTime date_time_from_dense_time(DenseTime t);
 
-#endif  // CORE_H
+#endif // CORE_H

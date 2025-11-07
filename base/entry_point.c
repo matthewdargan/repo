@@ -6,7 +6,7 @@ main_thread_base_entry_point(int arguments_count, char **arguments)
 	// parse command line
 	String8List command_line_argument_strings = {0};
 	{
-		for (u64 i = 0; i < (u64)arguments_count; i++)
+		for(u64 i = 0; i < (u64)arguments_count; i += 1)
 		{
 			str8_list_push(scratch.arena, &command_line_argument_strings, str8_cstring(arguments[i]));
 		}

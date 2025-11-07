@@ -8,7 +8,7 @@
 typedef u64 ArenaFlags;
 enum
 {
-	ArenaFlag_NoChain    = (1 << 0),
+	ArenaFlag_NoChain = (1 << 0),
 	ArenaFlag_LargePages = (1 << 1),
 };
 
@@ -24,8 +24,8 @@ struct ArenaParams
 typedef struct Arena Arena;
 struct Arena
 {
-	Arena *prev;     // previous arena in chain
-	Arena *current;  // current arena in chain
+	Arena *prev;    // previous arena in chain
+	Arena *current; // current arena in chain
 	ArenaFlags flags;
 	u64 cmt_size;
 	u64 res_size;
@@ -49,7 +49,7 @@ struct Temp
 // Arena Functions
 read_only static ArenaFlags arena_default_flags = 0;
 read_only static u64 arena_default_reserve_size = MB(64);
-read_only static u64 arena_default_commit_size  = KB(64);
+read_only static u64 arena_default_commit_size = KB(64);
 
 static Arena *arena_alloc(void);
 static Arena *arena_alloc_(ArenaParams params);
@@ -67,4 +67,4 @@ static void temp_end(Temp temp);
 #define push_array_no_zero(a, T, c) push_array_no_zero_aligned((a), T, (c), Max(8, AlignOf(T)))
 #define push_array(a, T, c) push_array_aligned(a, T, c, Max(8, AlignOf(T)))
 
-#endif  // ARENA_H
+#endif // ARENA_H

@@ -1,13 +1,24 @@
-AlignConsecutiveAssignments: Consecutive
-AllowShortFunctionsOnASingleLine: None
-AllowShortIfStatementsOnASingleLine: false
-AllowShortLoopsOnASingleLine: false
-BasedOnStyle: Google
+BasedOnStyle: LLVM
+BinPackArguments: true
+BinPackParameters: true
 BreakAfterReturnType: TopLevelDefinitions
 BreakBeforeBraces: Allman
 ColumnLimit: 120
+IndentCaseLabels: true
 IndentWidth: 2
 InsertBraces: true
 PointerAlignment: Right
+SpaceBeforeParens: Custom
+SpaceBeforeParensOptions:
+  AfterControlStatements: false
+  AfterForeachMacros: false
+  AfterFunctionDefinitionName: false
+  AfterFunctionDeclarationName: false
+  AfterIfMacros: false
+  AfterOverloadedOperator: false
+  AfterPlacementOperator: true
+  AfterRequiresInClause: false
+  AfterRequiresInExpression: false
+  BeforeNonEmptyParentheses: false
 TabWidth: 2
 UseTab: ForIndentation

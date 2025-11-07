@@ -50,4 +50,4 @@ static void log_msgf(LogMsgKind kind, char *fmt, ...);
 static void log_scope_begin(void);
 static LogScopeResult log_scope_end(Arena *arena);
 
-#endif  // LOG_H
+#endif // LOG_H

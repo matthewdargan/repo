@@ -1,5 +1,8 @@
-#ifndef _9PCLIENT_H
-#define _9PCLIENT_H
+#ifndef _9P_CLIENT_H
+#define _9P_CLIENT_H
+
+// Foreign Includes
+#include <pwd.h>
 
 typedef struct Cfsys Cfsys;
 typedef struct Cfid Cfid;
@@ -22,7 +25,14 @@ struct Cfid
 };
 
 read_only static b32 debug9pclient = 1;
-read_only static u32 omodetab[8] = {0, OEXEC, OWRITE, ORDWR, OREAD, OEXEC, ORDWR, ORDWR};
+read_only static u32 omodetab[8] = {0,
+                                    OpenFlag_Execute,
+                                    OpenFlag_Write,
+                                    OpenFlag_ReadWrite,
+                                    OpenFlag_Read,
+                                    OpenFlag_Execute,
+                                    OpenFlag_ReadWrite,
+                                    OpenFlag_ReadWrite};
 
 static Cfsys *fsinit(Arena *a, u64 fd);
 static Cfsys *fs9mount(Arena *a, u64 fd, String8 aname);
@@ -43,8 +53,8 @@ static s64 fsread(Arena *a, Cfid *fid, void *buf, u64 n);
 static s64 fsreadn(Arena *a, Cfid *fid, void *buf, u64 n);
 static s64 fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset);
 static s64 fswrite(Arena *a, Cfid *fid, void *buf, u64 n);
-static s64 fsdirread(Arena *a, Cfid *fid, Dirlist *list);
-static s64 fsdirreadall(Arena *a, Cfid *fid, Dirlist *list);
+static s64 fsdirread(Arena *a, Cfid *fid, DirList *list);
+static s64 fsdirreadall(Arena *a, Cfid *fid, DirList *list);
 static Dir fsdirfstat(Arena *a, Cfid *fid);
 static Dir fsdirstat(Arena *a, Cfsys *fs, String8 name);
 static b32 fsdirfwstat(Arena *a, Cfid *fid, Dir d);
@@ -52,4 +62,4 @@ static b32 fsdirwstat(Arena *a, Cfsys *fs, String8 name, Dir d);
 static b32 fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode);
 static s64 fsseek(Arena *a, Cfid *fid, s64 offset, u32 type);
 
-#endif  // _9PCLIENT_H
+#endif // _9P_CLIENT_H

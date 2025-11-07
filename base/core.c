@@ -98,7 +98,7 @@ static DateTime
 date_time_from_dense_time(DenseTime time)
 {
 	DateTime result = {0};
-	result.msec     = time % 1000;
+	result.msec = time % 1000;
 	time /= 1000;
 	result.sec = time % 61;
 	time /= 61;

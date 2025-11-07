@@ -16,4 +16,4 @@
 #include "entry_point.h"
 // clang-format on
 
-#endif  // INC_H
+#endif // INC_H

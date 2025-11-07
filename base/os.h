@@ -30,10 +30,10 @@ struct OS_SystemInfo
 typedef u32 OS_AccessFlags;
 enum
 {
-	OS_AccessFlag_Read       = (1 << 0),
-	OS_AccessFlag_Write      = (1 << 1),
-	OS_AccessFlag_Append     = (1 << 2),
-	OS_AccessFlag_ShareRead  = (1 << 3),
+	OS_AccessFlag_Read = (1 << 0),
+	OS_AccessFlag_Write = (1 << 1),
+	OS_AccessFlag_Append = (1 << 2),
+	OS_AccessFlag_ShareRead = (1 << 3),
 	OS_AccessFlag_ShareWrite = (1 << 4),
 };
 
@@ -103,4 +103,4 @@ static DateTime os_universal_time_from_local(DateTime *local_time);
 static DateTime os_local_time_from_universal(DateTime *universal_time);
 static void os_sleep_milliseconds(u32 msec);
 
-#endif  // OS_H
+#endif // OS_H

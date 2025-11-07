@@ -39,4 +39,4 @@
 #define ARCH_ARM32 0
 #endif
 
-#endif  // CONTEXT_CRACKING_H
+#endif // CONTEXT_CRACKING_H
