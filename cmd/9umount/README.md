@@ -1,18 +1,34 @@
 # 9umount
 
-9umount unmounts 9p filesystems.
+Unmount 9P filesystems.
 
-Usage:
+## Usage
 
-    9umount mtpt...
+```sh
+9umount mtpt...
+```
 
-## Example
+## Examples
 
-Mount 9p filesystems:
+Unmount a single mount point:
 
-    9mount 'tcp!sources.cs.bell-labs.com' $HOME/n/sources
-    9bind $HOME/n/sources $HOME/sources
+```sh
+9umount ~/n/sources
+```
 
-Unmount 9p filesystems:
+Unmount multiple mount points:
 
-    9umount $HOME/n/sources $HOME/sources
+```sh
+9umount ~/n/sources ~/sources
+```
+
+Complete workflow:
+
+```sh
+# Mount
+9mount 'tcp!sources.cs.bell-labs.com' ~/n/sources
+9bind ~/n/sources ~/sources
+
+# Unmount
+9umount ~/n/sources ~/sources
+```

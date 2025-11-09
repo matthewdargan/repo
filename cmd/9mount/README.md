@@ -1,54 +1,58 @@
 # 9mount
 
-9mount mounts a 9p filesystem served at dial on mtpt. Mtpt must be
-writable by you and not sticky. Dial is a dial string assuming one of
-the forms:
+Mount a [9P filesystem](https://9fans.github.io/plan9port/man/man9/intro.html) at a mount point.
 
-    unix!SOCKET
-    tcp!HOST[!PORT]
-    virtio!CHANNEL
-    -
+## Usage
 
-Usage:
+```sh
+9mount [-nsx] [-a=spec] [-m=msize] [-u=uid] [-g=gid] dial mtpt
+```
 
-    9mount [-nsx] [-a=spec] [-m=msize] [-u=uid] [-g=gid] dial mtpt
+**Dial formats:**
 
-The -n flag prints the mount command to stderr instead of performing
-the mount.
+- `unix!SOCKET` - Unix domain socket
+- `tcp!HOST[!PORT]` - TCP connection
+- `virtio!CHANNEL` - Virtio-9p channel
+- `-` - stdin/stdout
 
-The -s flag enables single attach mode so all users accessing the mount
-point see the same filesystem.
+**Options:**
 
-The -x flag enables exclusive access so other users cannot access the
-mount point.
-
-The -a flag sets the file tree to mount when attaching to servers that
-export multiple file trees.
-
-The -m flag sets the maximum length of a single 9p message in bytes.
-
-The -u flag sets the UID for mounting the filesystem.
-
-The -g flag sets the GID for mounting the filesystem.
+- `-n` - Print mount command to stderr without mounting
+- `-s` - Single attach mode (all users see same filesystem)
+- `-x` - Exclusive access (no other users can access)
+- `-a=spec` - File tree to attach (for servers exporting multiple trees)
+- `-m=msize` - Maximum 9P message length in bytes
+- `-u=uid` - UID for mounting
+- `-g=gid` - GID for mounting
 
 ## Examples
 
-Mount plan9port's factotum interface via unix socket:
+Mount Plan 9 sources archive:
 
-    9mount 'unix!/tmp/ns.'$USER'.:0/factotum' $HOME/n/factotum
+```sh
+9mount 'tcp!sources.cs.bell-labs.com' ~/n/sources
+```
 
-Import plan 9 "sources" archive:
+Mount via unix socket:
 
-    9mount 'tcp!sources.cs.bell-labs.com' $HOME/n/sources
+```sh
+9mount 'unix!/tmp/ns.'$USER'.:0/factotum' ~/n/factotum
+```
 
-Import maildir from remote server:
+Mount with specific attach name:
 
-    9mount -a='/home/user/mail' 'tcp!server!5640' $HOME/mail
+```sh
+9mount -a='/home/user/mail' 'tcp!server!5640' ~/mail
+```
 
-Mount host filesystem shared via virtio-9p:
+Mount via virtio-9p:
 
-    9mount 'virtio!share' $HOME/n/host
+```sh
+9mount 'virtio!share' ~/n/host
+```
 
-Mount a 9p server via stdin/stdout:
+Mount via stdin/stdout:
 
-    u9fs | 9mount - $HOME/n/fs
+```sh
+u9fs | 9mount - ~/n/fs
+```

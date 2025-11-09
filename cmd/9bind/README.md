@@ -1,18 +1,24 @@
 # 9bind
 
-9bind performs a bind mount, making the file tree visible at directory
-old also visible at mount point new.
+Bind mount a directory, making the file tree at `old` also visible at `new`.
 
-Usage:
+## Usage
 
-    9bind old new
+```sh
+9bind old new
+```
 
-## Example
+## Examples
 
-Mount a 9p filesystem:
+Mount a 9P filesystem and bind it to another location:
 
-    9mount 'tcp!sources.cs.bell-labs.com' $HOME/n/sources
+```sh
+9mount 'tcp!sources.cs.bell-labs.com' ~/n/sources
+9bind ~/n/sources ~/sources
+```
 
-Bind to make the same filesystem visible at another location:
+Make a directory accessible at multiple locations:
 
-    9bind $HOME/n/sources $HOME/sources
+```sh
+9bind /usr/share ~/share
+```
