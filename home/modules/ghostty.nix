@@ -1,4 +1,8 @@
-{inputs, ...}: {pkgs, ...}: {
+{
+  inputs,
+  pkgs,
+  ...
+}: {
   home.packages = [
     inputs.ghostty.packages.${pkgs.system}.default
     pkgs.liberation_ttf

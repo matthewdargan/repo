@@ -1,1 +1,0 @@
-{home.homeDirectory = "/home/mpd";}

@@ -7,7 +7,6 @@
     nas = inputs.nixpkgs.lib.nixosSystem {
       modules = [
         ./nas
-        ../../modules/settings.nix
       ];
       specialArgs = {
         inherit inputs self;
@@ -16,8 +15,7 @@
     };
     router = inputs.nixpkgs.lib.nixosSystem {
       modules = [
-        ./router.nix
-        ../../modules/settings.nix
+        ./router
       ];
       specialArgs = {
         inherit inputs self;
@@ -27,7 +25,6 @@
     scoop = inputs.nixpkgs.lib.nixosSystem {
       modules = [
         ./scoop
-        ../../modules/settings.nix
       ];
       specialArgs = {
         inherit inputs self;

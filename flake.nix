@@ -22,7 +22,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/nixvim";
     };
-    parts.url = "github:hercules-ci/flake-parts";
+    flake-parts.url = "github:hercules-ci/flake-parts";
     pre-commit-hooks = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:cachix/pre-commit-hooks.nix";
@@ -32,49 +32,17 @@
       url = "github:justinrubek/u9fs";
     };
   };
-  outputs = {parts, ...} @ inputs:
-    parts.lib.mkFlake {inherit inputs;} {
+  outputs = {flake-parts, ...} @ inputs:
+    flake-parts.lib.mkFlake {inherit inputs;} {
+      systems = ["x86_64-linux"];
       imports = [
+        ./flake-parts/pre-commit.nix
+        ./flake-parts/shells.nix
         ./home/configurations
-        inputs.pre-commit-hooks.flakeModule
+        ./home/modules
         ./nixos/configurations
+        ./nixos/modules
         ./packages
       ];
-      perSystem = {
-        config,
-        inputs',
-        lib,
-        pkgs,
-        ...
-      }: {
-        devShells.default = pkgs.mkShell {
-          packages = [
-            inputs'.home-manager.packages.home-manager
-            pkgs.gdb
-            pkgs.libllvm
-            pkgs.nh
-            pkgs.valgrind
-          ];
-          shellHook = "${config.pre-commit.installationScript}";
-        };
-        pre-commit = {
-          settings = {
-            hooks = {
-              alejandra.enable = true;
-              clang-format = {
-                enable = true;
-                types_or = lib.mkForce [
-                  "c"
-                  "c++"
-                ];
-              };
-              deadnix.enable = true;
-              statix.enable = true;
-            };
-            src = ../.;
-          };
-        };
-      };
-      systems = ["x86_64-linux"];
     };
 }

@@ -5,7 +5,14 @@
   self,
   ...
 }: {
-  imports = [./hardware.nix];
+  imports = [
+    ./hardware.nix
+    self.nixosModules."9p-tools"
+    self.nixosModules.fish
+    self.nixosModules.locale
+    self.nixosModules.nix-config
+    self.nixosModules.settings
+  ];
   boot = {
     loader = {
       efi.canTouchEfiVariables = true;
@@ -16,20 +23,6 @@
       "ext4"
       "vfat"
     ];
-  };
-  i18n = {
-    defaultLocale = "en_US.UTF-8";
-    extraLocaleSettings = {
-      LC_ADDRESS = "en_US.UTF-8";
-      LC_IDENTIFICATION = "en_US.UTF-8";
-      LC_MEASUREMENT = "en_US.UTF-8";
-      LC_MONETARY = "en_US.UTF-8";
-      LC_NAME = "en_US.UTF-8";
-      LC_NUMERIC = "en_US.UTF-8";
-      LC_PAPER = "en_US.UTF-8";
-      LC_TELEPHONE = "en_US.UTF-8";
-      LC_TIME = "en_US.UTF-8";
-    };
   };
   networking = rec {
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
@@ -43,47 +36,6 @@
       ];
     };
     networkmanager.enable = true;
-  };
-  nix = {
-    gc = {
-      automatic = true;
-      options = "--delete-older-than 5d";
-    };
-    nixPath = ["nixpkgs=${inputs.nixpkgs}"];
-    registry.nixpkgs.flake = inputs.nixpkgs;
-    settings = {
-      auto-optimise-store = true;
-      experimental-features = [
-        "nix-command"
-        "flakes"
-      ];
-      trusted-users = ["@wheel"];
-    };
-  };
-  nixpkgs.config.allowUnfree = true;
-  programs.fish.enable = true;
-  security.wrappers = {
-    "9bind" = {
-      owner = "root";
-      group = "root";
-      permissions = "u+rx,g+x,o+x";
-      setuid = true;
-      source = "${self.packages.${pkgs.system}."9bind"}/bin/9bind";
-    };
-    "9mount" = {
-      owner = "root";
-      group = "root";
-      permissions = "u+rx,g+x,o+x";
-      setuid = true;
-      source = "${self.packages.${pkgs.system}."9mount"}/bin/9mount";
-    };
-    "9umount" = {
-      owner = "root";
-      group = "root";
-      permissions = "u+rx,g+x,o+x";
-      setuid = true;
-      source = "${self.packages.${pkgs.system}."9umount"}/bin/9umount";
-    };
   };
   services = {
     btrfs.autoScrub.enable = true;
@@ -157,7 +109,6 @@
     };
   };
   system.stateVersion = "25.05";
-  time.timeZone = "America/Chicago";
   users = {
     groups.media = {};
     groups.storage = {};

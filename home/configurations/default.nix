@@ -1,32 +1,32 @@
-{inputs, ...} @ part-inputs: {
+{
+  inputs,
+  self,
+  ...
+}: {
   flake.homeConfigurations = let
-    modulesLinux = [
-      (import ../modules/dev.nix part-inputs)
-      ./linux.nix
-      ../../modules/settings.nix
+    pkgs = inputs.nixpkgs.legacyPackages."x86_64-linux";
+    baseModules = [
+      self.homeModules.base
+      self.homeModules.development
     ];
-    pkgsLinux = inputs.nixpkgs.legacyPackages."x86_64-linux";
-    homeConfig = {
-      modules,
-      pkgs,
-    }:
-      inputs.home-manager.lib.homeManagerConfiguration {
-        inherit modules pkgs;
-      };
-  in {
-    "mpd@nas" = homeConfig {
-      modules = modulesLinux;
-      pkgs = pkgsLinux;
+    extraSpecialArgs = {
+      inherit inputs self;
     };
-    "mpd@scoop" = homeConfig {
+  in {
+    "mpd@nas" = inputs.home-manager.lib.homeManagerConfiguration {
+      inherit extraSpecialArgs pkgs;
+      modules = baseModules;
+    };
+
+    "mpd@scoop" = inputs.home-manager.lib.homeManagerConfiguration {
+      inherit extraSpecialArgs pkgs;
       modules =
-        modulesLinux
+        baseModules
         ++ [
-          (import ../modules/firefox.nix part-inputs)
-          (import ../modules/ghostty.nix part-inputs)
-          ../modules/discord.nix
+          self.homeModules.discord
+          self.homeModules.firefox
+          self.homeModules.ghostty
         ];
-      pkgs = pkgsLinux;
     };
   };
 }
