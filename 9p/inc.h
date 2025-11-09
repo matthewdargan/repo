@@ -5,7 +5,7 @@
 // clang-format off
 #include "core.h"
 #include "client.h"
-#include "srv.h"
+#include "server.h"
 // clang-format on
 
 #endif // _9P_INC_H

@@ -1,18 +1,27 @@
 #ifndef _9P_CORE_H
 #define _9P_CORE_H
 
-// 9P Protocol Constants
+// Protocol Constants
 read_only static String8 version_9p = str8_lit_comp("9P2000");
 
-#define MAX_WALK_ELEM_COUNT 16
-#define STAT_DATA_FIXED_SIZE (2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4 + 8)
-#define TAG_NONE 0xffff
-#define FID_NONE 0xffffffff
-#define MESSAGE_HEADER_SIZE 24
-#define DIR_ENTRY_MAX 8192
-#define DIR_BUFFER_MAX (DIR_ENTRY_MAX * 16)
+// Encoding Sizes
+#define P9_MESSAGE_SIZE_FIELD_SIZE 4
+#define P9_MESSAGE_TYPE_FIELD_SIZE 1
+#define P9_MESSAGE_TAG_FIELD_SIZE 2
+#define P9_MESSAGE_MINIMUM_SIZE (P9_MESSAGE_SIZE_FIELD_SIZE + P9_MESSAGE_TYPE_FIELD_SIZE + P9_MESSAGE_TAG_FIELD_SIZE)
+#define P9_QID_ENCODED_SIZE 13
+#define P9_STRING8_SIZE_FIELD_SIZE 2
 
-// 9P Unique Identifier
+// Protocol Limits
+#define P9_MAX_WALK_ELEM_COUNT 16
+#define P9_STAT_DATA_FIXED_SIZE (2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4 + 8)
+#define P9_TAG_NONE 0xffff
+#define P9_FID_NONE 0xffffffff
+#define P9_MESSAGE_HEADER_SIZE 24
+#define P9_DIR_ENTRY_MAX 8192
+#define P9_DIR_BUFFER_MAX (P9_DIR_ENTRY_MAX * 16)
+
+// Protocol Message Types
 typedef struct Qid Qid;
 struct Qid
 {
@@ -21,40 +30,38 @@ struct Qid
 	u64 path;
 };
 
-// 9P Protocol Message
 typedef struct Message9P Message9P;
 struct Message9P
 {
 	u32 type;
 	u32 tag;
 	u32 fid;
-	u32 max_message_size;                    // Tversion, Rversion
-	String8 protocol_version;                // Tversion, Rversion
-	u32 cancel_tag;                          // Tflush
-	String8 error_message;                   // Rerror
-	Qid qid;                                 // Rattach, Ropen, Rcreate
-	u32 io_unit_size;                        // Ropen, Rcreate
-	Qid auth_qid;                            // Rauth
-	u32 auth_fid;                            // Tauth, Tattach
-	String8 user_name;                       // Tauth, Tattach
-	String8 attach_path;                     // Tauth, Tattach
-	u32 permissions;                         // Tcreate
-	String8 name;                            // Tcreate
-	u32 open_mode;                           // Topen, Tcreate
-	u32 new_fid;                             // Twalk
-	u32 walk_name_count;                     // Twalk
-	String8 walk_names[MAX_WALK_ELEM_COUNT]; // Twalk
-	u32 walk_qid_count;                      // Rwalk
-	Qid walk_qids[MAX_WALK_ELEM_COUNT];      // Rwalk
-	u64 file_offset;                         // Tread, Twrite
-	u32 byte_count;                          // Tread, Rread, Twrite, Rwrite
-	String8 payload_data;                    // Rread, Twrite
-	String8 stat_data;                       // Rstat, Twstat
+	u32 max_message_size;                       // Tversion, Rversion
+	String8 protocol_version;                   // Tversion, Rversion
+	u32 cancel_tag;                             // Tflush
+	String8 error_message;                      // Rerror
+	Qid qid;                                    // Rattach, Ropen, Rcreate
+	u32 io_unit_size;                           // Ropen, Rcreate
+	Qid auth_qid;                               // Rauth
+	u32 auth_fid;                               // Tauth, Tattach
+	String8 user_name;                          // Tauth, Tattach
+	String8 attach_path;                        // Tauth, Tattach
+	u32 permissions;                            // Tcreate
+	String8 name;                               // Tcreate
+	u32 open_mode;                              // Topen, Tcreate
+	u32 new_fid;                                // Twalk
+	u32 walk_name_count;                        // Twalk
+	String8 walk_names[P9_MAX_WALK_ELEM_COUNT]; // Twalk
+	u32 walk_qid_count;                         // Rwalk
+	Qid walk_qids[P9_MAX_WALK_ELEM_COUNT];      // Rwalk
+	u64 file_offset;                            // Tread, Twrite
+	u32 byte_count;                             // Tread, Rread, Twrite, Rwrite
+	String8 payload_data;                       // Rread, Twrite
+	String8 stat_data;                          // Rstat, Twstat
 };
 
-// 9P Directory Entry
-typedef struct Dir Dir;
-struct Dir
+typedef struct Dir9P Dir9P;
+struct Dir9P
 {
 	u32 server_type;
 	u32 server_dev;
@@ -69,23 +76,22 @@ struct Dir
 	String8 modify_user_id;
 };
 
-// Dir List Types
-typedef struct DirNode DirNode;
-struct DirNode
+typedef struct DirNode9P DirNode9P;
+struct DirNode9P
 {
-	DirNode *next;
-	Dir dir;
+	DirNode9P *next;
+	Dir9P dir;
 };
 
-typedef struct DirList DirList;
-struct DirList
+typedef struct DirList9P DirList9P;
+struct DirList9P
 {
 	u64 count;
-	DirNode *first;
-	DirNode *last;
+	DirNode9P *first;
+	DirNode9P *last;
 };
 
-// 9P Message Types
+// Message Type Codes
 typedef u32 Message9PType;
 enum
 {
@@ -118,63 +124,70 @@ enum
 	Msg9P_Rwstat = 127,
 };
 
-// 9P Open Flags
-typedef u32 OpenFlags;
+// Open Flags
+typedef u32 P9_OpenFlags;
 enum
 {
-	OpenFlag_Read = 0,
-	OpenFlag_Write = 1,
-	OpenFlag_ReadWrite = 2,
-	OpenFlag_Execute = 3,
-	OpenFlag_Truncate = 16,
+	P9_OpenFlag_Read = 0,
+	P9_OpenFlag_Write = 1,
+	P9_OpenFlag_ReadWrite = 2,
+	P9_OpenFlag_Execute = 3,
+	P9_OpenFlag_Truncate = 16,
 };
 
-// 9P Access Flags
-typedef u32 AccessFlags;
+// Access Flags
+typedef u32 P9_AccessFlags;
 enum
 {
-	AccessFlag_Exist = 0,
-	AccessFlag_Execute = 1,
-	AccessFlag_Write = 2,
-	AccessFlag_Read = 4,
+	P9_AccessFlag_Exist = 0,
+	P9_AccessFlag_Execute = 1,
+	P9_AccessFlag_Write = 2,
+	P9_AccessFlag_Read = 4,
 };
 
-// 9P Mode Flags
-typedef u32 ModeFlags;
+// Mode Flags
+typedef u32 P9_ModeFlags;
 enum
 {
-	ModeFlag_Directory = 0x80000000,
+	P9_ModeFlag_Directory = 0x80000000,
 };
 
-// 9P Seek Whence
-typedef u32 SeekWhence;
+// Seek Whence
+typedef u32 P9_SeekWhence;
 enum
 {
-	SeekWhence_Set = 0,
-	SeekWhence_Cur = 1,
-	SeekWhence_End = 2,
+	P9_SeekWhence_Set = 0,
+	P9_SeekWhence_Cur = 1,
+	P9_SeekWhence_End = 2,
 };
 
-// 9P Protocol Encoding/Decoding Helpers
-static u8 *encode_str8(u8 *ptr, String8 s);
+// Type Constructors
+static Message9P msg9p_zero(void);
+static Dir9P dir9p_zero(void);
+
+// Encoding/Decoding Helpers
+static u8 *encode_str8(u8 *ptr, String8 string);
 static u8 *encode_qid(u8 *ptr, Qid qid);
-static u8 *decode_str8(u8 *ptr, u8 *end, String8 *s);
-static u8 *decode_qid(u8 *ptr, u8 *end, Qid *qid);
+static u8 *decode_str8(u8 *ptr, u8 *end, String8 *out_string);
+static u8 *decode_qid(u8 *ptr, u8 *end, Qid *out_qid);
 
-// 9P Message Encoding/Decoding
+// Message Encoding/Decoding
 static u32 msg9p_size(Message9P msg);
 static String8 str8_from_msg9p(Arena *arena, Message9P msg);
 static Message9P msg9p_from_str8(String8 data);
 
-// 9P Directory Encoding/Decoding
-static u32 dir_size(Dir dir);
-static String8 str8_from_dir(Arena *arena, Dir dir);
-static Dir dir_from_str8(String8 data);
+// Message Formatting
+static String8 str8_from_msg9p__fmt(Arena *arena, Message9P msg);
 
-// 9P Directory List Operations
-static void dir_list_push(Arena *arena, DirList *list, Dir dir);
+// Directory Encoding/Decoding
+static u32 dir9p_size(Dir9P dir);
+static String8 str8_from_dir9p(Arena *arena, Dir9P dir);
+static Dir9P dir9p_from_str8(String8 data);
 
-// 9P Message I/O
+// Directory List Operations
+static void dir9p_list_push(Arena *arena, DirList9P *list, Dir9P dir);
+
+// Message I/O
 static String8 read_9p_msg(Arena *arena, u64 fd);
 
 #endif // _9P_CORE_H

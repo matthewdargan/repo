@@ -312,7 +312,7 @@ str8fv(Arena *arena, char *fmt, va_list args)
 	va_list args2;
 	va_copy(args2, args);
 	u32 needed_bytes = base_vsnprintf(0, 0, fmt, args) + 1;
-	String8 result = {0};
+	String8 result = str8_zero();
 	result.str = push_array_no_zero(arena, u8, needed_bytes);
 	result.size = base_vsnprintf((char *)result.str, needed_bytes, fmt, args2);
 	result.str[result.size] = 0;
@@ -422,8 +422,7 @@ str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_
 {
 	String8 result = str8_zero();
 	{
-		// prefix
-		String8 prefix = {0};
+		String8 prefix = str8_zero();
 		switch(radix)
 		{
 			case 16:

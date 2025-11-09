@@ -4,62 +4,67 @@
 // Foreign Includes
 #include <pwd.h>
 
-typedef struct Cfsys Cfsys;
-typedef struct Cfid Cfid;
-struct Cfsys
+// Client Constants
+read_only static u32 open_mode_table[8] = {0,
+                                           P9_OpenFlag_Execute,
+                                           P9_OpenFlag_Write,
+                                           P9_OpenFlag_ReadWrite,
+                                           P9_OpenFlag_Read,
+                                           P9_OpenFlag_Execute,
+                                           P9_OpenFlag_ReadWrite,
+                                           P9_OpenFlag_ReadWrite};
+
+// Client Types
+typedef struct Client9P Client9P;
+struct Client9P
 {
 	u64 fd;
-	u32 msize;
-	u32 nexttag;
-	u32 nextfid;
-	Cfid *root;
+	u32 max_message_size;
+	u32 next_tag;
+	u32 next_fid;
+	struct ClientFid9P *root;
 };
 
-struct Cfid
+typedef struct ClientFid9P ClientFid9P;
+struct ClientFid9P
 {
 	u32 fid;
 	u32 mode;
 	Qid qid;
 	u64 offset;
-	Cfsys *fs;
+	Client9P *client;
 };
 
-read_only static b32 debug9pclient = 1;
-read_only static u32 omodetab[8] = {0,
-                                    OpenFlag_Execute,
-                                    OpenFlag_Write,
-                                    OpenFlag_ReadWrite,
-                                    OpenFlag_Read,
-                                    OpenFlag_Execute,
-                                    OpenFlag_ReadWrite,
-                                    OpenFlag_ReadWrite};
+// Client Connection
+static Client9P *client9p_init(Arena *arena, u64 fd);
+static Client9P *client9p_mount(Arena *arena, u64 fd, String8 attach_path);
+static void client9p_unmount(Arena *arena, Client9P *client);
+static b32 client9p_version(Arena *arena, Client9P *client, u32 max_message_size);
+static ClientFid9P *client9p_auth(Arena *arena, Client9P *client, String8 user_name, String8 attach_path);
+static ClientFid9P *client9p_attach(Arena *arena, Client9P *client, u32 auth_fid, String8 user_name,
+                                    String8 attach_path);
+static ClientFid9P *client9p_create(Arena *arena, Client9P *client, String8 name, u32 mode, u32 permissions);
+static b32 client9p_remove(Arena *arena, Client9P *client, String8 name);
+static ClientFid9P *client9p_open(Arena *arena, Client9P *client, String8 name, u32 mode);
+static Dir9P client9p_stat(Arena *arena, Client9P *client, String8 name);
+static b32 client9p_wstat(Arena *arena, Client9P *client, String8 name, Dir9P dir);
+static b32 client9p_access(Arena *arena, Client9P *client, String8 name, u32 mode);
+static Message9P client9p_rpc(Arena *arena, Client9P *client, Message9P tx);
 
-static Cfsys *fsinit(Arena *a, u64 fd);
-static Cfsys *fs9mount(Arena *a, u64 fd, String8 aname);
-static void fs9unmount(Arena *a, Cfsys *fs);
-static b32 fsversion(Arena *a, Cfsys *fs, u32 msize);
-static Cfid *fsauth(Arena *a, Cfsys *fs, String8 uname, String8 aname);
-static Cfid *fsattach(Arena *a, Cfsys *fs, u32 afid, String8 uname, String8 aname);
-static void fsclose(Arena *a, Cfid *fid);
-static Cfid *fswalk(Arena *a, Cfid *fid, String8 path);
-static b32 fsfcreate(Arena *a, Cfid *fid, String8 name, u32 mode, u32 perm);
-static Cfid *fscreate(Arena *a, Cfsys *fs, String8 name, u32 mode, u32 perm);
-static b32 fsfremove(Arena *a, Cfid *fid);
-static b32 fsremove(Arena *a, Cfsys *fs, String8 name);
-static b32 fsfopen(Arena *a, Cfid *fid, u32 mode);
-static Cfid *fs9open(Arena *a, Cfsys *fs, String8 name, u32 mode);
-static s64 fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset);
-static s64 fsread(Arena *a, Cfid *fid, void *buf, u64 n);
-static s64 fsreadn(Arena *a, Cfid *fid, void *buf, u64 n);
-static s64 fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset);
-static s64 fswrite(Arena *a, Cfid *fid, void *buf, u64 n);
-static s64 fsdirread(Arena *a, Cfid *fid, DirList *list);
-static s64 fsdirreadall(Arena *a, Cfid *fid, DirList *list);
-static Dir fsdirfstat(Arena *a, Cfid *fid);
-static Dir fsdirstat(Arena *a, Cfsys *fs, String8 name);
-static b32 fsdirfwstat(Arena *a, Cfid *fid, Dir d);
-static b32 fsdirwstat(Arena *a, Cfsys *fs, String8 name, Dir d);
-static b32 fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode);
-static s64 fsseek(Arena *a, Cfid *fid, s64 offset, u32 type);
+// Fid Operations
+static void client9p_fid_close(Arena *arena, ClientFid9P *fid);
+static ClientFid9P *client9p_fid_walk(Arena *arena, ClientFid9P *fid, String8 path);
+static b32 client9p_fid_create(Arena *arena, ClientFid9P *fid, String8 name, u32 mode, u32 permissions);
+static b32 client9p_fid_remove(Arena *arena, ClientFid9P *fid);
+static b32 client9p_fid_open(Arena *arena, ClientFid9P *fid, u32 mode);
+static s64 client9p_fid_pread(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset);
+static s64 client9p_fid_read_range(Arena *arena, ClientFid9P *fid, void *buf, Rng1U64 range);
+static s64 client9p_fid_pwrite(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset);
+static s64 client9p_fid_write_range(Arena *arena, ClientFid9P *fid, void *buf, Rng1U64 range);
+static s64 client9p_fid_seek(Arena *arena, ClientFid9P *fid, s64 offset, u32 type);
+static DirList9P client9p_dir_list_from_str8(Arena *arena, String8 buffer);
+static DirList9P client9p_fid_read_dirs(Arena *arena, ClientFid9P *fid);
+static Dir9P client9p_fid_stat(Arena *arena, ClientFid9P *fid);
+static b32 client9p_fid_wstat(Arena *arena, ClientFid9P *fid, Dir9P dir);
 
 #endif // _9P_CLIENT_H

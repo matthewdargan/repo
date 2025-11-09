@@ -51,10 +51,10 @@ addfile(Arena *arena, String8 name)
 }
 
 static void
-ramfs_read(Req *r)
+ramfs_read(ServerRequest9P *r)
 {
-	Ramentry *e = r->fid->aux;
-	if(e == 0 && (r->fid->qid.type & QTDIR))
+	Ramentry *e = r->fid->auxiliary;
+	if(e == 0 && (r->fid->qid.type & QidTypeFlag_Directory))
 	{
 		String8 dirdata = str8_zero();
 		u64 pos = 0;
@@ -63,17 +63,17 @@ ramfs_read(Req *r)
 		{
 			if(pos >= r->in_msg.file_offset)
 			{
-				Dir d = {0};
-				d.qid = (Qid){.path = file->qid_path, .version = 0, .type = QTFILE};
-				d.mode = 0644;
-				d.name = file->name;
-				d.user_id = str8_lit("ramfs");
-				d.group_id = str8_lit("ramfs");
-				d.modify_user_id = str8_lit("ramfs");
-				d.access_time = now;
-				d.modify_time = now;
-				d.length = file->file ? file->file->data.size : 0;
-				String8 entry = str8_from_dir(r->srv->arena, d);
+				Dir9P dir = dir9p_zero();
+				dir.qid = (Qid){.path = file->qid_path, .version = 0, .type = QidTypeFlag_File};
+				dir.mode = 0644;
+				dir.name = file->name;
+				dir.user_id = str8_lit("ramfs");
+				dir.group_id = str8_lit("ramfs");
+				dir.modify_user_id = str8_lit("ramfs");
+				dir.access_time = now;
+				dir.modify_time = now;
+				dir.length = file->file ? file->file->data.size : 0;
+				String8 entry = str8_from_dir9p(r->server->arena, dir);
 				u64 entrylen = entry.size;
 				if(dirdata.size + entrylen > r->in_msg.byte_count)
 				{
@@ -85,7 +85,7 @@ ramfs_read(Req *r)
 				}
 				else
 				{
-					u8 *newdata = push_array(r->srv->arena, u8, dirdata.size + entrylen);
+					u8 *newdata = push_array(r->server->arena, u8, dirdata.size + entrylen);
 					MemoryCopy(newdata, dirdata.str, dirdata.size);
 					MemoryCopy(newdata + dirdata.size, entry.str, entrylen);
 					dirdata.str = newdata;
@@ -96,14 +96,14 @@ ramfs_read(Req *r)
 		}
 		r->out_msg.payload_data = dirdata;
 		r->out_msg.byte_count = dirdata.size;
-		respond(r, str8_zero());
+		server9p_respond(r, str8_zero());
 		return;
 	}
 	if(e == 0 || e->file == 0)
 	{
 		r->out_msg.payload_data = str8_zero();
 		r->out_msg.byte_count = 0;
-		respond(r, str8_zero());
+		server9p_respond(r, str8_zero());
 		return;
 	}
 	Ramfile *rf = e->file;
@@ -113,27 +113,27 @@ ramfs_read(Req *r)
 	{
 		r->out_msg.payload_data = str8_zero();
 		r->out_msg.byte_count = 0;
-		respond(r, str8_zero());
+		server9p_respond(r, str8_zero());
 		return;
 	}
 	if(offset + count > rf->data.size)
 	{
 		count = rf->data.size - offset;
 	}
-	r->rbuf = push_array(r->srv->arena, u8, count);
-	MemoryCopy(r->rbuf, rf->data.str + offset, count);
-	r->out_msg.payload_data = str8(r->rbuf, count);
+	r->read_buffer = push_array(r->server->arena, u8, count);
+	MemoryCopy(r->read_buffer, rf->data.str + offset, count);
+	r->out_msg.payload_data = str8(r->read_buffer, count);
 	r->out_msg.byte_count = count;
-	respond(r, str8_zero());
+	server9p_respond(r, str8_zero());
 }
 
 static void
-ramfs_write(Req *r)
+ramfs_write(ServerRequest9P *r)
 {
-	Ramentry *e = r->fid->aux;
+	Ramentry *e = r->fid->auxiliary;
 	if(e == 0 || e->file == 0)
 	{
-		respond(r, str8_lit("no file data"));
+		server9p_respond(r, str8_lit("no file data"));
 		return;
 	}
 	Ramfile *rf = e->file;
@@ -152,118 +152,118 @@ ramfs_write(Req *r)
 	}
 	MemoryCopy(rf->data.str + offset, r->in_msg.payload_data.str, count);
 	r->out_msg.byte_count = count;
-	respond(r, str8_zero());
+	server9p_respond(r, str8_zero());
 }
 
 static void
-ramfs_create(Req *r)
+ramfs_create(ServerRequest9P *r)
 {
 	Ramentry *e = findfile(r->in_msg.name);
 	if(e != 0)
 	{
-		respond(r, str8_lit("file exists"));
+		server9p_respond(r, str8_lit("file exists"));
 		return;
 	}
-	Ramfile *rf = push_array(r->srv->arena, Ramfile, 1);
-	rf->arena = r->srv->arena;
+	Ramfile *rf = push_array(r->server->arena, Ramfile, 1);
+	rf->arena = r->server->arena;
 	rf->data = str8_zero();
-	e = addfile(r->srv->arena, r->in_msg.name);
+	e = addfile(r->server->arena, r->in_msg.name);
 	e->file = rf;
-	r->fid->aux = e;
+	r->fid->auxiliary = e;
 	r->fid->qid.path = e->qid_path;
 	r->fid->qid.version = 0;
-	r->fid->qid.type = QTFILE;
+	r->fid->qid.type = QidTypeFlag_File;
 	r->out_msg.qid = r->fid->qid;
-	respond(r, str8_zero());
+	server9p_respond(r, str8_zero());
 }
 
 static void
-ramfs_attach(Req *r)
+ramfs_attach(ServerRequest9P *r)
 {
 	r->fid->qid.path = 0;
 	r->fid->qid.version = 0;
-	r->fid->qid.type = QTDIR;
+	r->fid->qid.type = QidTypeFlag_Directory;
 	r->out_msg.qid = r->fid->qid;
-	respond(r, str8_zero());
+	server9p_respond(r, str8_zero());
 }
 
 static void
-ramfs_walk(Req *r)
+ramfs_walk(ServerRequest9P *r)
 {
 	if(r->in_msg.walk_name_count == 0)
 	{
-		r->newfid->qid = r->fid->qid;
+		r->new_fid->qid = r->fid->qid;
 		r->out_msg.walk_qid_count = 0;
-		respond(r, str8_zero());
+		server9p_respond(r, str8_zero());
 		return;
 	}
 	for(u64 i = 0; i < r->in_msg.walk_name_count; i += 1)
 	{
-		if(!(r->fid->qid.type & QTDIR))
+		if(!(r->fid->qid.type & QidTypeFlag_Directory))
 		{
-			respond(r, str8_lit("not a directory"));
+			server9p_respond(r, str8_lit("not a directory"));
 			return;
 		}
 		String8 name = r->in_msg.walk_names[i];
 		Ramentry *e = findfile(name);
 		if(e == 0)
 		{
-			respond(r, str8_lit("file not found"));
+			server9p_respond(r, str8_lit("file not found"));
 			return;
 		}
-		r->newfid->qid.path = e->qid_path;
-		r->newfid->qid.version = 0;
-		r->newfid->qid.type = QTFILE;
-		r->newfid->aux = e;
-		r->out_msg.walk_qids[i] = r->newfid->qid;
+		r->new_fid->qid.path = e->qid_path;
+		r->new_fid->qid.version = 0;
+		r->new_fid->qid.type = QidTypeFlag_File;
+		r->new_fid->auxiliary = e;
+		r->out_msg.walk_qids[i] = r->new_fid->qid;
 	}
 	r->out_msg.walk_qid_count = r->in_msg.walk_name_count;
-	respond(r, str8_zero());
+	server9p_respond(r, str8_zero());
 }
 
 static void
-ramfs_stat(Req *r)
+ramfs_stat(ServerRequest9P *r)
 {
-	Ramentry *e = r->fid->aux;
+	Ramentry *e = r->fid->auxiliary;
 	if(e == 0)
 	{
 		time_t now = os_now_unix();
-		Dir d = {0};
-		d.qid = r->fid->qid;
-		d.mode = ModeFlag_Directory | 0755;
-		d.name = str8_copy(r->srv->arena, str8_lit("."));
-		d.user_id = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.group_id = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.modify_user_id = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.access_time = now;
-		d.modify_time = now;
-		r->out_msg.stat_data = str8_from_dir(r->srv->arena, d);
+		Dir9P dir = dir9p_zero();
+		dir.qid = r->fid->qid;
+		dir.mode = P9_ModeFlag_Directory | 0755;
+		dir.name = str8_copy(r->server->arena, str8_lit("."));
+		dir.user_id = str8_copy(r->server->arena, str8_lit("ramfs"));
+		dir.group_id = str8_copy(r->server->arena, str8_lit("ramfs"));
+		dir.modify_user_id = str8_copy(r->server->arena, str8_lit("ramfs"));
+		dir.access_time = now;
+		dir.modify_time = now;
+		r->out_msg.stat_data = str8_from_dir9p(r->server->arena, dir);
 	}
 	else
 	{
 		time_t now = os_now_unix();
-		Dir d = {0};
-		d.qid = r->fid->qid;
-		d.mode = 0644;
-		d.name = str8_copy(r->srv->arena, e->name);
-		d.user_id = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.group_id = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.modify_user_id = str8_copy(r->srv->arena, str8_lit("ramfs"));
-		d.access_time = now;
-		d.modify_time = now;
-		d.length = e->file ? e->file->data.size : 0;
-		r->out_msg.stat_data = str8_from_dir(r->srv->arena, d);
+		Dir9P dir = dir9p_zero();
+		dir.qid = r->fid->qid;
+		dir.mode = 0644;
+		dir.name = str8_copy(r->server->arena, e->name);
+		dir.user_id = str8_copy(r->server->arena, str8_lit("ramfs"));
+		dir.group_id = str8_copy(r->server->arena, str8_lit("ramfs"));
+		dir.modify_user_id = str8_copy(r->server->arena, str8_lit("ramfs"));
+		dir.access_time = now;
+		dir.modify_time = now;
+		dir.length = e->file ? e->file->data.size : 0;
+		r->out_msg.stat_data = str8_from_dir9p(r->server->arena, dir);
 	}
-	respond(r, str8_zero());
+	server9p_respond(r, str8_zero());
 }
 
 static void
-ramfs_remove(Req *r)
+ramfs_remove(ServerRequest9P *r)
 {
-	Ramentry *e = r->fid->aux;
+	Ramentry *e = r->fid->auxiliary;
 	if(e == 0)
 	{
-		respond(r, str8_lit("cannot remove root directory"));
+		server9p_respond(r, str8_lit("cannot remove root directory"));
 		return;
 	}
 	if(filelist == e)
@@ -281,41 +281,41 @@ ramfs_remove(Req *r)
 			}
 		}
 	}
-	respond(r, str8_zero());
+	server9p_respond(r, str8_zero());
 }
 
 static void
-ramfs_open(Req *r)
+ramfs_open(ServerRequest9P *r)
 {
-	Ramentry *e = r->fid->aux;
+	Ramentry *e = r->fid->auxiliary;
 	if(e == 0)
 	{
-		if((r->in_msg.open_mode & 3) == OpenFlag_Read)
+		if((r->in_msg.open_mode & 3) == P9_OpenFlag_Read)
 		{
 			r->out_msg.qid = r->fid->qid;
-			respond(r, str8_zero());
+			server9p_respond(r, str8_zero());
 			return;
 		}
 		else
 		{
-			respond(r, str8_lit("cannot write to root directory"));
+			server9p_respond(r, str8_lit("cannot write to root directory"));
 			return;
 		}
 	}
 	Ramfile *rf = e->file;
 	if(rf == 0)
 	{
-		rf = push_array(r->srv->arena, Ramfile, 1);
-		rf->arena = r->srv->arena;
+		rf = push_array(r->server->arena, Ramfile, 1);
+		rf->arena = r->server->arena;
 		rf->data = str8_zero();
 		e->file = rf;
 	}
-	if((r->in_msg.open_mode & OpenFlag_Truncate) && rf->data.size > 0)
+	if((r->in_msg.open_mode & P9_OpenFlag_Truncate) && rf->data.size > 0)
 	{
 		rf->data = str8_zero();
 	}
 	r->out_msg.qid = r->fid->qid;
-	respond(r, str8_zero());
+	server9p_respond(r, str8_zero());
 }
 
 static void
@@ -372,23 +372,23 @@ entry_point(CmdLine *cmd_line)
 						log_info(str8_lit("ramfs: accepted connection\n"));
 						u64 infd = connfd;
 						u64 outfd = connfd;
-						Srv *srv = srvalloc(arena, infd, outfd);
-						if(srv == 0)
+						Server9P *server = server9p_alloc(arena, infd, outfd);
+						if(server == 0)
 						{
 							log_error(str8_lit("ramfs: failed to allocate server\n"));
 							close(connfd);
 							continue;
 						}
-						srv->attach = ramfs_attach;
-						srv->read = ramfs_read;
-						srv->write = ramfs_write;
-						srv->create = ramfs_create;
-						srv->open = ramfs_open;
-						srv->walk = ramfs_walk;
-						srv->stat = ramfs_stat;
-						srv->remove = ramfs_remove;
-						srvrun(srv);
-						srvfree(srv);
+						server->attach = ramfs_attach;
+						server->read = ramfs_read;
+						server->write = ramfs_write;
+						server->create = ramfs_create;
+						server->open = ramfs_open;
+						server->walk = ramfs_walk;
+						server->stat = ramfs_stat;
+						server->remove = ramfs_remove;
+						server9p_run(server);
+						server9p_free(server);
 						close(connfd);
 						log_info(str8_lit("ramfs: connection closed\n"));
 					}
@@ -399,23 +399,23 @@ entry_point(CmdLine *cmd_line)
 		{
 			u64 infd = STDIN_FILENO;
 			u64 outfd = STDOUT_FILENO;
-			Srv *srv = srvalloc(arena, infd, outfd);
-			if(srv == 0)
+			Server9P *server = server9p_alloc(arena, infd, outfd);
+			if(server == 0)
 			{
 				log_error(str8_lit("ramfs: failed to allocate server\n"));
 			}
 			else
 			{
-				srv->attach = ramfs_attach;
-				srv->read = ramfs_read;
-				srv->write = ramfs_write;
-				srv->create = ramfs_create;
-				srv->open = ramfs_open;
-				srv->walk = ramfs_walk;
-				srv->stat = ramfs_stat;
-				srv->remove = ramfs_remove;
-				srvrun(srv);
-				srvfree(srv);
+				server->attach = ramfs_attach;
+				server->read = ramfs_read;
+				server->write = ramfs_write;
+				server->create = ramfs_create;
+				server->open = ramfs_open;
+				server->walk = ramfs_walk;
+				server->stat = ramfs_stat;
+				server->remove = ramfs_remove;
+				server9p_run(server);
+				server9p_free(server);
 			}
 		}
 	}

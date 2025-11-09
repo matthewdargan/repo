@@ -1,13 +1,28 @@
-// 9P Protocol Encoding/Decoding Helpers
-static u8 *
-encode_str8(u8 *ptr, String8 s)
+// Type Constructors
+static Message9P
+msg9p_zero(void)
 {
-	write_u16(ptr, from_le_u16(s.size));
-	ptr += 2;
-	if(s.size > 0)
+	Message9P msg = {0};
+	return msg;
+}
+
+static Dir9P
+dir9p_zero(void)
+{
+	Dir9P dir = {0};
+	return dir;
+}
+
+// Encoding/Decoding Helpers
+static u8 *
+encode_str8(u8 *ptr, String8 string)
+{
+	write_u16(ptr, from_le_u16(string.size));
+	ptr += P9_STRING8_SIZE_FIELD_SIZE;
+	if(string.size > 0)
 	{
-		MemoryCopy(ptr, s.str, s.size);
-		ptr += s.size;
+		MemoryCopy(ptr, string.str, string.size);
+		ptr += string.size;
 	}
 	return ptr;
 }
@@ -25,166 +40,168 @@ encode_qid(u8 *ptr, Qid qid)
 }
 
 static u8 *
-decode_str8(u8 *ptr, u8 *end, String8 *s)
+decode_str8(u8 *ptr, u8 *end, String8 *out_string)
 {
-	if(ptr + 2 > end)
+	if(ptr + P9_STRING8_SIZE_FIELD_SIZE > end)
 	{
 		return 0;
 	}
 	u32 size = (u32)from_le_u16(read_u16(ptr));
-	ptr += 2;
+	ptr += P9_STRING8_SIZE_FIELD_SIZE;
 	if(ptr + size > end)
 	{
 		return 0;
 	}
-	s->size = size;
+	out_string->size = size;
 	if(size > 0)
 	{
-		s->str = ptr;
+		out_string->str = ptr;
 		ptr += size;
 	}
 	else
 	{
-		s->str = 0;
+		out_string->str = 0;
 	}
 	return ptr;
 }
 
 static u8 *
-decode_qid(u8 *ptr, u8 *end, Qid *qid)
+decode_qid(u8 *ptr, u8 *end, Qid *out_qid)
 {
-	if(ptr + 13 > end)
+	// Bounds check: Qid is type(1) + version(4) + path(8)
+	if(ptr + P9_QID_ENCODED_SIZE > end)
 	{
 		return 0;
 	}
-	qid->type = (u32)*ptr;
+	out_qid->type = (u32)*ptr;
 	ptr += 1;
-	qid->version = (u32)from_le_u32(read_u32(ptr));
+	out_qid->version = from_le_u32(read_u32(ptr));
 	ptr += 4;
-	qid->path = (u64)from_le_u64(read_u64(ptr));
+	out_qid->path = from_le_u64(read_u64(ptr));
 	ptr += 8;
 	return ptr;
 }
 
-// 9P Message Encoding/Decoding
+// Message Encoding/Decoding
 static u32
 msg9p_size(Message9P msg)
 {
-	u32 result = 4 + 1 + 2;
+	// Message header is size(4) + type(1) + tag(2)
+	u32 total_size = P9_MESSAGE_MINIMUM_SIZE;
 	switch(msg.type)
 	{
 		case Msg9P_Tversion:
 		case Msg9P_Rversion:
 		{
-			result += 4;
-			result += 2 + msg.protocol_version.size;
+			total_size += 4;
+			total_size += P9_STRING8_SIZE_FIELD_SIZE + msg.protocol_version.size;
 		}
 		break;
 		case Msg9P_Tauth:
 		{
-			result += 4;
-			result += 2 + msg.user_name.size;
-			result += 2 + msg.attach_path.size;
+			total_size += 4;
+			total_size += P9_STRING8_SIZE_FIELD_SIZE + msg.user_name.size;
+			total_size += P9_STRING8_SIZE_FIELD_SIZE + msg.attach_path.size;
 		}
 		break;
 		case Msg9P_Rauth:
 		{
-			result += 13;
+			total_size += P9_QID_ENCODED_SIZE;
 		}
 		break;
 		case Msg9P_Rerror:
 		{
-			result += 2 + msg.error_message.size;
+			total_size += P9_STRING8_SIZE_FIELD_SIZE + msg.error_message.size;
 		}
 		break;
 		case Msg9P_Tflush:
 		{
-			result += 2;
+			total_size += 2;
 		}
 		break;
 		case Msg9P_Rflush:
 			break;
 		case Msg9P_Tattach:
 		{
-			result += 4;
-			result += 4;
-			result += 2 + msg.user_name.size;
-			result += 2 + msg.attach_path.size;
+			total_size += 4;
+			total_size += 4;
+			total_size += P9_STRING8_SIZE_FIELD_SIZE + msg.user_name.size;
+			total_size += P9_STRING8_SIZE_FIELD_SIZE + msg.attach_path.size;
 		}
 		break;
 		case Msg9P_Rattach:
 		{
-			result += 13;
+			total_size += P9_QID_ENCODED_SIZE;
 		}
 		break;
 		case Msg9P_Twalk:
 		{
-			result += 4;
-			result += 4;
-			result += 2;
+			total_size += 4;
+			total_size += 4;
+			total_size += 2;
 			for(u64 i = 0; i < msg.walk_name_count; i += 1)
 			{
-				result += 2 + msg.walk_names[i].size;
+				total_size += P9_STRING8_SIZE_FIELD_SIZE + msg.walk_names[i].size;
 			}
 		}
 		break;
 		case Msg9P_Rwalk:
 		{
-			result += 2;
-			result += msg.walk_qid_count * 13;
+			total_size += 2;
+			total_size += msg.walk_qid_count * P9_QID_ENCODED_SIZE;
 		}
 		break;
 		case Msg9P_Topen:
 		{
-			result += 4;
-			result += 1;
+			total_size += 4;
+			total_size += 1;
 		}
 		break;
 		case Msg9P_Ropen:
 		case Msg9P_Rcreate:
 		{
-			result += 13;
-			result += 4;
+			total_size += P9_QID_ENCODED_SIZE;
+			total_size += 4;
 		}
 		break;
 		case Msg9P_Tcreate:
 		{
-			result += 4;
-			result += 2 + msg.name.size;
-			result += 4;
-			result += 1;
+			total_size += 4;
+			total_size += P9_STRING8_SIZE_FIELD_SIZE + msg.name.size;
+			total_size += 4;
+			total_size += 1;
 		}
 		break;
 		case Msg9P_Tread:
 		{
-			result += 4;
-			result += 8;
-			result += 4;
+			total_size += 4;
+			total_size += 8;
+			total_size += 4;
 		}
 		break;
 		case Msg9P_Rread:
 		{
-			result += 4;
-			result += msg.payload_data.size;
+			total_size += 4;
+			total_size += msg.payload_data.size;
 		}
 		break;
 		case Msg9P_Twrite:
 		{
-			result += 4;
-			result += 8;
-			result += 4;
-			result += msg.payload_data.size;
+			total_size += 4;
+			total_size += 8;
+			total_size += 4;
+			total_size += msg.payload_data.size;
 		}
 		break;
 		case Msg9P_Rwrite:
 		{
-			result += 4;
+			total_size += 4;
 		}
 		break;
 		case Msg9P_Tclunk:
 		case Msg9P_Tremove:
 		{
-			result += 4;
+			total_size += 4;
 		}
 		break;
 		case Msg9P_Rclunk:
@@ -192,18 +209,18 @@ msg9p_size(Message9P msg)
 			break;
 		case Msg9P_Tstat:
 		{
-			result += 4;
+			total_size += 4;
 		}
 		break;
 		case Msg9P_Rstat:
 		{
-			result += 2 + msg.stat_data.size;
+			total_size += P9_STRING8_SIZE_FIELD_SIZE + msg.stat_data.size;
 		}
 		break;
 		case Msg9P_Twstat:
 		{
-			result += 4;
-			result += 2 + msg.stat_data.size;
+			total_size += 4;
+			total_size += P9_STRING8_SIZE_FIELD_SIZE + msg.stat_data.size;
 		}
 		break;
 		case Msg9P_Rwstat:
@@ -213,7 +230,7 @@ msg9p_size(Message9P msg)
 			return 0;
 		}
 	}
-	return result;
+	return total_size;
 }
 
 static String8
@@ -224,16 +241,16 @@ str8_from_msg9p(Arena *arena, Message9P msg)
 	{
 		return str8_zero();
 	}
-	String8 result = {0};
+	String8 result = str8_zero();
 	result.str = push_array_no_zero(arena, u8, msg_size);
 	result.size = msg_size;
 	u8 *ptr = result.str;
 	write_u32(ptr, from_le_u32(result.size));
-	ptr += 4;
+	ptr += P9_MESSAGE_SIZE_FIELD_SIZE;
 	*ptr = (u8)msg.type;
-	ptr += 1;
+	ptr += P9_MESSAGE_TYPE_FIELD_SIZE;
 	write_u16(ptr, from_le_u16(msg.tag));
-	ptr += 2;
+	ptr += P9_MESSAGE_TAG_FIELD_SIZE;
 	switch(msg.type)
 	{
 		case Msg9P_Tversion:
@@ -293,7 +310,7 @@ str8_from_msg9p(Arena *arena, Message9P msg)
 			ptr += 4;
 			write_u16(ptr, from_le_u16(msg.walk_name_count));
 			ptr += 2;
-			if(msg.walk_name_count > MAX_WALK_ELEM_COUNT)
+			if(msg.walk_name_count > P9_MAX_WALK_ELEM_COUNT)
 			{
 				return str8_zero();
 			}
@@ -307,7 +324,7 @@ str8_from_msg9p(Arena *arena, Message9P msg)
 		{
 			write_u16(ptr, from_le_u16(msg.walk_qid_count));
 			ptr += 2;
-			if(msg.walk_qid_count > MAX_WALK_ELEM_COUNT)
+			if(msg.walk_qid_count > P9_MAX_WALK_ELEM_COUNT)
 			{
 				return str8_zero();
 			}
@@ -443,39 +460,38 @@ str8_from_msg9p(Arena *arena, Message9P msg)
 static Message9P
 msg9p_from_str8(String8 data)
 {
-	Message9P msg = {0};
-	Message9P err_msg = {0};
-	if(data.size < 7)
+	Message9P result = msg9p_zero();
+	if(data.size < P9_MESSAGE_MINIMUM_SIZE)
 	{
-		return err_msg;
+		return msg9p_zero();
 	}
 	u8 *ptr = data.str;
 	u8 *end = data.str + data.size;
-	u32 size = (u32)from_le_u32(read_u32(ptr));
-	ptr += 4;
+	u32 size = from_le_u32(read_u32(ptr));
+	ptr += P9_MESSAGE_SIZE_FIELD_SIZE;
 	if(size != data.size)
 	{
-		return err_msg;
+		return msg9p_zero();
 	}
-	msg.type = (u32)*ptr;
-	ptr += 1;
-	msg.tag = (u32)from_le_u16(read_u16(ptr));
-	ptr += 2;
-	switch(msg.type)
+	result.type = (u32)*ptr;
+	ptr += P9_MESSAGE_TYPE_FIELD_SIZE;
+	result.tag = from_le_u16(read_u16(ptr));
+	ptr += P9_MESSAGE_TAG_FIELD_SIZE;
+	switch(result.type)
 	{
 		case Msg9P_Tversion:
 		case Msg9P_Rversion:
 		{
 			if(ptr + 4 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.max_message_size = (u32)from_le_u32(read_u32(ptr));
+			result.max_message_size = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			ptr = decode_str8(ptr, end, &msg.protocol_version);
+			ptr = decode_str8(ptr, end, &result.protocol_version);
 			if(ptr == 0)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
 		}
 		break;
@@ -483,37 +499,37 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 4 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.auth_fid = (u32)from_le_u32(read_u32(ptr));
+			result.auth_fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			ptr = decode_str8(ptr, end, &msg.user_name);
+			ptr = decode_str8(ptr, end, &result.user_name);
 			if(ptr == 0)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			ptr = decode_str8(ptr, end, &msg.attach_path);
+			ptr = decode_str8(ptr, end, &result.attach_path);
 			if(ptr == 0)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
 		}
 		break;
 		case Msg9P_Rauth:
 		{
-			ptr = decode_qid(ptr, end, &msg.auth_qid);
+			ptr = decode_qid(ptr, end, &result.auth_qid);
 			if(ptr == 0)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
 		}
 		break;
 		case Msg9P_Rerror:
 		{
-			ptr = decode_str8(ptr, end, &msg.error_message);
+			ptr = decode_str8(ptr, end, &result.error_message);
 			if(ptr == 0)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
 		}
 		break;
@@ -521,9 +537,9 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 2 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.cancel_tag = (u32)from_le_u16(read_u16(ptr));
+			result.cancel_tag = from_le_u16(read_u16(ptr));
 			ptr += 2;
 		}
 		break;
@@ -533,30 +549,30 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 8 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.fid = (u32)from_le_u32(read_u32(ptr));
+			result.fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			msg.auth_fid = (u32)from_le_u32(read_u32(ptr));
+			result.auth_fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			ptr = decode_str8(ptr, end, &msg.user_name);
+			ptr = decode_str8(ptr, end, &result.user_name);
 			if(ptr == 0)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			ptr = decode_str8(ptr, end, &msg.attach_path);
+			ptr = decode_str8(ptr, end, &result.attach_path);
 			if(ptr == 0)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
 		}
 		break;
 		case Msg9P_Rattach:
 		{
-			ptr = decode_qid(ptr, end, &msg.qid);
+			ptr = decode_qid(ptr, end, &result.qid);
 			if(ptr == 0)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
 		}
 		break;
@@ -564,24 +580,24 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 10 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.fid = (u32)from_le_u32(read_u32(ptr));
+			result.fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			msg.new_fid = (u32)from_le_u32(read_u32(ptr));
+			result.new_fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			msg.walk_name_count = (u32)from_le_u16(read_u16(ptr));
+			result.walk_name_count = from_le_u16(read_u16(ptr));
 			ptr += 2;
-			if(msg.walk_name_count > MAX_WALK_ELEM_COUNT)
+			if(result.walk_name_count > P9_MAX_WALK_ELEM_COUNT)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			for(u64 i = 0; i < msg.walk_name_count; i += 1)
+			for(u64 i = 0; i < result.walk_name_count; i += 1)
 			{
-				ptr = decode_str8(ptr, end, &msg.walk_names[i]);
+				ptr = decode_str8(ptr, end, &result.walk_names[i]);
 				if(ptr == 0)
 				{
-					return err_msg;
+					return msg9p_zero();
 				}
 			}
 		}
@@ -590,20 +606,20 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 2 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.walk_qid_count = (u32)from_le_u16(read_u16(ptr));
+			result.walk_qid_count = from_le_u16(read_u16(ptr));
 			ptr += 2;
-			if(msg.walk_qid_count > MAX_WALK_ELEM_COUNT)
+			if(result.walk_qid_count > P9_MAX_WALK_ELEM_COUNT)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			for(u64 i = 0; i < msg.walk_qid_count; i += 1)
+			for(u64 i = 0; i < result.walk_qid_count; i += 1)
 			{
-				ptr = decode_qid(ptr, end, &msg.walk_qids[i]);
+				ptr = decode_qid(ptr, end, &result.walk_qids[i]);
 				if(ptr == 0)
 				{
-					return err_msg;
+					return msg9p_zero();
 				}
 			}
 		}
@@ -612,27 +628,27 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 5 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.fid = (u32)from_le_u32(read_u32(ptr));
+			result.fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			msg.open_mode = (u32)*ptr;
+			result.open_mode = (u32)*ptr;
 			ptr += 1;
 		}
 		break;
 		case Msg9P_Ropen:
 		case Msg9P_Rcreate:
 		{
-			ptr = decode_qid(ptr, end, &msg.qid);
+			ptr = decode_qid(ptr, end, &result.qid);
 			if(ptr == 0)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
 			if(ptr + 4 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.io_unit_size = (u32)from_le_u32(read_u32(ptr));
+			result.io_unit_size = from_le_u32(read_u32(ptr));
 			ptr += 4;
 		}
 		break;
@@ -640,22 +656,22 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 4 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.fid = (u32)from_le_u32(read_u32(ptr));
+			result.fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			ptr = decode_str8(ptr, end, &msg.name);
+			ptr = decode_str8(ptr, end, &result.name);
 			if(ptr == 0)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
 			if(ptr + 5 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.permissions = (u32)from_le_u32(read_u32(ptr));
+			result.permissions = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			msg.open_mode = (u32)*ptr;
+			result.open_mode = (u32)*ptr;
 			ptr += 1;
 		}
 		break;
@@ -663,13 +679,13 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 16 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.fid = (u32)from_le_u32(read_u32(ptr));
+			result.fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			msg.file_offset = (u64)from_le_u64(read_u64(ptr));
+			result.file_offset = from_le_u64(read_u64(ptr));
 			ptr += 8;
-			msg.byte_count = (u32)from_le_u32(read_u32(ptr));
+			result.byte_count = from_le_u32(read_u32(ptr));
 			ptr += 4;
 		}
 		break;
@@ -677,22 +693,22 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 4 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.payload_data.size = (u32)from_le_u32(read_u32(ptr));
+			result.payload_data.size = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			if(ptr + msg.payload_data.size > end)
+			if(ptr + result.payload_data.size > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			if(msg.payload_data.size > 0)
+			if(result.payload_data.size > 0)
 			{
-				msg.payload_data.str = ptr;
-				ptr += msg.payload_data.size;
+				result.payload_data.str = ptr;
+				ptr += result.payload_data.size;
 			}
 			else
 			{
-				msg.payload_data.str = 0;
+				result.payload_data.str = 0;
 			}
 		}
 		break;
@@ -700,26 +716,26 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 16 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.fid = (u32)from_le_u32(read_u32(ptr));
+			result.fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			msg.file_offset = (u64)from_le_u64(read_u64(ptr));
+			result.file_offset = from_le_u64(read_u64(ptr));
 			ptr += 8;
-			msg.payload_data.size = (u32)from_le_u32(read_u32(ptr));
+			result.payload_data.size = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			if(ptr + msg.payload_data.size > end)
+			if(ptr + result.payload_data.size > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			if(msg.payload_data.size > 0)
+			if(result.payload_data.size > 0)
 			{
-				msg.payload_data.str = ptr;
-				ptr += msg.payload_data.size;
+				result.payload_data.str = ptr;
+				ptr += result.payload_data.size;
 			}
 			else
 			{
-				msg.payload_data.str = 0;
+				result.payload_data.str = 0;
 			}
 		}
 		break;
@@ -727,9 +743,9 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 4 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.byte_count = (u32)from_le_u32(read_u32(ptr));
+			result.byte_count = from_le_u32(read_u32(ptr));
 			ptr += 4;
 		}
 		break;
@@ -738,9 +754,9 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 4 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.fid = (u32)from_le_u32(read_u32(ptr));
+			result.fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
 		}
 		break;
@@ -751,32 +767,32 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 4 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.fid = (u32)from_le_u32(read_u32(ptr));
+			result.fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
 		}
 		break;
 		case Msg9P_Rstat:
 		{
-			if(ptr + 2 > end)
+			if(ptr + P9_STRING8_SIZE_FIELD_SIZE > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.stat_data.size = (u32)from_le_u16(read_u16(ptr));
-			ptr += 2;
-			if(ptr + msg.stat_data.size > end)
+			result.stat_data.size = from_le_u16(read_u16(ptr));
+			ptr += P9_STRING8_SIZE_FIELD_SIZE;
+			if(ptr + result.stat_data.size > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			if(msg.stat_data.size > 0)
+			if(result.stat_data.size > 0)
 			{
-				msg.stat_data.str = ptr;
-				ptr += msg.stat_data.size;
+				result.stat_data.str = ptr;
+				ptr += result.stat_data.size;
 			}
 			else
 			{
-				msg.stat_data.str = 0;
+				result.stat_data.str = 0;
 			}
 		}
 		break;
@@ -784,24 +800,24 @@ msg9p_from_str8(String8 data)
 		{
 			if(ptr + 6 > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			msg.fid = (u32)from_le_u32(read_u32(ptr));
+			result.fid = from_le_u32(read_u32(ptr));
 			ptr += 4;
-			msg.stat_data.size = (u32)from_le_u16(read_u16(ptr));
-			ptr += 2;
-			if(ptr + msg.stat_data.size > end)
+			result.stat_data.size = from_le_u16(read_u16(ptr));
+			ptr += P9_STRING8_SIZE_FIELD_SIZE;
+			if(ptr + result.stat_data.size > end)
 			{
-				return err_msg;
+				return msg9p_zero();
 			}
-			if(msg.stat_data.size > 0)
+			if(result.stat_data.size > 0)
 			{
-				msg.stat_data.str = ptr;
-				ptr += msg.stat_data.size;
+				result.stat_data.str = ptr;
+				ptr += result.stat_data.size;
 			}
 			else
 			{
-				msg.stat_data.str = 0;
+				result.stat_data.str = 0;
 			}
 		}
 		break;
@@ -809,42 +825,204 @@ msg9p_from_str8(String8 data)
 			break;
 		default:
 		{
-			return err_msg;
+			return msg9p_zero();
 		}
 	}
 	if(ptr != end)
 	{
-		return err_msg;
+		return msg9p_zero();
 	}
-	return msg;
-}
-
-// 9P Directory Encoding/Decoding
-static u32
-dir_size(Dir dir)
-{
-	u32 result = STAT_DATA_FIXED_SIZE;
-	result += 2 + dir.name.size;
-	result += 2 + dir.user_id.size;
-	result += 2 + dir.group_id.size;
-	result += 2 + dir.modify_user_id.size;
 	return result;
 }
 
+// Message Formatting
 static String8
-str8_from_dir(Arena *arena, Dir dir)
+str8_from_msg9p__fmt(Arena *arena, Message9P msg)
 {
-	u32 entry_size = dir_size(dir);
+	String8 result = str8_zero();
+	switch(msg.type)
+	{
+		case Msg9P_Tversion:
+		{
+			result = str8f(arena, "Msg9P_Tversion tag=%u msize=%u version='%.*s'", msg.tag, msg.max_message_size,
+			               str8_varg(msg.protocol_version));
+		}
+		break;
+		case Msg9P_Rversion:
+		{
+			result = str8f(arena, "Msg9P_Rversion tag=%u msize=%u version='%.*s'", msg.tag, msg.max_message_size,
+			               str8_varg(msg.protocol_version));
+		}
+		break;
+		case Msg9P_Tauth:
+		{
+			result = str8f(arena, "Msg9P_Tauth tag=%u afid=%u uname='%.*s' aname='%.*s'", msg.tag, msg.auth_fid,
+			               str8_varg(msg.user_name), str8_varg(msg.attach_path));
+		}
+		break;
+		case Msg9P_Rauth:
+		{
+			result = str8f(arena, "Msg9P_Rauth tag=%u qid=(type=%u vers=%u path=%llu)", msg.tag, msg.auth_qid.type,
+			               msg.auth_qid.version, msg.auth_qid.path);
+		}
+		break;
+		case Msg9P_Rerror:
+		{
+			result = str8f(arena, "Msg9P_Rerror tag=%u ename='%.*s'", msg.tag, str8_varg(msg.error_message));
+		}
+		break;
+		case Msg9P_Tattach:
+		{
+			result = str8f(arena, "Msg9P_Tattach tag=%u fid=%u afid=%u uname='%.*s' aname='%.*s'", msg.tag, msg.fid,
+			               msg.auth_fid, str8_varg(msg.user_name), str8_varg(msg.attach_path));
+		}
+		break;
+		case Msg9P_Rattach:
+		{
+			result = str8f(arena, "Msg9P_Rattach tag=%u qid=(type=%u vers=%u path=%llu)", msg.tag, msg.qid.type,
+			               msg.qid.version, msg.qid.path);
+		}
+		break;
+		case Msg9P_Twalk:
+		{
+			result = str8f(arena, "Msg9P_Twalk tag=%u fid=%u newfid=%u nwname=%u", msg.tag, msg.fid, msg.new_fid,
+			               msg.walk_name_count);
+			for(u64 i = 0; i < msg.walk_name_count; i += 1)
+			{
+				result = str8f(arena, "%S '%.*s'", result, str8_varg(msg.walk_names[i]));
+			}
+		}
+		break;
+		case Msg9P_Rwalk:
+		{
+			result = str8f(arena, "Msg9P_Rwalk tag=%u nwqid=%u", msg.tag, msg.walk_qid_count);
+			for(u64 i = 0; i < msg.walk_qid_count; i += 1)
+			{
+				result = str8f(arena, "%S qid%llu=(type=%u vers=%u path=%llu)", result, i, msg.walk_qids[i].type,
+				               msg.walk_qids[i].version, msg.walk_qids[i].path);
+			}
+		}
+		break;
+		case Msg9P_Topen:
+		{
+			result = str8f(arena, "Msg9P_Topen tag=%u fid=%u mode=%u", msg.tag, msg.fid, msg.open_mode);
+		}
+		break;
+		case Msg9P_Ropen:
+		{
+			result = str8f(arena, "Msg9P_Ropen tag=%u qid=(type=%u vers=%u path=%llu) iounit=%u", msg.tag, msg.qid.type,
+			               msg.qid.version, msg.qid.path, msg.io_unit_size);
+		}
+		break;
+		case Msg9P_Tcreate:
+		{
+			result = str8f(arena, "Msg9P_Tcreate tag=%u fid=%u name='%.*s' perm=%u mode=%u", msg.tag, msg.fid,
+			               str8_varg(msg.name), msg.permissions, msg.open_mode);
+		}
+		break;
+		case Msg9P_Rcreate:
+		{
+			result = str8f(arena, "Msg9P_Rcreate tag=%u qid=(type=%u vers=%u path=%llu) iounit=%u", msg.tag, msg.qid.type,
+			               msg.qid.version, msg.qid.path, msg.io_unit_size);
+		}
+		break;
+		case Msg9P_Tread:
+		{
+			result = str8f(arena, "Msg9P_Tread tag=%u fid=%u offset=%llu count=%u", msg.tag, msg.fid, msg.file_offset,
+			               msg.byte_count);
+		}
+		break;
+		case Msg9P_Rread:
+		{
+			result = str8f(arena, "Msg9P_Rread tag=%u count=%llu", msg.tag, msg.payload_data.size);
+		}
+		break;
+		case Msg9P_Twrite:
+		{
+			result = str8f(arena, "Msg9P_Twrite tag=%u fid=%u offset=%llu count=%llu", msg.tag, msg.fid, msg.file_offset,
+			               msg.payload_data.size);
+		}
+		break;
+		case Msg9P_Rwrite:
+		{
+			result = str8f(arena, "Msg9P_Rwrite tag=%u count=%u", msg.tag, msg.byte_count);
+		}
+		break;
+		case Msg9P_Tclunk:
+		{
+			result = str8f(arena, "Msg9P_Tclunk tag=%u fid=%u", msg.tag, msg.fid);
+		}
+		break;
+		case Msg9P_Rclunk:
+		{
+			result = str8f(arena, "Msg9P_Rclunk tag=%u", msg.tag);
+		}
+		break;
+		case Msg9P_Tremove:
+		{
+			result = str8f(arena, "Msg9P_Tremove tag=%u fid=%u", msg.tag, msg.fid);
+		}
+		break;
+		case Msg9P_Rremove:
+		{
+			result = str8f(arena, "Msg9P_Rremove tag=%u", msg.tag);
+		}
+		break;
+		case Msg9P_Tstat:
+		{
+			result = str8f(arena, "Msg9P_Tstat tag=%u fid=%u", msg.tag, msg.fid);
+		}
+		break;
+		case Msg9P_Rstat:
+		{
+			result = str8f(arena, "Msg9P_Rstat tag=%u stat.size=%llu", msg.tag, msg.stat_data.size);
+		}
+		break;
+		case Msg9P_Twstat:
+		{
+			result = str8f(arena, "Msg9P_Twstat tag=%u fid=%u stat.size=%llu", msg.tag, msg.fid, msg.stat_data.size);
+		}
+		break;
+		case Msg9P_Rwstat:
+		{
+			result = str8f(arena, "Msg9P_Rwstat tag=%u", msg.tag);
+		}
+		break;
+		default:
+		{
+			result = str8f(arena, "unknown type=%u tag=%u", msg.type, msg.tag);
+		}
+		break;
+	}
+	return result;
+}
+
+// Directory Encoding/Decoding
+static u32
+dir9p_size(Dir9P dir)
+{
+	u32 total_size = P9_STAT_DATA_FIXED_SIZE;
+	total_size += P9_STRING8_SIZE_FIELD_SIZE + dir.name.size;
+	total_size += P9_STRING8_SIZE_FIELD_SIZE + dir.user_id.size;
+	total_size += P9_STRING8_SIZE_FIELD_SIZE + dir.group_id.size;
+	total_size += P9_STRING8_SIZE_FIELD_SIZE + dir.modify_user_id.size;
+	return total_size;
+}
+
+static String8
+str8_from_dir9p(Arena *arena, Dir9P dir)
+{
+	u32 entry_size = dir9p_size(dir);
 	if(entry_size == 0)
 	{
 		return str8_zero();
 	}
-	String8 msg = {0};
-	msg.str = push_array_no_zero(arena, u8, entry_size);
-	msg.size = entry_size;
-	u8 *ptr = msg.str;
-	write_u16(ptr, from_le_u16(msg.size - 2));
-	ptr += 2;
+	String8 encoded_dir = str8_zero();
+	encoded_dir.str = push_array_no_zero(arena, u8, entry_size);
+	encoded_dir.size = entry_size;
+	u8 *ptr = encoded_dir.str;
+	write_u16(ptr, from_le_u16(encoded_dir.size - P9_STRING8_SIZE_FIELD_SIZE));
+	ptr += P9_STRING8_SIZE_FIELD_SIZE;
 	write_u16(ptr, from_le_u16(dir.server_type));
 	ptr += 2;
 	write_u32(ptr, from_le_u32(dir.server_dev));
@@ -867,126 +1045,120 @@ str8_from_dir(Arena *arena, Dir dir)
 	ptr = encode_str8(ptr, dir.user_id);
 	ptr = encode_str8(ptr, dir.group_id);
 	ptr = encode_str8(ptr, dir.modify_user_id);
-	if(msg.size != (u64)(ptr - msg.str))
+	// Sanity check: encoded size matches calculated size
+	if(encoded_dir.size != (u64)(ptr - encoded_dir.str))
 	{
 		return str8_zero();
 	}
-	return msg;
+	return encoded_dir;
 }
 
-static Dir
-dir_from_str8(String8 data)
+static Dir9P
+dir9p_from_str8(String8 data)
 {
-	Dir dir = {0};
-	Dir err_dir = {0};
-	if(data.size < STAT_DATA_FIXED_SIZE)
+	Dir9P result = dir9p_zero();
+	if(data.size < P9_STAT_DATA_FIXED_SIZE)
 	{
-		return err_dir;
+		return dir9p_zero();
 	}
 	u8 *ptr = data.str;
 	u8 *end = data.str + data.size;
-	ptr += 2;
+	ptr += P9_STRING8_SIZE_FIELD_SIZE;
 	if(ptr + 39 > end)
 	{
-		return err_dir;
+		return dir9p_zero();
 	}
-	dir.server_type = (u32)from_le_u16(read_u16(ptr));
+	result.server_type = from_le_u16(read_u16(ptr));
 	ptr += 2;
-	dir.server_dev = (u32)from_le_u32(read_u32(ptr));
+	result.server_dev = from_le_u32(read_u32(ptr));
 	ptr += 4;
-	dir.qid.type = (u32)*ptr;
+	result.qid.type = (u32)*ptr;
 	ptr += 1;
-	dir.qid.version = (u32)from_le_u32(read_u32(ptr));
+	result.qid.version = from_le_u32(read_u32(ptr));
 	ptr += 4;
-	dir.qid.path = (u64)from_le_u64(read_u64(ptr));
+	result.qid.path = from_le_u64(read_u64(ptr));
 	ptr += 8;
-	dir.mode = (u32)from_le_u32(read_u32(ptr));
+	result.mode = from_le_u32(read_u32(ptr));
 	ptr += 4;
-	dir.access_time = (u32)from_le_u32(read_u32(ptr));
+	result.access_time = from_le_u32(read_u32(ptr));
 	ptr += 4;
-	dir.modify_time = (u32)from_le_u32(read_u32(ptr));
+	result.modify_time = from_le_u32(read_u32(ptr));
 	ptr += 4;
-	dir.length = (u64)from_le_u64(read_u64(ptr));
+	result.length = from_le_u64(read_u64(ptr));
 	ptr += 8;
-	ptr = decode_str8(ptr, end, &dir.name);
+	ptr = decode_str8(ptr, end, &result.name);
 	if(ptr == 0)
 	{
-		return err_dir;
+		return dir9p_zero();
 	}
-	ptr = decode_str8(ptr, end, &dir.user_id);
+	ptr = decode_str8(ptr, end, &result.user_id);
 	if(ptr == 0)
 	{
-		return err_dir;
+		return dir9p_zero();
 	}
-	ptr = decode_str8(ptr, end, &dir.group_id);
+	ptr = decode_str8(ptr, end, &result.group_id);
 	if(ptr == 0)
 	{
-		return err_dir;
+		return dir9p_zero();
 	}
-	ptr = decode_str8(ptr, end, &dir.modify_user_id);
+	ptr = decode_str8(ptr, end, &result.modify_user_id);
 	if(ptr == 0)
 	{
-		return err_dir;
+		return dir9p_zero();
 	}
 	if(ptr != end)
 	{
-		return err_dir;
+		return dir9p_zero();
 	}
-	return dir;
+	return result;
 }
 
-// 9P Directory List Operations
+// Directory List Operations
 static void
-dir_list_push(Arena *arena, DirList *list, Dir dir)
+dir9p_list_push(Arena *arena, DirList9P *list, Dir9P dir)
 {
-	DirNode *node = push_array_no_zero(arena, DirNode, 1);
+	DirNode9P *node = push_array_no_zero(arena, DirNode9P, 1);
 	node->dir = dir;
-	if(list->first == 0)
-	{
-		list->first = node;
-		list->last = node;
-	}
-	else
-	{
-		list->last->next = node;
-		list->last = node;
-	}
+	node->next = 0;
+	SLLQueuePush(list->first, list->last, node);
 	list->count += 1;
 }
 
-// 9P Message I/O
+// Message I/O
 static String8
 read_9p_msg(Arena *arena, u64 fd)
 {
-	u8 lenbuf[4];
-	u32 total_bytes_read = 0;
-	u32 total_bytes_left_to_read = 4;
-	for(; total_bytes_left_to_read > 0;)
+	u8 len_buf[4];
+	u32 total_num_bytes_to_read = 4;
+	u32 total_num_bytes_read = 0;
+	u32 total_num_bytes_left_to_read = total_num_bytes_to_read;
+	for(; total_num_bytes_left_to_read > 0;)
 	{
-		ssize_t n = read(fd, lenbuf + total_bytes_read, total_bytes_left_to_read);
-		if(n <= 0)
+		ssize_t read_result = read(fd, len_buf + total_num_bytes_read, total_num_bytes_left_to_read);
+		if(read_result <= 0)
 		{
 			return str8_zero();
 		}
-		total_bytes_read += n;
-		total_bytes_left_to_read -= n;
+		total_num_bytes_read += read_result;
+		total_num_bytes_left_to_read -= read_result;
 	}
-	u32 msg_size = (u32)from_le_u32(read_u32(lenbuf));
-	String8 msg = {0};
+	u32 msg_size = (u32)from_le_u32(read_u32(len_buf));
+	String8 msg = str8_zero();
 	msg.str = push_array_no_zero(arena, u8, msg_size);
 	msg.size = msg_size;
-	MemoryCopy(msg.str, lenbuf, sizeof lenbuf);
-	total_bytes_read = 0;
-	total_bytes_left_to_read = msg.size - 4;
-	for(; total_bytes_left_to_read > 0;)
+	MemoryCopy(msg.str, len_buf, sizeof len_buf);
+	total_num_bytes_to_read = msg.size - 4;
+	total_num_bytes_read = 0;
+	total_num_bytes_left_to_read = total_num_bytes_to_read;
+	for(; total_num_bytes_left_to_read > 0;)
 	{
-		ssize_t n = read(fd, msg.str + 4 + total_bytes_read, total_bytes_left_to_read);
-		if(n <= 0)
+		ssize_t read_result = read(fd, msg.str + 4 + total_num_bytes_read, total_num_bytes_left_to_read);
+		if(read_result <= 0)
 		{
 			return str8_zero();
 		}
-		total_bytes_read += n;
-		total_bytes_left_to_read -= n;
+		total_num_bytes_read += read_result;
+		total_num_bytes_left_to_read -= read_result;
 	}
 	return msg;
 }

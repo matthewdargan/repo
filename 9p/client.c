@@ -1,20 +1,21 @@
-static Cfsys *
-fsinit(Arena *a, u64 fd)
+// Client Connection
+static Client9P *
+client9p_init(Arena *arena, u64 fd)
 {
-	Cfsys *fs = push_array(a, Cfsys, 1);
-	fs->fd = fd;
-	fs->nexttag = 1;
-	fs->nextfid = 1;
-	if(!fsversion(a, fs, 8192))
+	Client9P *client = push_array(arena, Client9P, 1);
+	client->fd = fd;
+	client->next_tag = 1;
+	client->next_fid = 1;
+	if(!client9p_version(arena, client, 8192))
 	{
-		fs9unmount(a, fs);
+		client9p_unmount(arena, client);
 		return 0;
 	}
-	return fs;
+	return client;
 }
 
 static String8
-getuser()
+get_user_name(Arena *arena)
 {
 	uid_t uid = getuid();
 	struct passwd *pw = getpwuid(uid);
@@ -22,258 +23,101 @@ getuser()
 	{
 		return str8_lit("none");
 	}
-	return str8_cstring(pw->pw_name);
+	String8 name = str8_cstring(pw->pw_name);
+	return str8_copy(arena, name);
 }
 
-static Cfsys *
-fs9mount(Arena *a, u64 fd, String8 aname)
+static Client9P *
+client9p_mount(Arena *arena, u64 fd, String8 attach_path)
 {
-	Cfsys *fs = fsinit(a, fd);
-	if(fs == 0)
+	Client9P *client = client9p_init(arena, fd);
+	if(client == 0)
 	{
 		return 0;
 	}
-	String8 user = getuser();
-	Cfid *fid = fsattach(a, fs, FID_NONE, user, aname);
+	String8 user = get_user_name(arena);
+	ClientFid9P *fid = client9p_attach(arena, client, P9_FID_NONE, user, attach_path);
 	if(fid == 0)
 	{
-		fs9unmount(a, fs);
+		client9p_unmount(arena, client);
 		return 0;
 	}
-	fs->root = fid;
-	return fs;
+	client->root = fid;
+	return client;
 }
 
 static void
-fs9unmount(Arena *a, Cfsys *fs)
+client9p_unmount(Arena *arena, Client9P *client)
 {
-	fsclose(a, fs->root);
-	fs->root = 0;
-	close(fs->fd);
-	fs->fd = -1;
-}
-
-static void
-debug9pprint(Arena *a, String8 dir, Message9P fc)
-{
-	if(!debug9pclient)
-	{
-		return;
-	}
-	switch(fc.type)
-	{
-		case Msg9P_Tversion:
-		{
-			log_infof("%S Msg9P_Tversion tag=%u msize=%u version='%.*s'\n", dir, fc.tag, fc.max_message_size,
-			          str8_varg(fc.protocol_version));
-		}
-		break;
-		case Msg9P_Rversion:
-		{
-			log_infof("%S Msg9P_Rversion tag=%u msize=%u version='%.*s'\n", dir, fc.tag, fc.max_message_size,
-			          str8_varg(fc.protocol_version));
-		}
-		break;
-		case Msg9P_Tauth:
-		{
-			log_infof("%S Msg9P_Tauth tag=%u afid=%u uname='%.*s' aname='%.*s'\n", dir, fc.tag, fc.auth_fid,
-			          str8_varg(fc.user_name), str8_varg(fc.attach_path));
-		}
-		break;
-		case Msg9P_Rauth:
-		{
-			log_infof("%S Msg9P_Rauth tag=%u qid=(type=%u vers=%u path=%llu)\n", dir, fc.tag, fc.auth_qid.type,
-			          fc.auth_qid.version, fc.auth_qid.path);
-		}
-		break;
-		case Msg9P_Rerror:
-		{
-			log_infof("%S Msg9P_Rerror tag=%u ename='%.*s'\n", dir, fc.tag, str8_varg(fc.error_message));
-		}
-		break;
-		case Msg9P_Tattach:
-		{
-			log_infof("%S Msg9P_Tattach tag=%u fid=%u afid=%u uname='%.*s' aname='%.*s'\n", dir, fc.tag, fc.fid, fc.auth_fid,
-			          str8_varg(fc.user_name), str8_varg(fc.attach_path));
-		}
-		break;
-		case Msg9P_Rattach:
-		{
-			log_infof("%S Msg9P_Rattach tag=%u qid=(type=%u vers=%u path=%llu)\n", dir, fc.tag, fc.qid.type, fc.qid.version,
-			          fc.qid.path);
-		}
-		break;
-		case Msg9P_Twalk:
-		{
-			String8 msg = str8f(a, "%S Msg9P_Twalk tag=%u fid=%u newfid=%u nwname=%u", dir, fc.tag, fc.fid, fc.new_fid,
-			                    fc.walk_name_count);
-			for(u64 i = 0; i < fc.walk_name_count; i += 1)
-			{
-				msg = str8f(a, "%S '%.*s'", msg, str8_varg(fc.walk_names[i]));
-			}
-			log_infof("%S\n", msg);
-		}
-		break;
-		case Msg9P_Rwalk:
-		{
-			String8 msg = str8f(a, "%S Msg9P_Rwalk tag=%u nwqid=%u", dir, fc.tag, fc.walk_qid_count);
-			for(u64 i = 0; i < fc.walk_qid_count; i += 1)
-			{
-				msg = str8f(a, "%S qid%u=(type=%u vers=%u path=%llu)", msg, i, fc.walk_qids[i].type, fc.walk_qids[i].version,
-				            fc.walk_qids[i].path);
-			}
-			log_infof("%S\n", msg);
-		}
-		break;
-		case Msg9P_Topen:
-		{
-			log_infof("%S Msg9P_Topen tag=%u fid=%u mode=%u\n", dir, fc.tag, fc.fid, fc.open_mode);
-		}
-		break;
-		case Msg9P_Ropen:
-		{
-			log_infof("%S Msg9P_Ropen tag=%u qid=(type=%u vers=%u path=%llu) iounit=%u\n", dir, fc.tag, fc.qid.type,
-			          fc.qid.version, fc.qid.path, fc.io_unit_size);
-		}
-		break;
-		case Msg9P_Tcreate:
-		{
-			log_infof("%S Msg9P_Tcreate tag=%u fid=%u name='%.*s' perm=%u mode=%u\n", dir, fc.tag, fc.fid, str8_varg(fc.name),
-			          fc.permissions, fc.open_mode);
-		}
-		break;
-		case Msg9P_Rcreate:
-		{
-			log_infof("%S Msg9P_Rcreate tag=%u qid=(type=%u vers=%u path=%llu) iounit=%u\n", dir, fc.tag, fc.qid.type,
-			          fc.qid.version, fc.qid.path, fc.io_unit_size);
-		}
-		break;
-		case Msg9P_Tread:
-		{
-			log_infof("%S Msg9P_Tread tag=%u fid=%u offset=%llu count=%u\n", dir, fc.tag, fc.fid, fc.file_offset,
-			          fc.byte_count);
-		}
-		break;
-		case Msg9P_Rread:
-		{
-			log_infof("%S Msg9P_Rread tag=%u count=%llu\n", dir, fc.tag, fc.payload_data.size);
-		}
-		break;
-		case Msg9P_Twrite:
-		{
-			log_infof("%S Msg9P_Twrite tag=%u fid=%u offset=%llu count=%llu\n", dir, fc.tag, fc.fid, fc.file_offset,
-			          fc.payload_data.size);
-		}
-		break;
-		case Msg9P_Rwrite:
-		{
-			log_infof("%S Msg9P_Rwrite tag=%u count=%u\n", dir, fc.tag, fc.byte_count);
-		}
-		break;
-		case Msg9P_Tclunk:
-		{
-			log_infof("%S Msg9P_Tclunk tag=%u fid=%u\n", dir, fc.tag, fc.fid);
-		}
-		break;
-		case Msg9P_Rclunk:
-		{
-			log_infof("%S Msg9P_Rclunk tag=%u\n", dir, fc.tag);
-		}
-		break;
-		case Msg9P_Tremove:
-		{
-			log_infof("%S Msg9P_Tremove tag=%u fid=%u\n", dir, fc.tag, fc.fid);
-		}
-		break;
-		case Msg9P_Rremove:
-		{
-			log_infof("%S Msg9P_Rremove tag=%u\n", dir, fc.tag);
-		}
-		break;
-		case Msg9P_Tstat:
-		{
-			log_infof("%S Msg9P_Tstat tag=%u fid=%u\n", dir, fc.tag, fc.fid);
-		}
-		break;
-		case Msg9P_Rstat:
-		{
-			log_infof("%S Msg9P_Rstat tag=%u stat.size=%llu\n", dir, fc.tag, fc.stat_data.size);
-		}
-		break;
-		case Msg9P_Twstat:
-		{
-			log_infof("%S Msg9P_Twstat tag=%u fid=%u stat.size=%llu\n", dir, fc.tag, fc.fid, fc.stat_data.size);
-		}
-		break;
-		case Msg9P_Rwstat:
-		{
-			log_infof("%S Msg9P_Rwstat tag=%u\n", dir, fc.tag);
-		}
-		break;
-		default:
-		{
-			log_infof("%S unknown type=%u tag=%u\n", dir, fc.type, fc.tag);
-		}
-		break;
-	}
+	client9p_fid_close(arena, client->root);
+	client->root = 0;
+	close(client->fd);
+	client->fd = -1;
 }
 
 static Message9P
-fsrpc(Arena *a, Cfsys *fs, Message9P tx)
+client9p_rpc(Arena *arena, Client9P *client, Message9P tx)
 {
-	Message9P errfc = {0};
+	Message9P result = msg9p_zero();
 	if(tx.type != Msg9P_Tversion)
 	{
-		tx.tag = fs->nexttag;
-		fs->nexttag += 1;
-		if(fs->nexttag == TAG_NONE)
+		tx.tag = client->next_tag;
+		client->next_tag += 1;
+		if(client->next_tag == P9_TAG_NONE)
 		{
-			fs->nexttag = 1;
+			client->next_tag = 1;
 		}
 	}
-	debug9pprint(a, str8_lit("<-"), tx);
-	String8 txmsg = str8_from_msg9p(a, tx);
-	if(txmsg.size == 0)
+	Temp scratch = scratch_begin(&arena, 1);
+	log_infof("9P <- %S", str8_from_msg9p__fmt(scratch.arena, tx));
+	String8 tx_msg = str8_from_msg9p(arena, tx);
+	if(tx_msg.size == 0)
 	{
-		return errfc;
+		scratch_end(scratch);
+		return result;
 	}
-	ssize_t n = write(fs->fd, txmsg.str, txmsg.size);
-	if(n < 0 || (u64)n != txmsg.size)
+	ssize_t bytes_written = write(client->fd, tx_msg.str, tx_msg.size);
+	if(bytes_written < 0 || (u64)bytes_written != tx_msg.size)
 	{
-		return errfc;
+		scratch_end(scratch);
+		return result;
 	}
-	String8 rxmsg = read_9p_msg(a, fs->fd);
-	if(rxmsg.size == 0)
+	String8 rx_msg = read_9p_msg(arena, client->fd);
+	if(rx_msg.size == 0)
 	{
-		return errfc;
+		scratch_end(scratch);
+		return result;
 	}
-	Message9P rx = msg9p_from_str8(rxmsg);
-	debug9pprint(a, str8_lit("->"), rx);
+	Message9P rx = msg9p_from_str8(rx_msg);
+	log_infof("9P -> %S", str8_from_msg9p__fmt(scratch.arena, rx));
 	if(rx.type == 0 || rx.type == Msg9P_Rerror || rx.type != tx.type + 1)
 	{
-		return errfc;
+		scratch_end(scratch);
+		return result;
 	}
 	if(rx.tag != tx.tag)
 	{
-		return errfc;
+		scratch_end(scratch);
+		return result;
 	}
+	scratch_end(scratch);
 	return rx;
 }
 
 static b32
-fsversion(Arena *a, Cfsys *fs, u32 msize)
+client9p_version(Arena *arena, Client9P *client, u32 max_message_size)
 {
-	Message9P tx = {0};
+	Message9P tx = msg9p_zero();
 	tx.type = Msg9P_Tversion;
-	tx.tag = TAG_NONE;
-	tx.max_message_size = msize;
+	tx.tag = P9_TAG_NONE;
+	tx.max_message_size = max_message_size;
 	tx.protocol_version = version_9p;
-	Message9P rx = fsrpc(a, fs, tx);
+	Message9P rx = client9p_rpc(arena, client, tx);
 	if(rx.type != Msg9P_Rversion)
 	{
 		return 0;
 	}
-	fs->msize = rx.max_message_size;
+	client->max_message_size = rx.max_message_size;
 	if(!str8_match(rx.protocol_version, version_9p, 0))
 	{
 		return 0;
@@ -281,41 +125,41 @@ fsversion(Arena *a, Cfsys *fs, u32 msize)
 	return 1;
 }
 
-static Cfid *
-fsauth(Arena *a, Cfsys *fs, String8 uname, String8 aname)
+static ClientFid9P *
+client9p_auth(Arena *arena, Client9P *client, String8 user_name, String8 attach_path)
 {
-	Cfid *afid = push_array(a, Cfid, 1);
-	afid->fid = fs->nextfid;
-	fs->nextfid += 1;
-	afid->fs = fs;
-	Message9P tx = {0};
+	ClientFid9P *auth_fid_result = push_array(arena, ClientFid9P, 1);
+	auth_fid_result->fid = client->next_fid;
+	client->next_fid += 1;
+	auth_fid_result->client = client;
+	Message9P tx = msg9p_zero();
 	tx.type = Msg9P_Tauth;
-	tx.auth_fid = afid->fid;
-	tx.user_name = uname;
-	tx.attach_path = aname;
-	Message9P rx = fsrpc(a, fs, tx);
+	tx.auth_fid = auth_fid_result->fid;
+	tx.user_name = user_name;
+	tx.attach_path = attach_path;
+	Message9P rx = client9p_rpc(arena, client, tx);
 	if(rx.type != Msg9P_Rauth)
 	{
 		return 0;
 	}
-	afid->qid = rx.auth_qid;
-	return afid;
+	auth_fid_result->qid = rx.auth_qid;
+	return auth_fid_result;
 }
 
-static Cfid *
-fsattach(Arena *a, Cfsys *fs, u32 afid, String8 uname, String8 aname)
+static ClientFid9P *
+client9p_attach(Arena *arena, Client9P *client, u32 auth_fid, String8 user_name, String8 attach_path)
 {
-	Cfid *fid = push_array(a, Cfid, 1);
-	fid->fid = fs->nextfid;
-	fs->nextfid += 1;
-	fid->fs = fs;
-	Message9P tx = {0};
+	ClientFid9P *fid = push_array(arena, ClientFid9P, 1);
+	fid->fid = client->next_fid;
+	client->next_fid += 1;
+	fid->client = client;
+	Message9P tx = msg9p_zero();
 	tx.type = Msg9P_Tattach;
 	tx.fid = fid->fid;
-	tx.auth_fid = afid;
-	tx.user_name = uname;
-	tx.attach_path = aname;
-	Message9P rx = fsrpc(a, fs, tx);
+	tx.auth_fid = auth_fid;
+	tx.user_name = user_name;
+	tx.attach_path = attach_path;
+	Message9P rx = client9p_rpc(arena, client, tx);
 	if(rx.type != Msg9P_Rattach)
 	{
 		return 0;
@@ -324,53 +168,54 @@ fsattach(Arena *a, Cfsys *fs, u32 afid, String8 uname, String8 aname)
 	return fid;
 }
 
+// Fid Operations
 static void
-fsclose(Arena *a, Cfid *fid)
+client9p_fid_close(Arena *arena, ClientFid9P *fid)
 {
 	if(fid == 0)
 	{
 		return;
 	}
-	Message9P tx = {0};
+	Message9P tx = msg9p_zero();
 	tx.type = Msg9P_Tclunk;
 	tx.fid = fid->fid;
-	fsrpc(a, fid->fs, tx);
+	client9p_rpc(arena, fid->client, tx);
 }
 
-static Cfid *
-fswalk(Arena *a, Cfid *fid, String8 path)
+static ClientFid9P *
+client9p_fid_walk(Arena *arena, ClientFid9P *fid, String8 path)
 {
 	if(fid == 0)
 	{
 		return 0;
 	}
-	Cfid *wfid = push_array(a, Cfid, 1);
-	Temp scratch = temp_begin(a);
-	wfid->fid = fid->fs->nextfid;
-	fid->fs->nextfid += 1;
-	wfid->qid = fid->qid;
-	wfid->fs = fid->fs;
-	b32 firstwalk = 1;
+	ClientFid9P *walk_fid = push_array(arena, ClientFid9P, 1);
+	Temp scratch = temp_begin(arena);
+	walk_fid->fid = fid->client->next_fid;
+	fid->client->next_fid += 1;
+	walk_fid->qid = fid->qid;
+	walk_fid->client = fid->client;
+	b32 first_walk = 1;
 	String8List parts = str8_split(scratch.arena, path, (u8 *)"/", 1, 0);
 	String8Node *node = parts.first;
-	Message9P tx = {0};
+	Message9P tx = msg9p_zero();
 	tx.type = Msg9P_Twalk;
 	tx.fid = fid->fid;
-	tx.new_fid = wfid->fid;
+	tx.new_fid = walk_fid->fid;
 	if(node == 0)
 	{
-		Message9P rx = fsrpc(a, fid->fs, tx);
+		Message9P rx = client9p_rpc(arena, fid->client, tx);
 		if(rx.type != Msg9P_Rwalk || rx.walk_qid_count != tx.walk_name_count)
 		{
 			return 0;
 		}
-		return wfid;
+		return walk_fid;
 	}
 	for(; node != 0;)
 	{
-		tx.fid = firstwalk ? fid->fid : wfid->fid;
+		tx.fid = first_walk ? fid->fid : walk_fid->fid;
 		u64 i = 0;
-		for(; node != 0 && i < MAX_WALK_ELEM_COUNT;)
+		for(; node != 0 && i < P9_MAX_WALK_ELEM_COUNT;)
 		{
 			String8 part = node->string;
 			if(str8_match(part, str8_lit("."), 0))
@@ -383,38 +228,38 @@ fswalk(Arena *a, Cfid *fid, String8 path)
 			node = node->next;
 		}
 		tx.walk_name_count = i;
-		Message9P rx = fsrpc(a, fid->fs, tx);
+		Message9P rx = client9p_rpc(arena, fid->client, tx);
 		if(rx.type != Msg9P_Rwalk || rx.walk_qid_count != tx.walk_name_count)
 		{
-			if(!firstwalk)
+			if(!first_walk)
 			{
-				fsclose(a, wfid);
+				client9p_fid_close(arena, walk_fid);
 			}
 			return 0;
 		}
 		if(rx.walk_qid_count > 0)
 		{
-			wfid->qid = rx.walk_qids[rx.walk_qid_count - 1];
+			walk_fid->qid = rx.walk_qids[rx.walk_qid_count - 1];
 		}
-		firstwalk = 0;
+		first_walk = 0;
 	}
-	return wfid;
+	return walk_fid;
 }
 
 static b32
-fsfcreate(Arena *a, Cfid *fid, String8 name, u32 mode, u32 perm)
+client9p_fid_create(Arena *arena, ClientFid9P *fid, String8 name, u32 mode, u32 permissions)
 {
 	if(fid == 0)
 	{
 		return 0;
 	}
-	Message9P tx = {0};
+	Message9P tx = msg9p_zero();
 	tx.type = Msg9P_Tcreate;
 	tx.fid = fid->fid;
 	tx.name = name;
-	tx.permissions = perm;
+	tx.permissions = permissions;
 	tx.open_mode = mode;
-	Message9P rx = fsrpc(a, fid->fs, tx);
+	Message9P rx = client9p_rpc(arena, fid->client, tx);
 	if(rx.type != Msg9P_Rcreate)
 	{
 		return 0;
@@ -423,39 +268,39 @@ fsfcreate(Arena *a, Cfid *fid, String8 name, u32 mode, u32 perm)
 	return 1;
 }
 
-static Cfid *
-fscreate(Arena *a, Cfsys *fs, String8 name, u32 mode, u32 perm)
+static ClientFid9P *
+client9p_create(Arena *arena, Client9P *client, String8 name, u32 mode, u32 permissions)
 {
-	if(fs == 0 || fs->root == 0)
+	if(client == 0 || client->root == 0)
 	{
 		return 0;
 	}
 	String8 dir = str8_chop_last_slash(name);
-	String8 elem = str8_skip_last_slash(name);
-	Cfid *fid = fswalk(a, fs->root, dir);
+	String8 element = str8_skip_last_slash(name);
+	ClientFid9P *fid = client9p_fid_walk(arena, client->root, dir);
 	if(fid == 0)
 	{
 		return 0;
 	}
-	if(!fsfcreate(a, fid, elem, mode, perm))
+	if(!client9p_fid_create(arena, fid, element, mode, permissions))
 	{
-		fsclose(a, fid);
+		client9p_fid_close(arena, fid);
 		return 0;
 	}
 	return fid;
 }
 
 static b32
-fsfremove(Arena *a, Cfid *fid)
+client9p_fid_remove(Arena *arena, ClientFid9P *fid)
 {
 	if(fid == 0)
 	{
 		return 0;
 	}
-	Message9P tx = {0};
+	Message9P tx = msg9p_zero();
 	tx.type = Msg9P_Tremove;
 	tx.fid = fid->fid;
-	Message9P rx = fsrpc(a, fid->fs, tx);
+	Message9P rx = client9p_rpc(arena, fid->client, tx);
 	if(rx.type != Msg9P_Rremove)
 	{
 		return 0;
@@ -464,18 +309,18 @@ fsfremove(Arena *a, Cfid *fid)
 }
 
 static b32
-fsremove(Arena *a, Cfsys *fs, String8 name)
+client9p_remove(Arena *arena, Client9P *client, String8 name)
 {
-	if(fs == 0 || fs->root == 0)
+	if(client == 0 || client->root == 0)
 	{
 		return 0;
 	}
-	Cfid *fid = fswalk(a, fs->root, name);
+	ClientFid9P *fid = client9p_fid_walk(arena, client->root, name);
 	if(fid == 0)
 	{
 		return 0;
 	}
-	if(!fsfremove(a, fid))
+	if(!client9p_fid_remove(arena, fid))
 	{
 		return 0;
 	}
@@ -483,17 +328,17 @@ fsremove(Arena *a, Cfsys *fs, String8 name)
 }
 
 static b32
-fsfopen(Arena *a, Cfid *fid, u32 mode)
+client9p_fid_open(Arena *arena, ClientFid9P *fid, u32 mode)
 {
 	if(fid == 0)
 	{
 		return 0;
 	}
-	Message9P tx = {0};
+	Message9P tx = msg9p_zero();
 	tx.type = Msg9P_Topen;
 	tx.fid = fid->fid;
 	tx.open_mode = mode;
-	Message9P rx = fsrpc(a, fid->fs, tx);
+	Message9P rx = client9p_rpc(arena, fid->client, tx);
 	if(rx.type != Msg9P_Ropen)
 	{
 		return 0;
@@ -502,291 +347,296 @@ fsfopen(Arena *a, Cfid *fid, u32 mode)
 	return 1;
 }
 
-static Cfid *
-fs9open(Arena *a, Cfsys *fs, String8 name, u32 mode)
+static ClientFid9P *
+client9p_open(Arena *arena, Client9P *client, String8 name, u32 mode)
 {
-	if(fs == 0 || fs->root == 0)
+	if(client == 0 || client->root == 0)
 	{
 		return 0;
 	}
-	Cfid *fid = fswalk(a, fs->root, name);
+	ClientFid9P *fid = client9p_fid_walk(arena, client->root, name);
 	if(fid == 0)
 	{
 		return 0;
 	}
-	if(!fsfopen(a, fid, mode))
+	if(!client9p_fid_open(arena, fid, mode))
 	{
-		fsclose(a, fid);
+		client9p_fid_close(arena, fid);
 		return 0;
 	}
 	return fid;
 }
 
 static s64
-fspread(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
+client9p_fid_pread(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset)
 {
 	if(fid == 0 || buf == 0)
 	{
 		return -1;
 	}
-	u32 msize = fid->fs->msize - MESSAGE_HEADER_SIZE;
-	if(n > msize)
+	u32 max_message_size = fid->client->max_message_size - P9_MESSAGE_HEADER_SIZE;
+	if(n > max_message_size)
 	{
-		n = msize;
+		n = max_message_size;
 	}
-	Message9P tx = {0};
+	Message9P tx = msg9p_zero();
 	tx.type = Msg9P_Tread;
 	tx.fid = fid->fid;
 	tx.file_offset = (offset == -1) ? fid->offset : offset;
 	tx.byte_count = n;
-	Message9P rx = fsrpc(a, fid->fs, tx);
+	Message9P rx = client9p_rpc(arena, fid->client, tx);
 	if(rx.type != Msg9P_Rread)
 	{
 		return -1;
 	}
-	s64 nr = rx.payload_data.size;
-	if(nr > (s64)n)
+	s64 read_result = rx.payload_data.size;
+	if(read_result > (s64)n)
 	{
-		nr = n;
+		read_result = n;
 	}
-	if(nr > 0)
+	if(read_result > 0)
 	{
-		MemoryCopy(buf, rx.payload_data.str, nr);
+		MemoryCopy(buf, rx.payload_data.str, read_result);
 		if(offset == -1)
 		{
-			fid->offset += nr;
+			fid->offset += read_result;
 		}
 	}
-	return nr;
+	return read_result;
 }
 
 static s64
-fsread(Arena *a, Cfid *fid, void *buf, u64 n)
-{
-	return fspread(a, fid, buf, n, -1);
-}
-
-static s64
-fsreadn(Arena *a, Cfid *fid, void *buf, u64 n)
-{
-	u64 total_bytes_read = 0;
-	u64 total_bytes_left_to_read = n;
-	u8 *p = buf;
-	for(; total_bytes_left_to_read > 0;)
-	{
-		s64 nr = fsread(a, fid, p + total_bytes_read, total_bytes_left_to_read);
-		if(nr <= 0)
-		{
-			if(total_bytes_read == 0)
-			{
-				return nr;
-			}
-			break;
-		}
-		total_bytes_read += nr;
-		total_bytes_left_to_read -= nr;
-	}
-	return total_bytes_read;
-}
-
-static s64
-fspwrite(Arena *a, Cfid *fid, void *buf, u64 n, s64 offset)
+client9p_fid_read_range(Arena *arena, ClientFid9P *fid, void *buf, Rng1U64 range)
 {
 	if(fid == 0 || buf == 0)
 	{
 		return -1;
 	}
-	u32 msize = fid->fs->msize - MESSAGE_HEADER_SIZE;
-	u64 total_bytes_written = 0;
-	u64 total_bytes_left_to_write = n;
-	u8 *p = buf;
-	for(; total_bytes_left_to_write > 0;)
+	u64 total_num_bytes_to_read = dim_1u64(range);
+	u64 total_num_bytes_read = 0;
+	u64 total_num_bytes_left_to_read = total_num_bytes_to_read;
+	for(; total_num_bytes_left_to_read > 0;)
 	{
-		u64 want = total_bytes_left_to_write;
-		if(want > msize)
+		u64 offset = range.min + total_num_bytes_read;
+		s64 read_result =
+		    client9p_fid_pread(arena, fid, (u8 *)buf + total_num_bytes_read, total_num_bytes_left_to_read, offset);
+		if(read_result > 0)
 		{
-			want = msize;
+			total_num_bytes_read += read_result;
+			total_num_bytes_left_to_read -= read_result;
 		}
-		Message9P tx = {0};
+		else
+		{
+			if(total_num_bytes_read == 0)
+			{
+				return read_result;
+			}
+			break;
+		}
+	}
+	return total_num_bytes_read;
+}
+
+static s64
+client9p_fid_pwrite(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset)
+{
+	if(fid == 0 || buf == 0)
+	{
+		return -1;
+	}
+	u32 max_message_size = fid->client->max_message_size - P9_MESSAGE_HEADER_SIZE;
+	u64 total_num_bytes_to_write = n;
+	u64 total_num_bytes_written = 0;
+	u64 total_num_bytes_left_to_write = total_num_bytes_to_write;
+	for(; total_num_bytes_left_to_write > 0;)
+	{
+		u64 write_size = total_num_bytes_left_to_write;
+		if(write_size > max_message_size)
+		{
+			write_size = max_message_size;
+		}
+		Message9P tx = msg9p_zero();
 		tx.type = Msg9P_Twrite;
 		tx.fid = fid->fid;
-		tx.file_offset = (offset == -1) ? fid->offset : offset + total_bytes_written;
-		tx.payload_data.size = want;
-		tx.payload_data.str = p + total_bytes_written;
-		Message9P rx = fsrpc(a, fid->fs, tx);
+		tx.file_offset = (offset == -1) ? fid->offset : offset + total_num_bytes_written;
+		tx.payload_data.size = write_size;
+		tx.payload_data.str = (u8 *)buf + total_num_bytes_written;
+		Message9P rx = client9p_rpc(arena, fid->client, tx);
 		if(rx.type != Msg9P_Rwrite)
 		{
-			if(total_bytes_written == 0)
+			if(total_num_bytes_written == 0)
 			{
 				return -1;
 			}
 			break;
 		}
-		u32 got = rx.byte_count;
-		if(got == 0)
+		u32 write_result = rx.byte_count;
+		if(write_result == 0)
 		{
-			if(total_bytes_written == 0)
+			if(total_num_bytes_written == 0)
 			{
 				return -1;
 			}
 			break;
 		}
-		total_bytes_written += got;
-		total_bytes_left_to_write -= got;
+		total_num_bytes_written += write_result;
+		total_num_bytes_left_to_write -= write_result;
 		if(offset == -1)
 		{
-			fid->offset += got;
+			fid->offset += write_result;
 		}
-		if(got < want)
+		if(write_result < write_size)
 		{
 			break;
 		}
 	}
-	return total_bytes_written;
+	return total_num_bytes_written;
 }
 
 static s64
-fswrite(Arena *a, Cfid *fid, void *buf, u64 n)
+client9p_fid_write_range(Arena *arena, ClientFid9P *fid, void *buf, Rng1U64 range)
 {
-	return fspwrite(a, fid, buf, n, -1);
-}
-
-static s64
-dirpackage(Arena *a, u8 *buf, s64 ts, DirList *list)
-{
-	*list = (DirList){0};
-	s64 n = 0;
-	u64 i = 0;
-	for(; i < (u64)ts;)
-	{
-		if(i + 2 > (u64)ts)
-		{
-			return -1;
-		}
-		u64 m = 2 + from_le_u16(read_u16(&buf[i]));
-		if(i + m > (u64)ts)
-		{
-			return -1;
-		}
-		String8 dirmsg = {.str = &buf[i], .size = m};
-		Dir d = dir_from_str8(dirmsg);
-		if(d.name.size == 0 && m > 2)
-		{
-			return -1;
-		}
-		dir_list_push(a, list, d);
-		n += 1;
-		i += m;
-	}
-	return n;
-}
-
-static s64
-fsdirread(Arena *a, Cfid *fid, DirList *list)
-{
-	if(fid == 0 || list == 0)
+	if(fid == 0 || buf == 0)
 	{
 		return -1;
 	}
-	Temp scratch = temp_begin(a);
-	u8 *buf = push_array_no_zero(a, u8, DIR_ENTRY_MAX);
-	s64 ts = fsread(a, fid, buf, DIR_ENTRY_MAX);
-	if(ts >= 0)
+	u64 total_num_bytes_to_write = dim_1u64(range);
+	u64 total_num_bytes_written = 0;
+	u64 total_num_bytes_left_to_write = total_num_bytes_to_write;
+	for(; total_num_bytes_left_to_write > 0;)
 	{
-		ts = dirpackage(a, buf, ts, list);
-	}
-	temp_end(scratch);
-	return ts;
-}
-
-static s64
-fsdirreadall(Arena *a, Cfid *fid, DirList *list)
-{
-	if(fid == 0 || list == 0)
-	{
-		return -1;
-	}
-	u8 *buf = push_array_no_zero(a, u8, DIR_BUFFER_MAX);
-	s64 total_bytes_read = 0;
-	u64 buffer_space_left = DIR_BUFFER_MAX;
-	s64 n = 0;
-	for(; buffer_space_left >= DIR_ENTRY_MAX;)
-	{
-		n = fsread(a, fid, buf + total_bytes_read, DIR_ENTRY_MAX);
-		if(n <= 0)
+		u64 offset = range.min + total_num_bytes_written;
+		s64 write_result =
+		    client9p_fid_pwrite(arena, fid, (u8 *)buf + total_num_bytes_written, total_num_bytes_left_to_write, offset);
+		if(write_result > 0)
 		{
+			total_num_bytes_written += write_result;
+			total_num_bytes_left_to_write -= write_result;
+		}
+		else
+		{
+			if(total_num_bytes_written == 0)
+			{
+				return write_result;
+			}
 			break;
 		}
-		total_bytes_read += n;
-		buffer_space_left -= n;
 	}
-	if(total_bytes_read >= 0)
-	{
-		total_bytes_read = dirpackage(a, buf, total_bytes_read, list);
-	}
-	if(total_bytes_read == 0 && n < 0)
-	{
-		return -1;
-	}
-	return total_bytes_read;
+	return total_num_bytes_written;
 }
 
-static Dir
-fsdirfstat(Arena *a, Cfid *fid)
+static DirList9P
+client9p_dir_list_from_str8(Arena *arena, String8 buffer)
 {
-	Dir errd = {0};
+	DirList9P result = {0};
+	u64 offset = 0;
+	for(; offset < buffer.size;)
+	{
+		if(offset + 2 > buffer.size)
+		{
+			return result;
+		}
+		u64 entry_size = 2 + from_le_u16(read_u16(&buffer.str[offset]));
+		if(offset + entry_size > buffer.size)
+		{
+			return result;
+		}
+		String8 dir_msg = str8_zero();
+		dir_msg.str = &buffer.str[offset];
+		dir_msg.size = entry_size;
+		Dir9P dir = dir9p_from_str8(dir_msg);
+		if(dir.name.size == 0 && entry_size > 2)
+		{
+			return result;
+		}
+		dir9p_list_push(arena, &result, dir);
+		offset += entry_size;
+	}
+	return result;
+}
+
+static DirList9P
+client9p_fid_read_dirs(Arena *arena, ClientFid9P *fid)
+{
+	DirList9P result = {0};
 	if(fid == 0)
 	{
-		return errd;
+		return result;
 	}
-	Message9P tx = {0};
+	u8 *buf = push_array_no_zero(arena, u8, P9_DIR_BUFFER_MAX);
+	s64 total_bytes_read = 0;
+	u64 buffer_space_left = P9_DIR_BUFFER_MAX;
+	for(; buffer_space_left >= P9_DIR_ENTRY_MAX;)
+	{
+		s64 bytes_read = client9p_fid_pread(arena, fid, buf + total_bytes_read, P9_DIR_ENTRY_MAX, -1);
+		if(bytes_read <= 0)
+		{
+			break;
+		}
+		total_bytes_read += bytes_read;
+		buffer_space_left -= bytes_read;
+	}
+	String8 buffer = {buf, total_bytes_read};
+	result = client9p_dir_list_from_str8(arena, buffer);
+	return result;
+}
+
+static Dir9P
+client9p_fid_stat(Arena *arena, ClientFid9P *fid)
+{
+	Dir9P result = dir9p_zero();
+	if(fid == 0)
+	{
+		return result;
+	}
+	Message9P tx = msg9p_zero();
 	tx.type = Msg9P_Tstat;
 	tx.fid = fid->fid;
-	Message9P rx = fsrpc(a, fid->fs, tx);
+	Message9P rx = client9p_rpc(arena, fid->client, tx);
 	if(rx.type != Msg9P_Rstat)
 	{
-		return errd;
+		return result;
 	}
-	Dir d = dir_from_str8(rx.stat_data);
-	return d;
+	result = dir9p_from_str8(rx.stat_data);
+	return result;
 }
 
-static Dir
-fsdirstat(Arena *a, Cfsys *fs, String8 name)
+static Dir9P
+client9p_stat(Arena *arena, Client9P *client, String8 name)
 {
-	Dir errd = {0};
-	if(fs == 0 || fs->root == 0)
+	Dir9P result = dir9p_zero();
+	if(client == 0 || client->root == 0)
 	{
-		return errd;
+		return result;
 	}
-	Cfid *fid = fswalk(a, fs->root, name);
+	ClientFid9P *fid = client9p_fid_walk(arena, client->root, name);
 	if(fid == 0)
 	{
-		return errd;
+		return result;
 	}
-	Dir d = fsdirfstat(a, fid);
-	fsclose(a, fid);
-	return d;
+	result = client9p_fid_stat(arena, fid);
+	client9p_fid_close(arena, fid);
+	return result;
 }
 
 static b32
-fsdirfwstat(Arena *a, Cfid *fid, Dir d)
+client9p_fid_wstat(Arena *arena, ClientFid9P *fid, Dir9P dir)
 {
 	if(fid == 0)
 	{
 		return 0;
 	}
-	Temp scratch = temp_begin(a);
-	String8 stat = str8_from_dir(scratch.arena, d);
+	Temp scratch = temp_begin(arena);
+	String8 stat = str8_from_dir9p(scratch.arena, dir);
 	if(stat.size == 0)
 	{
 		return 0;
 	}
-	Message9P tx = {0};
+	Message9P tx = msg9p_zero();
 	tx.type = Msg9P_Twstat;
 	tx.fid = fid->fid;
 	tx.stat_data = stat;
-	Message9P rx = fsrpc(a, fid->fs, tx);
+	Message9P rx = client9p_rpc(arena, fid->client, tx);
 	if(rx.type != Msg9P_Rwstat)
 	{
 		return 0;
@@ -795,49 +645,49 @@ fsdirfwstat(Arena *a, Cfid *fid, Dir d)
 }
 
 static b32
-fsdirwstat(Arena *a, Cfsys *fs, String8 name, Dir d)
+client9p_wstat(Arena *arena, Client9P *client, String8 name, Dir9P dir)
 {
-	if(fs == 0 || fs->root == 0)
+	if(client == 0 || client->root == 0)
 	{
 		return 0;
 	}
-	Cfid *fid = fswalk(a, fs->root, name);
+	ClientFid9P *fid = client9p_fid_walk(arena, client->root, name);
 	if(fid == 0)
 	{
 		return 0;
 	}
-	b32 ok = fsdirfwstat(a, fid, d);
-	fsclose(a, fid);
-	return ok;
+	b32 result = client9p_fid_wstat(arena, fid, dir);
+	client9p_fid_close(arena, fid);
+	return result;
 }
 
 static b32
-fsaccess(Arena *a, Cfsys *fs, String8 name, u32 mode)
+client9p_access(Arena *arena, Client9P *client, String8 name, u32 mode)
 {
-	if(fs == 0 || fs->root == 0)
+	if(client == 0 || client->root == 0)
 	{
 		return 0;
 	}
-	if(mode == AccessFlag_Exist)
+	if(mode == P9_AccessFlag_Exist)
 	{
-		Dir d = fsdirstat(a, fs, name);
-		if(d.name.size == 0)
+		Dir9P dir = client9p_stat(arena, client, name);
+		if(dir.name.size == 0)
 		{
 			return 0;
 		}
 		return 1;
 	}
-	Cfid *fid = fs9open(a, fs, name, omodetab[mode & 7]);
+	ClientFid9P *fid = client9p_open(arena, client, name, open_mode_table[mode & 7]);
 	if(fid == 0)
 	{
 		return 0;
 	}
-	fsclose(a, fid);
+	client9p_fid_close(arena, fid);
 	return 1;
 }
 
 static s64
-fsseek(Arena *a, Cfid *fid, s64 offset, u32 type)
+client9p_fid_seek(Arena *arena, ClientFid9P *fid, s64 offset, u32 type)
 {
 	if(fid == 0)
 	{
@@ -846,13 +696,13 @@ fsseek(Arena *a, Cfid *fid, s64 offset, u32 type)
 	s64 pos = 0;
 	switch(type)
 	{
-		case SeekWhence_Set:
+		case P9_SeekWhence_Set:
 		{
 			pos = offset;
 			fid->offset = offset;
 		}
 		break;
-		case SeekWhence_Cur:
+		case P9_SeekWhence_Cur:
 		{
 			pos = (s64)fid->offset + offset;
 			if(pos < 0)
@@ -862,14 +712,14 @@ fsseek(Arena *a, Cfid *fid, s64 offset, u32 type)
 			fid->offset = pos;
 		}
 		break;
-		case SeekWhence_End:
+		case P9_SeekWhence_End:
 		{
-			Dir d = fsdirfstat(a, fid);
-			if(d.name.size == 0)
+			Dir9P dir = client9p_fid_stat(arena, fid);
+			if(dir.name.size == 0)
 			{
 				return -1;
 			}
-			pos = (s64)d.length + offset;
+			pos = (s64)dir.length + offset;
 			if(pos < 0)
 			{
 				return -1;

@@ -30,6 +30,7 @@
 // Clamps, Mins, Maxes
 #define Min(A, B) (((A) < (B)) ? (A) : (B))
 #define Max(A, B) (((A) > (B)) ? (A) : (B))
+#define Clamp(A, X, B) (((X) < (A)) ? (A) : ((X) > (B)) ? (B) : (X))
 
 // Type -> Alignment
 #define AlignOf(T) __alignof(T)
@@ -39,10 +40,19 @@
 
 // Memory Operation Macros
 #define MemoryCopy(dst, src, size) memmove((dst), (src), (size))
+#define MemorySet(dst, byte, size) memset((dst), (byte), (size))
 #define MemoryCompare(a, b, size) memcmp((a), (b), (size))
+
 #define MemoryCopyStruct(d, s) MemoryCopy((d), (s), sizeof(*(d)))
+#define MemoryCopyArray(d, s) MemoryCopy((d), (s), sizeof(d))
+
 #define MemoryZero(s, z) memset((s), 0, (z))
+#define MemoryZeroStruct(s) MemoryZero((s), sizeof(*(s)))
+#define MemoryZeroArray(a) MemoryZero((a), sizeof(a))
+
 #define MemoryMatch(a, b, z) (MemoryCompare((a), (b), (z)) == 0)
+#define MemoryMatchStruct(a, b) MemoryMatch((a), (b), sizeof(*(a)))
+#define MemoryMatchArray(a, b) MemoryMatch((a), (b), sizeof(a))
 
 // Asserts
 #define Trap() __builtin_trap()
