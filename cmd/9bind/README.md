@@ -5,7 +5,7 @@ Bind mount a directory, making the file tree at `old` also visible at `new`.
 ## Usage
 
 ```sh
-9bind old new
+9bind <old> <new>
 ```
 
 ## Examples

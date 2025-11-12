@@ -6,7 +6,7 @@ client9p_init(Arena *arena, u64 fd)
 	client->fd = fd;
 	client->next_tag = 1;
 	client->next_fid = 1;
-	if(!client9p_version(arena, client, 8192))
+	if(!client9p_version(arena, client, P9_IOUNIT_DEFAULT))
 	{
 		client9p_unmount(arena, client);
 		return 0;
@@ -69,7 +69,7 @@ client9p_rpc(Arena *arena, Client9P *client, Message9P tx)
 		}
 	}
 	Temp scratch = scratch_begin(&arena, 1);
-	log_infof("9P <- %S", str8_from_msg9p__fmt(scratch.arena, tx));
+	log_infof("9P <- %S\n", str8_from_msg9p__fmt(scratch.arena, tx));
 	String8 tx_msg = str8_from_msg9p(arena, tx);
 	if(tx_msg.size == 0)
 	{
@@ -89,7 +89,7 @@ client9p_rpc(Arena *arena, Client9P *client, Message9P tx)
 		return result;
 	}
 	Message9P rx = msg9p_from_str8(rx_msg);
-	log_infof("9P -> %S", str8_from_msg9p__fmt(scratch.arena, rx));
+	log_infof("9P -> %S\n", str8_from_msg9p__fmt(scratch.arena, rx));
 	if(rx.type == 0 || rx.type == Msg9P_Rerror || rx.type != tx.type + 1)
 	{
 		scratch_end(scratch);

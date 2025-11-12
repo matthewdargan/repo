@@ -15,7 +15,7 @@ entry_point(CmdLine *cmd_line)
 
 	if(cmd_line->inputs.node_count != 2)
 	{
-		log_error(str8_lit("usage: 9bind old new\n"));
+		log_error(str8_lit("usage: 9bind <old> <new>\n"));
 	}
 	else
 	{

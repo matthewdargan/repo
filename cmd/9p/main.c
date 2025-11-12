@@ -11,14 +11,9 @@
 static void
 usage(void)
 {
-	log_error(str8_lit("usage: 9p [-a address] [-A aname] cmd args...\n"
-	                   "possible cmds:\n"
-	                   " create name...\n"
-	                   " read name\n"
-	                   " write name\n"
-	                   " remove name...\n"
-	                   " stat name\n"
-	                   " ls name...\n"));
+	log_error(
+	    str8_lit("usage: 9p [-a=<address>] [-A=<aname>] <cmd> <args>\n"
+	             "cmds: create <name>..., read <name>, write <name>, remove <name>..., stat <name>, ls <name>...\n"));
 }
 
 static Client9P *

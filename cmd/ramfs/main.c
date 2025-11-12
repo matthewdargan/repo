@@ -178,6 +178,14 @@ ramfs_create(ServerRequest9P *r)
 }
 
 static void
+ramfs_version(ServerRequest9P *r)
+{
+	r->out_msg.max_message_size = r->in_msg.max_message_size;
+	r->out_msg.protocol_version = r->in_msg.protocol_version;
+	server9p_respond(r, str8_zero());
+}
+
+static void
 ramfs_attach(ServerRequest9P *r)
 {
 	r->fid->qid.path = 0;
@@ -326,96 +334,116 @@ entry_point(CmdLine *cmd_line)
 	log_select(log);
 	log_scope_begin();
 	Arena *arena = arena_alloc();
-	String8 srvname = str8_zero();
 	String8 address = str8_zero();
 
-	if(cmd_line_has_argument(cmd_line, str8_lit("s")))
+	// Get address from first positional argument
+	if(cmd_line->inputs.node_count > 0)
 	{
-		srvname = cmd_line_string(cmd_line, str8_lit("s"));
+		address = cmd_line->inputs.first->string;
 	}
-	if(cmd_line_has_argument(cmd_line, str8_lit("a")))
+
+	if(address.size == 0)
 	{
-		address = cmd_line_string(cmd_line, str8_lit("a"));
-	}
-	if(srvname.size == 0 && address.size == 0)
-	{
-		log_error(str8_lit("usage: ramfs [-s srvname] [-a address]\n"));
+		log_error(str8_lit("usage: ramfs <address>\n"
+		                   "<address>: dial string (e.g., tcp!localhost!5640)\n"));
 	}
 	else
 	{
-		if(address.size > 0)
+		Netaddr na = netaddr(arena, address, str8_lit("tcp"), str8_lit("9pfs"));
+		if(na.net.size == 0)
 		{
-			Netaddr na = netaddr(arena, address, str8_lit("tcp"), str8_lit("9pfs"));
-			if(na.net.size == 0)
-			{
-				log_errorf("ramfs: failed to parse address '%S'\n", address);
-			}
-			else
-			{
-				String8 portstr = str8f(arena, "%llu", na.port);
-				u64 listenfd = socketlisten(portstr, 0);
-				if(listenfd == 0)
-				{
-					log_errorf("ramfs: failed to listen on port %S\n", portstr);
-				}
-				else
-				{
-					log_infof("ramfs: listening on %S (port %S)\n", address, portstr);
-					for(;;)
-					{
-						u64 connfd = socketaccept(listenfd);
-						if(connfd == 0)
-						{
-							log_error(str8_lit("ramfs: failed to accept connection\n"));
-							continue;
-						}
-						log_info(str8_lit("ramfs: accepted connection\n"));
-						u64 infd = connfd;
-						u64 outfd = connfd;
-						Server9P *server = server9p_alloc(arena, infd, outfd);
-						if(server == 0)
-						{
-							log_error(str8_lit("ramfs: failed to allocate server\n"));
-							close(connfd);
-							continue;
-						}
-						server->attach = ramfs_attach;
-						server->read = ramfs_read;
-						server->write = ramfs_write;
-						server->create = ramfs_create;
-						server->open = ramfs_open;
-						server->walk = ramfs_walk;
-						server->stat = ramfs_stat;
-						server->remove = ramfs_remove;
-						server9p_run(server);
-						server9p_free(server);
-						close(connfd);
-						log_info(str8_lit("ramfs: connection closed\n"));
-					}
-				}
-			}
+			log_errorf("ramfs: failed to parse address '%S'\n", address);
 		}
 		else
 		{
-			u64 infd = STDIN_FILENO;
-			u64 outfd = STDOUT_FILENO;
-			Server9P *server = server9p_alloc(arena, infd, outfd);
-			if(server == 0)
+			String8 portstr = str8f(arena, "%llu", na.port);
+			u64 listenfd = socketlisten(portstr, 0);
+			if(listenfd == 0)
 			{
-				log_error(str8_lit("ramfs: failed to allocate server\n"));
+				log_errorf("ramfs: failed to listen on port %S\n", portstr);
 			}
 			else
 			{
-				server->attach = ramfs_attach;
-				server->read = ramfs_read;
-				server->write = ramfs_write;
-				server->create = ramfs_create;
-				server->open = ramfs_open;
-				server->walk = ramfs_walk;
-				server->stat = ramfs_stat;
-				server->remove = ramfs_remove;
-				server9p_run(server);
-				server9p_free(server);
+				log_infof("ramfs: listening on %S (port %S)\n", address, portstr);
+				for(;;)
+				{
+					u64 connfd = socketaccept(listenfd);
+					if(connfd == 0)
+					{
+						log_error(str8_lit("ramfs: failed to accept connection\n"));
+						continue;
+					}
+					log_info(str8_lit("ramfs: accepted connection\n"));
+					u64 infd = connfd;
+					u64 outfd = connfd;
+					Server9P *server = server9p_alloc(arena, infd, outfd);
+					if(server == 0)
+					{
+						log_error(str8_lit("ramfs: failed to allocate server\n"));
+						close(connfd);
+						continue;
+					}
+
+					// User-controlled dispatch loop
+					for(;;)
+					{
+						ServerRequest9P *r = server9p_get_request(server);
+						if(r == 0)
+						{
+							break;
+						}
+						if(r->error.size > 0)
+						{
+							server9p_respond(r, r->error);
+							continue;
+						}
+
+						switch(r->in_msg.type)
+						{
+							case Msg9P_Tversion:
+								ramfs_version(r);
+								break;
+							case Msg9P_Tattach:
+								ramfs_attach(r);
+								break;
+							case Msg9P_Twalk:
+								ramfs_walk(r);
+								break;
+							case Msg9P_Topen:
+								ramfs_open(r);
+								break;
+							case Msg9P_Tcreate:
+								ramfs_create(r);
+								break;
+							case Msg9P_Tread:
+								ramfs_read(r);
+								break;
+							case Msg9P_Twrite:
+								ramfs_write(r);
+								break;
+							case Msg9P_Tstat:
+								ramfs_stat(r);
+								break;
+							case Msg9P_Tremove:
+								ramfs_remove(r);
+								break;
+							case Msg9P_Tclunk:
+							{
+								server9p_fid_remove(server, r->in_msg.fid);
+								server9p_respond(r, str8_zero());
+							}
+							break;
+							default:
+							{
+								server9p_respond(r, str8_lit("unsupported operation"));
+							}
+							break;
+						}
+					}
+
+					close(connfd);
+					log_info(str8_lit("ramfs: connection closed\n"));
+				}
 			}
 		}
 	}

@@ -5,7 +5,7 @@ Unmount 9P filesystems.
 ## Usage
 
 ```sh
-9umount mtpt...
+9umount <mtpt>...
 ```
 
 ## Examples

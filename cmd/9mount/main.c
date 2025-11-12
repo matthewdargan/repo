@@ -47,7 +47,7 @@ entry_point(CmdLine *cmd_line)
 
 	if(cmd_line->inputs.node_count != 2)
 	{
-		log_error(str8_lit("usage: 9mount [-nsx] [-a spec] [-m msize] [-u uid] [-g gid] dial mtpt\n"));
+		log_error(str8_lit("usage: 9mount [-nsx] [-a=<spec>] [-m=<msize>] [-u=<uid>] [-g=<gid>] <dial> <mtpt>\n"));
 	}
 	else
 	{

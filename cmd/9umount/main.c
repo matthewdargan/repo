@@ -33,7 +33,7 @@ entry_point(CmdLine *cmd_line)
 
 	if(cmd_line->inputs.node_count == 0)
 	{
-		log_error(str8_lit("usage: 9umount mtpt...\n"));
+		log_error(str8_lit("usage: 9umount <mtpt>...\n"));
 	}
 	else
 	{

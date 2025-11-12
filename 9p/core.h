@@ -15,9 +15,11 @@ read_only static String8 version_9p = str8_lit_comp("9P2000");
 // Protocol Limits
 #define P9_MAX_WALK_ELEM_COUNT 16
 #define P9_STAT_DATA_FIXED_SIZE (2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4 + 8)
-#define P9_TAG_NONE 0xffff
-#define P9_FID_NONE 0xffffffff
+#define P9_TAG_NONE max_u16
+#define P9_FID_NONE max_u32
+#define P9_OPEN_MODE_NONE max_u32
 #define P9_MESSAGE_HEADER_SIZE 24
+#define P9_IOUNIT_DEFAULT 8192
 #define P9_DIR_ENTRY_MAX 8192
 #define P9_DIR_BUFFER_MAX (P9_DIR_ENTRY_MAX * 16)
 

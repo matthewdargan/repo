@@ -5,7 +5,7 @@ Mount a [9P filesystem](https://9fans.github.io/plan9port/man/man9/intro.html) a
 ## Usage
 
 ```sh
-9mount [-nsx] [-a=spec] [-m=msize] [-u=uid] [-g=gid] dial mtpt
+9mount [-nsx] [-a=<spec>] [-m=<msize>] [-u=<uid>] [-g=<gid>] <dial> <mtpt>
 ```
 
 **Dial formats:**

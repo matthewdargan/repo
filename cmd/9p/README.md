@@ -5,7 +5,7 @@ A command-line tool for interacting with 9P file servers. Provides basic file op
 ## Usage
 
 ```sh
-9p [-a=address] [-A=aname] cmd args...
+9p [-a=<address>] [-A=<aname>] <cmd> <args>
 ```
 
 **Options:**
