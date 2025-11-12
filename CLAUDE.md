@@ -107,8 +107,6 @@ nix build .#<package> -L
 
 The `-L` flag prints the full build log. This is important for debugging build issues.
 
-**Important:** Avoid piping build output through `head`, `tail`, or similar commands. This truncates compiler errors and makes debugging difficult.
-
 **Run a package directly:**
 ```sh
 nix run .#<package>

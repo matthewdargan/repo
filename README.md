@@ -1,17 +1,14 @@
 # Monorepo
 
-C99 systems programming with custom standard library and 9P protocol implementation. Built for Clang and Linux, managed with Nix/NixOS.
+Systems programming monorepo centered on a custom C99 standard library. Built for Clang and Linux, managed with Nix/NixOS.
 
-## What is this?
+## Overview
 
-A monorepo providing:
+This is a systems programming monorepo centered around a custom C99 standard library. The base layer provides arena allocators, length-prefixed strings (`String8`), and explicit integer types (`u8`, `u64`, `s64`) as alternatives to malloc/free, null-terminated strings, and standard C integer types.
 
-- **Custom standard library** - Arena allocators, length-prefixed strings, explicit types
-- **9P protocol implementation** - Client and server for the [Plan 9 File Protocol](https://9fans.github.io/plan9port/man/man9/intro.html)
-- **Command-line tools** - 9P mount utilities and file servers
-- **System configuration** - NixOS and Home Manager configs
+Built on this foundation are additional components: a [9P protocol](https://9fans.github.io/plan9port/man/man9/intro.html) implementation, command-line utilities for 9P filesystems, and NixOS/Home Manager system configurations.
 
-Replaces unsafe C stdlib patterns with safer abstractions: arena allocators instead of malloc/free, length-prefixed strings instead of null-terminated, explicit types instead of int/long.
+The codebase uses a layered architecture with explicit dependencies, unity builds for compilation, and namespace prefixes for code organization.
 
 ## Quick Start
 
@@ -36,15 +33,16 @@ Development environment loads automatically via direnv, or manually with `nix de
 
 ## Architecture
 
-Layered codebase with directed acyclic graph of dependencies. Each layer uses namespace prefixes to identify ownership.
+The codebase is organized into layers that depend on each other in a directed acyclic graph. Layers correspond with namespace prefixes - short identifiers (1-3 characters) followed by an underscore that identify which layer code belongs to.
 
+**Layer dependency graph:**
 ```
-base/     Custom standard library (foundation, no dependencies)
+base/     Custom standard library (no dependencies)
 9p/       9P protocol implementation (depends on base/)
 cmd/      Command-line tools (depend on base/ and 9p/)
 ```
 
-**Unity builds:** Each layer has `inc.h` (includes all `.h`) and `inc.c` (includes all `.c`). Binaries include both to compile everything together.
+**Unity builds:** Each layer contains `inc.h` (includes all header files) and `inc.c` (includes all implementation files). Applications include these to compile the entire layer at once, improving compilation speed and enabling whole-program optimization.
 
 ## Documentation
 
@@ -71,23 +69,30 @@ cmd/      Command-line tools (depend on base/ and 9p/)
 
 ## Project Structure
 
+**Source code:**
 ```
-base/           Custom standard library
-9p/             9P protocol client and server
-cmd/            Command-line binaries
-packages/       Nix package definitions
-flake-parts/    Modular Nix flake configuration
-home/           Home Manager user configs
-nixos/          NixOS system configs
-docs/           Conceptual documentation
+base/           Custom standard library (arena allocators, strings, OS abstraction)
+9p/             9P protocol implementation (client, server, message encoding)
+cmd/            Command-line binaries (9mount, 9bind, ramfs, etc.)
+docs/           Architecture and design documentation
+```
+
+**Build and configuration:**
+```
+flake-parts/    Modular Nix flake configuration (shells, packages, pre-commit)
+home/           Home Manager user environment configurations
+nixos/          NixOS system configurations
+packages/       Nix package definitions for each binary
 ```
 
 ## Coding Standards
 
-- Arena allocators over malloc/free
-- `String8` over `char*`
-- Explicit types (`u8`, `u64`, `s64`) over `int`/`long`
-- Unity builds - add files to layer's `inc.h`/`inc.c`
-- Follow namespace conventions
+When writing code, use base layer abstractions:
 
-See **[CLAUDE.md](CLAUDE.md)** for complete standards.
+- **Arena allocators** (`arena_alloc`, `temp_begin`/`temp_end`) instead of malloc/free
+- **Length-prefixed strings** (`String8`) instead of null-terminated `char*`
+- **Explicit types** (`u8`, `u64`, `s64`, `f32`, etc.) instead of int/long/float
+- **Unity builds** - add new files to the layer's `inc.h` (for headers) and `inc.c` (for implementation)
+- **Namespace conventions** - prefix functions and types with the layer's namespace
+
+Complete standards and layer descriptions are in **[CLAUDE.md](CLAUDE.md)**.
