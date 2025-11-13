@@ -8,16 +8,16 @@
 // clang-format on
 
 static b32
-mountedby(Arena *a, String8 mntopts, String8 user)
+is_mounted_by_user(Arena *arena, String8 mount_options, String8 username)
 {
-	String8List opts = str8_split(a, mntopts, (u8 *)",", 1, 0);
-	for(String8Node *node = opts.first; node != 0; node = node->next)
+	String8List options = str8_split(arena, mount_options, (u8 *)",", 1, 0);
+	for(String8Node *node = options.first; node != 0; node = node->next)
 	{
-		String8 opt = node->string;
-		if(str8_find_needle(opt, 0, str8_lit("uname="), 0) == 0)
+		String8 option = node->string;
+		if(str8_find_needle(option, 0, str8_lit("uname="), 0) == 0)
 		{
-			String8 uname = str8_skip(opt, 6);
-			return str8_match(uname, user, 0);
+			String8 option_username = str8_skip(option, 6);
+			return str8_match(option_username, username, 0);
 		}
 	}
 	return 0;
@@ -37,63 +37,63 @@ entry_point(CmdLine *cmd_line)
 	}
 	else
 	{
-		uid_t uid = getuid();
-		struct passwd *pw = getpwuid(uid);
-		if(pw == 0)
+		uid_t user_id = getuid();
+		struct passwd *user_info = getpwuid(user_id);
+		if(user_info == 0)
 		{
-			log_errorf("9umount: unknown uid %d\n", uid);
+			log_errorf("9umount: unknown uid %d\n", user_id);
 		}
 		else
 		{
 			for(String8Node *node = cmd_line->inputs.first; node != 0; node = node->next)
 			{
-				String8 mtpt = node->string;
-				String8 path = os_full_path_from_path(scratch.arena, mtpt);
+				String8 mount_point = node->string;
+				String8 path = os_full_path_from_path(scratch.arena, mount_point);
 				if(path.size == 0)
 				{
-					log_errorf("9umount: %S: %s\n", mtpt, strerror(errno));
+					log_errorf("9umount: %S: %s\n", mount_point, strerror(errno));
 					continue;
 				}
-				FILE *fp = setmntent("/proc/mounts", "r");
-				if(fp == 0)
+				FILE *mounts_file = setmntent("/proc/mounts", "r");
+				if(mounts_file == 0)
 				{
 					log_errorf("9umount: could not open /proc/mounts: %s\n", strerror(errno));
 					break;
 				}
-				b32 ok = 0;
+				b32 found_mount = 0;
 				for(;;)
 				{
-					struct mntent *mnt = getmntent(fp);
-					if(mnt == 0)
+					struct mntent *mount_entry = getmntent(mounts_file);
+					if(mount_entry == 0)
 					{
 						break;
 					}
-					String8 mntdir = str8_cstring(mnt->mnt_dir);
-					if(str8_match(path, mntdir, 0))
+					String8 mount_directory = str8_cstring(mount_entry->mnt_dir);
+					if(str8_match(path, mount_directory, 0))
 					{
-						ok = 1;
-						String8 mnttype = str8_cstring(mnt->mnt_type);
-						String8 mntopts = str8_cstring(mnt->mnt_opts);
-						String8 homedir = str8_cstring(pw->pw_dir);
-						String8 user = str8_cstring(pw->pw_name);
-						b32 inhome = (str8_find_needle(mntdir, 0, homedir, 0) == 0);
-						if(!inhome && !str8_match(mnttype, str8_lit("9p"), 0))
+						found_mount = 1;
+						String8 mount_type = str8_cstring(mount_entry->mnt_type);
+						String8 mount_options = str8_cstring(mount_entry->mnt_opts);
+						String8 home_directory = str8_cstring(user_info->pw_dir);
+						String8 username = str8_cstring(user_info->pw_name);
+						b32 in_home_directory = (str8_find_needle(mount_directory, 0, home_directory, 0) == 0);
+						if(!in_home_directory && !str8_match(mount_type, str8_lit("9p"), 0))
 						{
 							log_errorf("9umount: %S: refusing to unmount non-9p fs\n", path);
 						}
-						else if(!inhome && !mountedby(scratch.arena, mntopts, user))
+						else if(!in_home_directory && !is_mounted_by_user(scratch.arena, mount_options, username))
 						{
 							log_errorf("9umount: %S: not mounted by you\n", path);
 						}
-						else if(umount(mnt->mnt_dir))
+						else if(umount(mount_entry->mnt_dir))
 						{
-							log_errorf("9umount: umount %S: %s\n", mntdir, strerror(errno));
+							log_errorf("9umount: umount %S: %s\n", mount_directory, strerror(errno));
 						}
 						break;
 					}
 				}
-				endmntent(fp);
-				if(!ok)
+				endmntent(mounts_file);
+				if(!found_mount)
 				{
 					log_errorf("9umount: %S not found in /proc/mounts\n", path);
 				}

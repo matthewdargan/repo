@@ -4,6 +4,7 @@
 // 9P Includes
 // clang-format off
 #include "core.h"
+#include "dial.h"
 #include "client.h"
 #include "server.h"
 // clang-format on

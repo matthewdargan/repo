@@ -6,11 +6,15 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/limits.h>
+#include <netdb.h>
+#include <netinet/tcp.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -94,6 +98,13 @@ static b32 os_file_path_exists(String8 path);
 static b32 os_directory_path_exists(String8 path);
 static OS_FileProperties os_properties_from_file_path(String8 path);
 static b32 os_make_directory(String8 path);
+
+// Socket Operations
+static OS_Handle os_socket_connect_tcp(String8 host, u16 port);
+static OS_Handle os_socket_connect_unix(String8 path);
+static OS_Handle os_socket_listen_tcp(u16 port);
+static OS_Handle os_socket_listen_unix(String8 path);
+static OS_Handle os_socket_accept(OS_Handle listen_socket);
 
 // Time
 static u64 os_now_microseconds(void);

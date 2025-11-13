@@ -11,7 +11,6 @@
 #include "thread_context.h"
 #include "command_line.h"
 #include "os.h"
-#include "socket.h"
 #include "log.h"
 #include "entry_point.h"
 // clang-format on

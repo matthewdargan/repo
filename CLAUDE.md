@@ -33,8 +33,7 @@ The foundation layer. Provides custom implementations of common functionality wi
 - **`string.c/h`** - Length-prefixed string operations (String8, no null termination)
 - **`thread_context.c/h`** - Thread-local context management
 - **`command_line.c/h`** - Command-line argument parsing
-- **`os.c/h`** - Operating system abstraction (files, directories, time, processes)
-- **`socket.c/h`** - Network socket operations
+- **`os.c/h`** - Operating system abstraction (files, directories, memory, sockets, time)
 - **`log.c/h`** - Logging utilities
 - **`entry_point.c/h`** - Program entry point abstraction
 - **`inc.h/inc.c`** - Unity build includes (all `.h` and `.c` files respectively)
@@ -44,6 +43,7 @@ The foundation layer. Provides custom implementations of common functionality wi
 Implementation of the 9P protocol for network file systems.
 
 - **`core.c/h`** - 9P protocol message encoding/decoding (Fcalls)
+- **`dial.c/h`** - Dial string parsing and connection management
 - **`client.c/h`** - 9P client implementation
 - **`srv.c/h`** - 9P server utilities
 - **`inc.h/inc.c`** - Unity build includes for the layer

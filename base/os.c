@@ -225,7 +225,7 @@ os_file_open(OS_AccessFlags flags, String8 path)
 		lnx_flags |= O_CREAT;
 	}
 	int fd = open((char *)path_copy.str, lnx_flags, 0755);
-	OS_Handle handle = {0};
+	OS_Handle handle = os_handle_zero();
 	if(fd != -1)
 	{
 		handle.u64[0] = fd;
@@ -419,6 +419,249 @@ os_make_directory(String8 path)
 	}
 	scratch_end(scratch);
 	return result;
+}
+
+// Socket Operations
+static OS_Handle
+os_socket_connect_tcp(String8 host, u16 port)
+{
+	char host_buffer[1024] = {0};
+	if(host.size == 0)
+	{
+		MemoryCopy(host_buffer, "localhost", 9);
+		host_buffer[9] = 0;
+	}
+	else
+	{
+		if(host.size >= sizeof host_buffer)
+		{
+			return os_handle_zero();
+		}
+		MemoryCopy(host_buffer, host.str, host.size);
+		host_buffer[host.size] = 0;
+	}
+	if(port == 0)
+	{
+		return os_handle_zero();
+	}
+
+	struct addrinfo hints = {0};
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	struct addrinfo *addrinfo_result = 0;
+	if(getaddrinfo(host_buffer, 0, &hints, &addrinfo_result) != 0)
+	{
+		return os_handle_zero();
+	}
+
+	int fd = -1;
+	for(struct addrinfo *address_info = addrinfo_result; address_info != 0; address_info = address_info->ai_next)
+	{
+		switch(address_info->ai_family)
+		{
+			case AF_INET:
+			{
+				((struct sockaddr_in *)address_info->ai_addr)->sin_port = htons(port);
+			}
+			break;
+			case AF_INET6:
+			{
+				((struct sockaddr_in6 *)address_info->ai_addr)->sin6_port = htons(port);
+			}
+			break;
+			default:
+			{
+				continue;
+			}
+		}
+		fd = socket(address_info->ai_family, address_info->ai_socktype, address_info->ai_protocol);
+		if(fd < 0)
+		{
+			continue;
+		}
+		int option = 1;
+		setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &option, sizeof option);
+		if(connect(fd, address_info->ai_addr, address_info->ai_addrlen) == 0)
+		{
+			break;
+		}
+		close(fd);
+		fd = -1;
+	}
+	freeaddrinfo(addrinfo_result);
+
+	if(fd < 0)
+	{
+		return os_handle_zero();
+	}
+	OS_Handle handle = os_handle_zero();
+	handle.u64[0] = fd;
+	return handle;
+}
+
+static OS_Handle
+os_socket_connect_unix(String8 path)
+{
+	if(path.size == 0)
+	{
+		return os_handle_zero();
+	}
+	char path_buffer[1024] = {0};
+	if(path.size >= sizeof path_buffer)
+	{
+		return os_handle_zero();
+	}
+	MemoryCopy(path_buffer, path.str, path.size);
+	path_buffer[path.size] = 0;
+
+	int fd = open(path_buffer, O_RDWR);
+	if(fd >= 0)
+	{
+		OS_Handle handle = os_handle_zero();
+		handle.u64[0] = fd;
+		return handle;
+	}
+
+	fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(fd < 0)
+	{
+		return os_handle_zero();
+	}
+	struct sockaddr_un unix_address = {0};
+	unix_address.sun_family = AF_UNIX;
+	if(path.size >= sizeof unix_address.sun_path)
+	{
+		close(fd);
+		return os_handle_zero();
+	}
+	MemoryCopy(unix_address.sun_path, path.str, path.size);
+
+	if(connect(fd, (struct sockaddr *)&unix_address, sizeof unix_address) < 0)
+	{
+		close(fd);
+		return os_handle_zero();
+	}
+	OS_Handle handle = os_handle_zero();
+	handle.u64[0] = fd;
+	return handle;
+}
+
+static OS_Handle
+os_socket_listen_tcp(u16 port)
+{
+	if(port == 0)
+	{
+		return os_handle_zero();
+	}
+	char port_buffer[6] = {0};
+	snprintf(port_buffer, sizeof port_buffer, "%u", port);
+
+	struct addrinfo hints = {0};
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_flags = AI_PASSIVE;
+	struct addrinfo *addrinfo_result;
+	if(getaddrinfo(0, port_buffer, &hints, &addrinfo_result) != 0)
+	{
+		return os_handle_zero();
+	}
+
+	int fd = socket(addrinfo_result->ai_family, addrinfo_result->ai_socktype, addrinfo_result->ai_protocol);
+	if(fd < 0)
+	{
+		freeaddrinfo(addrinfo_result);
+		return os_handle_zero();
+	}
+	int option = 1;
+	if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &option, sizeof option) < 0)
+	{
+		close(fd);
+		freeaddrinfo(addrinfo_result);
+		return os_handle_zero();
+	}
+	if(bind(fd, addrinfo_result->ai_addr, addrinfo_result->ai_addrlen) < 0)
+	{
+		close(fd);
+		freeaddrinfo(addrinfo_result);
+		return os_handle_zero();
+	}
+	freeaddrinfo(addrinfo_result);
+
+	if(listen(fd, 128) < 0)
+	{
+		close(fd);
+		return os_handle_zero();
+	}
+	OS_Handle handle = os_handle_zero();
+	handle.u64[0] = fd;
+	return handle;
+}
+
+static OS_Handle
+os_socket_listen_unix(String8 path)
+{
+	if(path.size == 0)
+	{
+		return os_handle_zero();
+	}
+	char path_buffer[1024] = {0};
+	if(path.size >= sizeof path_buffer)
+	{
+		return os_handle_zero();
+	}
+	MemoryCopy(path_buffer, path.str, path.size);
+	path_buffer[path.size] = 0;
+	unlink(path_buffer);
+
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(fd < 0)
+	{
+		return os_handle_zero();
+	}
+	struct sockaddr_un unix_address = {0};
+	unix_address.sun_family = AF_UNIX;
+	if(path.size >= sizeof unix_address.sun_path)
+	{
+		close(fd);
+		return os_handle_zero();
+	}
+	MemoryCopy(unix_address.sun_path, path.str, path.size);
+
+	if(bind(fd, (struct sockaddr *)&unix_address, sizeof unix_address) < 0)
+	{
+		close(fd);
+		return os_handle_zero();
+	}
+	if(listen(fd, 128) < 0)
+	{
+		close(fd);
+		unlink(path_buffer);
+		return os_handle_zero();
+	}
+
+	OS_Handle handle = os_handle_zero();
+	handle.u64[0] = fd;
+	return handle;
+}
+
+static OS_Handle
+os_socket_accept(OS_Handle listen_socket)
+{
+	if(os_handle_match(listen_socket, os_handle_zero()))
+	{
+		return os_handle_zero();
+	}
+	int listen_fd = (int)listen_socket.u64[0];
+	int connection_fd = accept(listen_fd, 0, 0);
+	if(connection_fd < 0)
+	{
+		return os_handle_zero();
+	}
+	int option = 1;
+	setsockopt(connection_fd, IPPROTO_TCP, TCP_NODELAY, &option, sizeof option);
+	OS_Handle handle = os_handle_zero();
+	handle.u64[0] = connection_fd;
+	return handle;
 }
 
 // Time

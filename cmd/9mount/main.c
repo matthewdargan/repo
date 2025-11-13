@@ -1,34 +1,11 @@
-#include <pwd.h>
 #include <sys/mount.h>
 
 // clang-format off
 #include "base/inc.h"
+#include "9p/inc.h"
 #include "base/inc.c"
+#include "9p/inc.c"
 // clang-format on
-
-static String8
-resolvehost(Arena *a, String8 host)
-{
-	String8 host_copy = str8_copy(a, host);
-	struct addrinfo *ai = 0;
-	int ret = getaddrinfo((char *)host_copy.str, 0, 0, &ai);
-	if(ret != 0)
-	{
-		log_errorf("9mount: getaddrinfo %S: %s\n", host, gai_strerror(ret));
-		return str8_zero();
-	}
-	char ipbuf[INET6_ADDRSTRLEN] = {0};
-	ret = getnameinfo(ai->ai_addr, ai->ai_addrlen, ipbuf, sizeof ipbuf, 0, 0, NI_NUMERICHOST);
-	if(ret != 0)
-	{
-		log_errorf("9mount: getnameinfo: %s\n", gai_strerror(ret));
-		freeaddrinfo(ai);
-		return str8_zero();
-	}
-	String8 s = str8_copy(a, str8_cstring(ipbuf));
-	freeaddrinfo(ai);
-	return s;
-}
 
 static void
 entry_point(CmdLine *cmd_line)
@@ -56,6 +33,7 @@ entry_point(CmdLine *cmd_line)
 		String8 mtpt_copy = str8_copy(scratch.arena, mtpt);
 		uid_t uid = uidstr.size > 0 ? (uid_t)u64_from_str8(uidstr, 10) : getuid();
 		gid_t gid = gidstr.size > 0 ? (gid_t)u64_from_str8(gidstr, 10) : getgid();
+
 		struct passwd *pw = getpwuid(uid);
 		if(pw == 0)
 		{
@@ -77,6 +55,7 @@ entry_point(CmdLine *cmd_line)
 				String8List opts = {0};
 				String8 addr = str8_zero();
 				b32 addr_ok = 1;
+
 				if(str8_match(dial, str8_lit("-"), 0))
 				{
 					addr = str8_lit("nodev");
@@ -84,44 +63,33 @@ entry_point(CmdLine *cmd_line)
 				}
 				else
 				{
-					Netaddr na = netaddr(scratch.arena, dial, str8_lit("tcp"), str8_lit("9pfs"));
-					if(na.net.size == 0)
+					Dial9PAddress address = dial9p_parse(scratch.arena, dial, str8_lit("tcp"), str8_lit("9pfs"));
+					if(address.host.size == 0)
 					{
 						log_errorf("9mount: invalid dial string %S\n", dial);
 						addr_ok = 0;
 					}
-					else if(na.isunix)
+					else if(address.protocol == Dial9PProtocol_Unix)
 					{
-						addr = na.host;
-						if(str8_match(na.net, str8_lit("virtio"), 0))
-						{
-							str8_list_push(scratch.arena, &opts, str8_lit("trans=virtio"));
-						}
-						else
-						{
-							str8_list_push(scratch.arena, &opts, str8_lit("trans=unix"));
-						}
+						addr = address.host;
+						str8_list_push(scratch.arena, &opts, str8_lit("trans=unix"));
 					}
-					else if(str8_match(na.net, str8_lit("tcp"), 0))
+					else if(address.protocol == Dial9PProtocol_TCP)
 					{
-						addr = resolvehost(scratch.arena, na.host);
-						if(addr.size == 0)
-						{
-							addr_ok = 0;
-						}
-						else if(na.port == 0)
+						addr = address.host;
+						if(address.port == 0)
 						{
 							log_error(str8_lit("9mount: port resolution failed\n"));
 							addr_ok = 0;
 						}
 						else
 						{
-							str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "trans=tcp,port=%llu", na.port));
+							str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "trans=tcp,port=%llu", address.port));
 						}
 					}
 					else
 					{
-						log_errorf("9mount: unsupported network type %S\n", na.net);
+						log_error(str8_lit("9mount: unsupported protocol\n"));
 						addr_ok = 0;
 					}
 				}
@@ -145,6 +113,7 @@ entry_point(CmdLine *cmd_line)
 							str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "msize=%llu", msize));
 						}
 					}
+
 					if(msizestr.size == 0 || u64_from_str8(msizestr, 10) != 0)
 					{
 						str8_list_push(scratch.arena, &opts, str8_lit("noextend"));
@@ -157,12 +126,14 @@ entry_point(CmdLine *cmd_line)
 						{
 							str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "access=%d", uid));
 						}
+
 						StringJoin join = {0};
 						join.pre = str8_zero();
 						join.sep = str8_lit(",");
 						join.post = str8_zero();
 						String8 optstr = str8_list_join(scratch.arena, &opts, &join);
 						String8 addr_copy = str8_copy(scratch.arena, addr);
+
 						if(dryrun)
 						{
 							log_infof("mount -t 9p -o %S %S %S\n", optstr, addr, mtpt);
