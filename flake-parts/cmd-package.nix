@@ -24,11 +24,17 @@
     releaseFlags = "-O3 -I. -g -Wall -Wextra -DBUILD_DEBUG=0";
     debugFlags = "-O0 -I. -g -fsanitize=address -fno-omit-frame-pointer -Wall -Wextra -DBUILD_DEBUG=1";
 
-    mkVariant = flags: extraAttrs:
+    mkVariant = flags: extraAttrs: let
+      buildMode =
+        if lib.hasInfix "BUILD_DEBUG=1" flags
+        then "debug mode"
+        else "release mode";
+    in
       pkgs.clangStdenv.mkDerivation (commonAttrs
         // {
           buildPhase = ''
             runHook preBuild
+            echo "[${buildMode}]"
             clang ${flags} cmd/${pname}/main.c -o ${binaryName}
             runHook postBuild
           '';

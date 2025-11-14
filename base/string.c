@@ -525,6 +525,14 @@ str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_
 	return result;
 }
 
+// String <-> DateTime Conversions
+static String8
+str8_from_datetime(Arena *arena, DateTime dt)
+{
+	String8 result = str8f(arena, "%04u-%02u-%02u %02u:%02u:%02u", dt.year, dt.mon, dt.day, dt.hour, dt.min, dt.sec);
+	return result;
+}
+
 // String List Construction Functions
 static String8Node *
 str8_list_push_node(String8List *list, String8Node *node, String8 string)

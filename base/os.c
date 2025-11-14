@@ -354,7 +354,14 @@ os_full_path_from_path(Arena *arena, String8 path)
 	Temp scratch = scratch_begin(&arena, 1);
 	String8 path_copy = str8_copy(scratch.arena, path);
 	char buffer[PATH_MAX] = {0};
-	realpath((char *)path_copy.str, buffer);
+	char *resolved = realpath((char *)path_copy.str, buffer);
+	if(resolved == 0)
+	{
+		// If realpath fails, return the original path
+		String8 result = str8_copy(arena, path);
+		scratch_end(scratch);
+		return result;
+	}
 	String8 result = str8_copy(arena, str8_cstring(buffer));
 	scratch_end(scratch);
 	return result;

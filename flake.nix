@@ -36,6 +36,7 @@
     flake-parts.lib.mkFlake {inherit inputs;} {
       systems = ["x86_64-linux"];
       imports = [
+        ./flake-parts/checks.nix
         ./flake-parts/pre-commit.nix
         ./flake-parts/shells.nix
         ./home/configurations

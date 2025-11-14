@@ -125,6 +125,9 @@ static u32 u32_from_str8(String8 string, u32 radix);
 static b32 try_u64_from_str8(String8 string, u64 *x);
 static String8 str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_separator);
 
+// String <-> DateTime Conversions
+static String8 str8_from_datetime(Arena *arena, DateTime dt);
+
 // String List Construction Functions
 static String8Node *str8_list_push_node(String8List *list, String8Node *node, String8 string);
 static String8Node *str8_list_push(Arena *arena, String8List *list, String8 string);

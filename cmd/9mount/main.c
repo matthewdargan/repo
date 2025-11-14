@@ -7,6 +7,29 @@
 #include "9p/inc.c"
 // clang-format on
 
+static String8
+resolve_host(Arena *arena, String8 host)
+{
+	String8 host_copy = str8_copy(arena, host);
+	struct addrinfo *addr_info = 0;
+	int getaddr_result = getaddrinfo((char *)host_copy.str, 0, 0, &addr_info);
+	if(getaddr_result != 0)
+	{
+		return str8_zero();
+	}
+	char ip_buffer[INET6_ADDRSTRLEN] = {0};
+	int getname_result =
+	    getnameinfo(addr_info->ai_addr, addr_info->ai_addrlen, ip_buffer, sizeof(ip_buffer), 0, 0, NI_NUMERICHOST);
+	if(getname_result != 0)
+	{
+		freeaddrinfo(addr_info);
+		return str8_zero();
+	}
+	String8 result = str8_copy(arena, str8_cstring(ip_buffer));
+	freeaddrinfo(addr_info);
+	return result;
+}
+
 static void
 entry_point(CmdLine *cmd_line)
 {
@@ -14,52 +37,59 @@ entry_point(CmdLine *cmd_line)
 	Log *log = log_alloc();
 	log_select(log);
 	log_scope_begin();
-	b32 dryrun = cmd_line_has_flag(cmd_line, str8_lit("n"));
-	b32 singleattach = cmd_line_has_flag(cmd_line, str8_lit("s"));
-	b32 exclusive = cmd_line_has_flag(cmd_line, str8_lit("x"));
-	String8 aname = cmd_line_string(cmd_line, str8_lit("a"));
-	String8 msizestr = cmd_line_string(cmd_line, str8_lit("m"));
-	String8 uidstr = cmd_line_string(cmd_line, str8_lit("u"));
-	String8 gidstr = cmd_line_string(cmd_line, str8_lit("g"));
+	b32 dry_run = cmd_line_has_flag(cmd_line, str8_lit("dry-run"));
+	String8 attach_name = cmd_line_string(cmd_line, str8_lit("aname"));
+	String8 max_message_size_string = cmd_line_string(cmd_line, str8_lit("msize"));
+	String8 uid_string = cmd_line_string(cmd_line, str8_lit("uid"));
+	String8 gid_string = cmd_line_string(cmd_line, str8_lit("gid"));
 
 	if(cmd_line->inputs.node_count != 2)
 	{
-		log_error(str8_lit("usage: 9mount [-nsx] [-a=<spec>] [-m=<msize>] [-u=<uid>] [-g=<gid>] <dial> <mtpt>\n"));
+		log_error(str8_lit("usage: 9mount [options] <dial> <mtpt>\n"
+		                   "options:\n"
+		                   "  --dry-run               Print mount command without executing\n"
+		                   "  --aname=<path>          Remote path to attach (default: root)\n"
+		                   "  --msize=<bytes>         Maximum 9P message size\n"
+		                   "  --uid=<uid>             User ID for mount (default: current user)\n"
+		                   "  --gid=<gid>             Group ID for mount (default: current group)\n"
+		                   "arguments:\n"
+		                   "  <dial>                  Dial string (e.g., tcp!host!port)\n"
+		                   "  <mtpt>                  Local mount point directory\n"));
 	}
 	else
 	{
 		String8 dial = cmd_line->inputs.first->string;
-		String8 mtpt = cmd_line->inputs.first->next->string;
-		String8 mtpt_copy = str8_copy(scratch.arena, mtpt);
-		uid_t uid = uidstr.size > 0 ? (uid_t)u64_from_str8(uidstr, 10) : getuid();
-		gid_t gid = gidstr.size > 0 ? (gid_t)u64_from_str8(gidstr, 10) : getgid();
+		String8 mount_point = cmd_line->inputs.first->next->string;
+		String8 mount_point_copy = str8_copy(scratch.arena, mount_point);
+		uid_t uid = uid_string.size > 0 ? (uid_t)u64_from_str8(uid_string, 10) : getuid();
+		gid_t gid = gid_string.size > 0 ? (gid_t)u64_from_str8(gid_string, 10) : getgid();
 
-		struct passwd *pw = getpwuid(uid);
-		if(pw == 0)
+		struct passwd *passwd_entry = getpwuid(uid);
+		if(passwd_entry == 0)
 		{
 			log_errorf("9mount: unknown uid %d\n", uid);
 		}
 		else
 		{
-			struct stat st = {0};
-			if(stat((char *)mtpt_copy.str, &st) || access((char *)mtpt_copy.str, W_OK))
+			struct stat stat_result = {0};
+			if(stat((char *)mount_point_copy.str, &stat_result) || access((char *)mount_point_copy.str, W_OK))
 			{
-				log_errorf("9mount: %S: %s\n", mtpt, strerror(errno));
+				log_errorf("9mount: %S: %s\n", mount_point, strerror(errno));
 			}
-			else if(st.st_mode & S_ISVTX)
+			else if(stat_result.st_mode & S_ISVTX)
 			{
-				log_errorf("9mount: refusing to mount over sticky directory %S\n", mtpt);
+				log_errorf("9mount: refusing to mount over sticky directory %S\n", mount_point);
 			}
 			else
 			{
-				String8List opts = {0};
-				String8 addr = str8_zero();
-				b32 addr_ok = 1;
+				String8List mount_options = {0};
+				String8 device_address = str8_zero();
+				b32 address_valid = 1;
 
 				if(str8_match(dial, str8_lit("-"), 0))
 				{
-					addr = str8_lit("nodev");
-					str8_list_push(scratch.arena, &opts, str8_lit("trans=fd,rfdno=0,wrfdno=1"));
+					device_address = str8_lit("nodev");
+					str8_list_push(scratch.arena, &mount_options, str8_lit("trans=fd,rfdno=0,wrfdno=1"));
 				}
 				else
 				{
@@ -67,81 +97,75 @@ entry_point(CmdLine *cmd_line)
 					if(address.host.size == 0)
 					{
 						log_errorf("9mount: invalid dial string %S\n", dial);
-						addr_ok = 0;
+						address_valid = 0;
 					}
 					else if(address.protocol == Dial9PProtocol_Unix)
 					{
-						addr = address.host;
-						str8_list_push(scratch.arena, &opts, str8_lit("trans=unix"));
+						device_address = address.host;
+						str8_list_push(scratch.arena, &mount_options, str8_lit("trans=unix"));
 					}
 					else if(address.protocol == Dial9PProtocol_TCP)
 					{
-						addr = address.host;
-						if(address.port == 0)
+						device_address = resolve_host(scratch.arena, address.host);
+						if(device_address.size == 0)
+						{
+							address_valid = 0;
+						}
+						else if(address.port == 0)
 						{
 							log_error(str8_lit("9mount: port resolution failed\n"));
-							addr_ok = 0;
+							address_valid = 0;
 						}
 						else
 						{
-							str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "trans=tcp,port=%llu", address.port));
+							str8_list_push(scratch.arena, &mount_options, str8f(scratch.arena, "trans=tcp,port=%llu", address.port));
 						}
 					}
 					else
 					{
 						log_error(str8_lit("9mount: unsupported protocol\n"));
-						addr_ok = 0;
+						address_valid = 0;
 					}
 				}
-				if(addr_ok)
+				if(address_valid)
 				{
-					String8 user = str8_cstring(pw->pw_name);
-					str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "uname=%S", user));
-					if(aname.size > 0)
+					String8 user = str8_cstring(passwd_entry->pw_name);
+					str8_list_push(scratch.arena, &mount_options, str8f(scratch.arena, "uname=%S", user));
+					if(attach_name.size > 0)
 					{
-						str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "aname=%S", aname));
+						str8_list_push(scratch.arena, &mount_options, str8f(scratch.arena, "aname=%S", attach_name));
 					}
-					if(msizestr.size > 0)
+					if(max_message_size_string.size > 0)
 					{
-						u64 msize = u64_from_str8(msizestr, 10);
-						if(msize == 0)
+						u64 max_message_size = u64_from_str8(max_message_size_string, 10);
+						if(max_message_size == 0)
 						{
-							log_errorf("9mount: invalid msize %llu\n", msize);
+							log_errorf("9mount: invalid msize %llu\n", max_message_size);
 						}
 						else
 						{
-							str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "msize=%llu", msize));
+							str8_list_push(scratch.arena, &mount_options, str8f(scratch.arena, "msize=%llu", max_message_size));
 						}
 					}
 
-					if(msizestr.size == 0 || u64_from_str8(msizestr, 10) != 0)
+					str8_list_push(scratch.arena, &mount_options, str8_lit("noextend"));
+					str8_list_push(scratch.arena, &mount_options, str8f(scratch.arena, "dfltuid=%d,dfltgid=%d", uid, gid));
+
+					StringJoin join = {0};
+					join.pre = str8_zero();
+					join.sep = str8_lit(",");
+					join.post = str8_zero();
+					String8 option_string = str8_list_join(scratch.arena, &mount_options, &join);
+					String8 device_address_copy = str8_copy(scratch.arena, device_address);
+
+					if(dry_run)
 					{
-						str8_list_push(scratch.arena, &opts, str8_lit("noextend"));
-						str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "dfltuid=%d,dfltgid=%d", uid, gid));
-						if(singleattach)
-						{
-							str8_list_push(scratch.arena, &opts, str8_lit("access=any"));
-						}
-						else if(exclusive)
-						{
-							str8_list_push(scratch.arena, &opts, str8f(scratch.arena, "access=%d", uid));
-						}
-
-						StringJoin join = {0};
-						join.pre = str8_zero();
-						join.sep = str8_lit(",");
-						join.post = str8_zero();
-						String8 optstr = str8_list_join(scratch.arena, &opts, &join);
-						String8 addr_copy = str8_copy(scratch.arena, addr);
-
-						if(dryrun)
-						{
-							log_infof("mount -t 9p -o %S %S %S\n", optstr, addr, mtpt);
-						}
-						else if(mount((char *)addr_copy.str, (char *)mtpt_copy.str, "9p", 0, (char *)optstr.str))
-						{
-							log_errorf("9mount: mount failed: %s\n", strerror(errno));
-						}
+						log_infof("mount -t 9p -o %S %S %S\n", option_string, device_address, mount_point);
+					}
+					else if(mount((char *)device_address_copy.str, (char *)mount_point_copy.str, "9p", 0,
+					              (char *)option_string.str))
+					{
+						log_errorf("9mount: mount failed: %s\n", strerror(errno));
 					}
 				}
 			}

@@ -17,16 +17,17 @@ Build and run with Nix:
 ```sh
 # Build a tool
 nix build .#9p
-nix build .#ramfs
+nix build .#9pfs
 
 # Run directly
 nix run .#9mount
+nix run .#9pfs
 ```
 
 Use `-L` flag to see full build output including compiler errors:
 
 ```sh
-nix build .#9p -L
+nix build .#9pfs -L
 ```
 
 Development environment loads automatically via direnv, or manually with `nix develop`.
@@ -57,11 +58,12 @@ cmd/      Command-line tools (depend on base/ and 9p/)
 
 ### Tool Documentation
 
-- **[cmd/9mount/README.md](cmd/9mount/README.md)** - Mount 9P filesystems
+- **[cmd/9mount/README.md](cmd/9mount/README.md)** - Mount 9P filesystems via FUSE
 - **[cmd/9bind/README.md](cmd/9bind/README.md)** - Bind 9P namespaces
 - **[cmd/9umount/README.md](cmd/9umount/README.md)** - Unmount 9P filesystems
-- **[cmd/9p/README.md](cmd/9p/README.md)** - 9P protocol tool
-- **[cmd/ramfs/](cmd/ramfs/)** - In-memory 9P server (coming soon)
+- **[cmd/9p/README.md](cmd/9p/README.md)** - 9P protocol inspection tool
+- **[cmd/9pfs/](cmd/9pfs/)** - 9P file server (disk-backed with arena tmp/) (coming soon)
+- **[cmd/ramfs/](cmd/ramfs/)** - In-memory 9P server (arena-backed) (coming soon)
 
 ### Conceptual Documentation
 

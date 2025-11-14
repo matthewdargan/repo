@@ -4,4 +4,5 @@
 #include "dial.c"
 #include "client.c"
 #include "server.c"
+#include "fs.c"
 // clang-format on

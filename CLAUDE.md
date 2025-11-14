@@ -30,7 +30,7 @@ The foundation layer. Provides custom implementations of common functionality wi
 - **`core.c/h`** - Types, macros, helper functions (u8, u64, s64, Min/Max, asserts, linked list macros)
 - **`arena.c/h`** - Arena memory allocators (`Arena` for general use, `Temp` for scope-local)
 - **`math.c/h`** - Vector and matrix math (Vec2, Vec3, Mat3x3, Mat4x4)
-- **`string.c/h`** - Length-prefixed string operations (String8, no null termination)
+- **`string.c/h`** - Length-prefixed string operations (String8, conversions, formatting, lists)
 - **`thread_context.c/h`** - Thread-local context management
 - **`command_line.c/h`** - Command-line argument parsing
 - **`os.c/h`** - Operating system abstraction (files, directories, memory, sockets, time)
@@ -45,16 +45,19 @@ Implementation of the 9P protocol for network file systems.
 - **`core.c/h`** - 9P protocol message encoding/decoding (Fcalls)
 - **`dial.c/h`** - Dial string parsing and connection management
 - **`client.c/h`** - 9P client implementation
-- **`srv.c/h`** - 9P server utilities
+- **`server.c/h`** - 9P server implementation (request handling, response generation)
+- **`fs.c/h`** - Filesystem abstraction layer (path resolution, file operations, metadata, directory iteration)
 - **`inc.h/inc.c`** - Unity build includes for the layer
 
 ### `cmd/` - Command-line Tools
 
 - **`9p/`** - 9P protocol inspection tool
 - **`9bind/`** - Bind 9P namespace operations
-- **`9mount/`** - Mount 9P file systems
+- **`9mount/`** - Mount 9P file systems via FUSE
 - **`9umount/`** - Unmount 9P file systems
-- **`ramfs/`** - In-memory 9P file server
+- **`9pfs/`** - 9P file server (disk-backed with arena-based tmp/)
+- **`ramfs/`** - In-memory 9P file server (arena-backed)
+- **`9pfs-test/`** - Test program for 9P file server implementations
 
 ### `packages/` - Nix Packages
 
@@ -98,7 +101,7 @@ Pre-commit hooks run automatically on commit and enforce clang-format and lintin
 nix build .#<package>
 ```
 
-Examples: `nix build .#9p`, `nix build .#ramfs`, `nix build .#9mount`
+Examples: `nix build .#9p`, `nix build .#9pfs`, `nix build .#9mount`
 
 **Build with full output (see compiler errors/warnings):**
 ```sh
@@ -112,4 +115,20 @@ The `-L` flag prints the full build log. This is important for debugging build i
 nix run .#<package>
 ```
 
-Examples: `nix run .#9p`, `nix run .#ramfs`
+Examples: `nix run .#9p`, `nix run .#9pfs`
+
+## Testing
+
+**Run all checks:**
+```sh
+nix flake check
+```
+
+This runs all automated tests defined in `flake-parts/checks.nix`.
+
+**Run a specific check:**
+```sh
+nix build .#checks.x86_64-linux.9pfs-test -L
+```
+
+The `-L` flag shows full output, which is useful for debugging test failures.

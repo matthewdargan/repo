@@ -5,50 +5,47 @@ Mount a [9P filesystem](https://9fans.github.io/plan9port/man/man9/intro.html) a
 ## Usage
 
 ```sh
-9mount [-nsx] [-a=<spec>] [-m=<msize>] [-u=<uid>] [-g=<gid>] <dial> <mtpt>
+9mount [options] <dial> <mtpt>
 ```
-
-**Dial formats:**
-
-- `unix!SOCKET` - Unix domain socket
-- `tcp!HOST[!PORT]` - TCP connection
-- `virtio!CHANNEL` - Virtio-9p channel
-- `-` - stdin/stdout
 
 **Options:**
 
-- `-n` - Print mount command to stderr without mounting
-- `-s` - Single attach mode (all users see same filesystem)
-- `-x` - Exclusive access (no other users can access)
-- `-a=spec` - File tree to attach (for servers exporting multiple trees)
-- `-m=msize` - Maximum 9P message length in bytes
-- `-u=uid` - UID for mounting
-- `-g=gid` - GID for mounting
+- `--dry-run` - Print mount command without executing
+- `--aname=<path>` - Remote path to attach (default: root)
+- `--msize=<bytes>` - Maximum 9P message size
+- `--uid=<uid>` - User ID for mount (default: current user)
+- `--gid=<gid>` - Group ID for mount (default: current group)
+
+**Dial formats:**
+
+- `tcp!HOST!PORT` - TCP connection (hostname or IP)
+- `unix!SOCKET` - Unix domain socket
+- `-` - stdin/stdout
 
 ## Examples
 
-Mount Plan 9 sources archive:
+Mount a 9P server over TCP:
 
 ```sh
-9mount 'tcp!sources.cs.bell-labs.com' ~/n/sources
+9mount 'tcp!nas!564' ~/n/nas
 ```
 
 Mount via unix socket:
 
 ```sh
-9mount 'unix!/tmp/ns.'$USER'.:0/factotum' ~/n/factotum
+9mount 'unix!/tmp/9p.sock' ~/n/remote
 ```
 
 Mount with specific attach name:
 
 ```sh
-9mount -a='/home/user/mail' 'tcp!server!5640' ~/mail
+9mount --aname='/home/user/mail' 'tcp!server!5640' ~/mail
 ```
 
-Mount via virtio-9p:
+Dry run to see mount command:
 
 ```sh
-9mount 'virtio!share' ~/n/host
+9mount --dry-run 'tcp!localhost!5640' ~/n/test
 ```
 
 Mount via stdin/stdout:

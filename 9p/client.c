@@ -375,34 +375,53 @@ client9p_fid_pread(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset)
 		return -1;
 	}
 	u32 max_message_size = fid->client->max_message_size - P9_MESSAGE_HEADER_SIZE;
-	if(n > max_message_size)
+	u64 total_num_bytes_to_read = n;
+	u64 total_num_bytes_read = 0;
+	u64 total_num_bytes_left_to_read = total_num_bytes_to_read;
+	s64 current_offset = (offset == -1) ? fid->offset : offset;
+	for(; total_num_bytes_left_to_read > 0;)
 	{
-		n = max_message_size;
-	}
-	Message9P tx = msg9p_zero();
-	tx.type = Msg9P_Tread;
-	tx.fid = fid->fid;
-	tx.file_offset = (offset == -1) ? fid->offset : offset;
-	tx.byte_count = n;
-	Message9P rx = client9p_rpc(arena, fid->client, tx);
-	if(rx.type != Msg9P_Rread)
-	{
-		return -1;
-	}
-	s64 read_result = rx.payload_data.size;
-	if(read_result > (s64)n)
-	{
-		read_result = n;
-	}
-	if(read_result > 0)
-	{
-		MemoryCopy(buf, rx.payload_data.str, read_result);
-		if(offset == -1)
+		u64 chunk_size = total_num_bytes_left_to_read;
+		if(chunk_size > max_message_size)
 		{
-			fid->offset += read_result;
+			chunk_size = max_message_size;
+		}
+		Message9P tx = msg9p_zero();
+		tx.type = Msg9P_Tread;
+		tx.fid = fid->fid;
+		tx.file_offset = current_offset;
+		tx.byte_count = chunk_size;
+		Message9P rx = client9p_rpc(arena, fid->client, tx);
+		if(rx.type != Msg9P_Rread)
+		{
+			if(total_num_bytes_read == 0)
+			{
+				return -1;
+			}
+			break;
+		}
+		s64 read_result = rx.payload_data.size;
+		if(read_result > (s64)chunk_size)
+		{
+			read_result = chunk_size;
+		}
+		if(read_result > 0)
+		{
+			MemoryCopy((u8 *)buf + total_num_bytes_read, rx.payload_data.str, read_result);
+			total_num_bytes_read += read_result;
+			total_num_bytes_left_to_read -= read_result;
+			current_offset += read_result;
+			if(offset == -1)
+			{
+				fid->offset += read_result;
+			}
+		}
+		if(read_result < (s64)chunk_size)
+		{
+			break;
 		}
 	}
-	return read_result;
+	return total_num_bytes_read;
 }
 
 static s64
@@ -412,29 +431,8 @@ client9p_fid_read_range(Arena *arena, ClientFid9P *fid, void *buf, Rng1U64 range
 	{
 		return -1;
 	}
-	u64 total_num_bytes_to_read = dim_1u64(range);
-	u64 total_num_bytes_read = 0;
-	u64 total_num_bytes_left_to_read = total_num_bytes_to_read;
-	for(; total_num_bytes_left_to_read > 0;)
-	{
-		u64 offset = range.min + total_num_bytes_read;
-		s64 read_result =
-		    client9p_fid_pread(arena, fid, (u8 *)buf + total_num_bytes_read, total_num_bytes_left_to_read, offset);
-		if(read_result > 0)
-		{
-			total_num_bytes_read += read_result;
-			total_num_bytes_left_to_read -= read_result;
-		}
-		else
-		{
-			if(total_num_bytes_read == 0)
-			{
-				return read_result;
-			}
-			break;
-		}
-	}
-	return total_num_bytes_read;
+	u64 num_bytes = dim_1u64(range);
+	return client9p_fid_pread(arena, fid, buf, num_bytes, range.min);
 }
 
 static s64
@@ -500,29 +498,8 @@ client9p_fid_write_range(Arena *arena, ClientFid9P *fid, void *buf, Rng1U64 rang
 	{
 		return -1;
 	}
-	u64 total_num_bytes_to_write = dim_1u64(range);
-	u64 total_num_bytes_written = 0;
-	u64 total_num_bytes_left_to_write = total_num_bytes_to_write;
-	for(; total_num_bytes_left_to_write > 0;)
-	{
-		u64 offset = range.min + total_num_bytes_written;
-		s64 write_result =
-		    client9p_fid_pwrite(arena, fid, (u8 *)buf + total_num_bytes_written, total_num_bytes_left_to_write, offset);
-		if(write_result > 0)
-		{
-			total_num_bytes_written += write_result;
-			total_num_bytes_left_to_write -= write_result;
-		}
-		else
-		{
-			if(total_num_bytes_written == 0)
-			{
-				return write_result;
-			}
-			break;
-		}
-	}
-	return total_num_bytes_written;
+	u64 num_bytes = dim_1u64(range);
+	return client9p_fid_pwrite(arena, fid, buf, num_bytes, range.min);
 }
 
 static DirList9P
