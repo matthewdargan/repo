@@ -3,33 +3,20 @@
   self,
   ...
 }: {
-  flake.nixosConfigurations = {
-    nas = inputs.nixpkgs.lib.nixosSystem {
-      modules = [
-        ./nas
-      ];
-      specialArgs = {
-        inherit inputs self;
+  flake.nixosConfigurations = let
+    mkSystem = name:
+      inputs.nixpkgs.lib.nixosSystem {
+        modules = [
+          ./${name}
+        ];
+        specialArgs = {
+          inherit inputs self;
+        };
+        system = "x86_64-linux";
       };
-      system = "x86_64-linux";
-    };
-    router = inputs.nixpkgs.lib.nixosSystem {
-      modules = [
-        ./router
-      ];
-      specialArgs = {
-        inherit inputs self;
-      };
-      system = "x86_64-linux";
-    };
-    scoop = inputs.nixpkgs.lib.nixosSystem {
-      modules = [
-        ./scoop
-      ];
-      specialArgs = {
-        inherit inputs self;
-      };
-      system = "x86_64-linux";
-    };
+  in {
+    nas = mkSystem "nas";
+    router = mkSystem "router";
+    scoop = mkSystem "scoop";
   };
 }
