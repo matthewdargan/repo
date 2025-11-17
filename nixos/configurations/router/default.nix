@@ -14,7 +14,7 @@
   ];
   environment.systemPackages = [
     pkgs.iproute2
-    self.packages.${pkgs.system}.neovim
+    self.packages.${pkgs.stdenv.hostPlatform.system}.neovim
   ];
   system.stateVersion = "25.11";
   users.users.mpd = {

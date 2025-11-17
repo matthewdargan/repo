@@ -91,7 +91,7 @@
         after = ["network.target"];
         description = "9P filesystem server (debug)";
         serviceConfig = {
-          ExecStart = "${self.packages.${pkgs.system}."9pfs-debug"}/bin/9pfs --root=/media tcp!*!4500";
+          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs-debug"}/bin/9pfs --root=/media tcp!*!4500";
           Restart = "always";
           RestartSec = "5s";
           StandardError = "journal";
@@ -112,7 +112,7 @@
         group = "media";
         isNormalUser = true;
         linger = true;
-        packages = [self.packages.${pkgs.system}.neovim];
+        packages = [self.packages.${pkgs.stdenv.hostPlatform.system}.neovim];
         shell = pkgs.fish;
       };
       mpd = {

@@ -7,7 +7,7 @@
   programs.firefox = {
     enable = true;
     package = pkgs.firefox;
-    profiles.${config.home.username}.extensions.packages = with inputs.firefox-addons.packages.${pkgs.system}; [
+    profiles.${config.home.username}.extensions.packages = with inputs.firefox-addons.packages.${pkgs.stdenv.hostPlatform.system}; [
       bitwarden
       darkreader
       ublock-origin

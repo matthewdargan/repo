@@ -4,7 +4,7 @@
   ...
 }: {
   home.packages = [
-    inputs.ghostty.packages.${pkgs.system}.default
+    inputs.ghostty.packages.${pkgs.stdenv.hostPlatform.system}.default
     pkgs.liberation_ttf
   ];
   xdg.configFile."ghostty/config".text = ''
