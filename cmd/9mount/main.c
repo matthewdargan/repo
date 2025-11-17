@@ -86,46 +86,38 @@ entry_point(CmdLine *cmd_line)
 				String8 device_address = str8_zero();
 				b32 address_valid = 1;
 
-				if(str8_match(dial, str8_lit("-"), 0))
+				Dial9PAddress address = dial9p_parse(scratch.arena, dial, str8_lit("tcp"), str8_lit("9pfs"));
+				if(address.host.size == 0)
 				{
-					device_address = str8_lit("nodev");
-					str8_list_push(scratch.arena, &mount_options, str8_lit("trans=fd,rfdno=0,wrfdno=1"));
+					log_errorf("9mount: invalid dial string %S\n", dial);
+					address_valid = 0;
 				}
-				else
+				else if(address.protocol == Dial9PProtocol_Unix)
 				{
-					Dial9PAddress address = dial9p_parse(scratch.arena, dial, str8_lit("tcp"), str8_lit("9pfs"));
-					if(address.host.size == 0)
+					device_address = address.host;
+					str8_list_push(scratch.arena, &mount_options, str8_lit("trans=unix"));
+				}
+				else if(address.protocol == Dial9PProtocol_TCP)
+				{
+					device_address = resolve_host(scratch.arena, address.host);
+					if(device_address.size == 0)
 					{
-						log_errorf("9mount: invalid dial string %S\n", dial);
 						address_valid = 0;
 					}
-					else if(address.protocol == Dial9PProtocol_Unix)
+					else if(address.port == 0)
 					{
-						device_address = address.host;
-						str8_list_push(scratch.arena, &mount_options, str8_lit("trans=unix"));
-					}
-					else if(address.protocol == Dial9PProtocol_TCP)
-					{
-						device_address = resolve_host(scratch.arena, address.host);
-						if(device_address.size == 0)
-						{
-							address_valid = 0;
-						}
-						else if(address.port == 0)
-						{
-							log_error(str8_lit("9mount: port resolution failed\n"));
-							address_valid = 0;
-						}
-						else
-						{
-							str8_list_push(scratch.arena, &mount_options, str8f(scratch.arena, "trans=tcp,port=%llu", address.port));
-						}
+						log_error(str8_lit("9mount: port resolution failed\n"));
+						address_valid = 0;
 					}
 					else
 					{
-						log_error(str8_lit("9mount: unsupported protocol\n"));
-						address_valid = 0;
+						str8_list_push(scratch.arena, &mount_options, str8f(scratch.arena, "trans=tcp,port=%llu", address.port));
 					}
+				}
+				else
+				{
+					log_error(str8_lit("9mount: unsupported protocol\n"));
+					address_valid = 0;
 				}
 				if(address_valid)
 				{

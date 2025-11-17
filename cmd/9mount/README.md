@@ -20,7 +20,6 @@ Mount a [9P filesystem](https://9fans.github.io/plan9port/man/man9/intro.html) a
 
 - `tcp!HOST!PORT` - TCP connection (hostname or IP)
 - `unix!SOCKET` - Unix domain socket
-- `-` - stdin/stdout
 
 ## Examples
 
@@ -46,10 +45,4 @@ Dry run to see mount command:
 
 ```sh
 9mount --dry-run 'tcp!localhost!5640' ~/n/test
-```
-
-Mount via stdin/stdout:
-
-```sh
-u9fs | 9mount - ~/n/fs
 ```

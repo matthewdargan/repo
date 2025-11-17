@@ -1,6 +1,5 @@
 {
   config,
-  inputs,
   pkgs,
   self,
   ...
@@ -61,7 +60,7 @@
       "nas-mount" = {
         after = [
           "network-online.target"
-          "u9fs.socket"
+          "9pfs.service"
         ];
         description = "mount nas";
         serviceConfig = {
@@ -85,27 +84,22 @@
         wantedBy = ["multi-user.target"];
         wants = [
           "network-online.target"
-          "u9fs.socket"
+          "9pfs.service"
         ];
       };
-      "u9fs@" = {
+      "9pfs" = {
         after = ["network.target"];
-        description = "9P filesystem server";
+        description = "9P filesystem server (debug)";
         serviceConfig = {
-          ExecStart = "${inputs.u9fs.packages.${pkgs.system}.u9fs}/bin/u9fs -D -a none -u storage -d /media";
+          ExecStart = "${self.packages.${pkgs.system}."9pfs-debug"}/bin/9pfs --root=/media tcp!*!4500";
+          Restart = "always";
+          RestartSec = "5s";
           StandardError = "journal";
-          StandardInput = "socket";
+          StandardOutput = "journal";
           User = "storage";
         };
+        wantedBy = ["multi-user.target"];
       };
-    };
-    sockets.u9fs = {
-      description = "9P filesystem server socket";
-      socketConfig = {
-        Accept = "yes";
-        ListenStream = "4500";
-      };
-      wantedBy = ["sockets.target"];
     };
   };
   system.stateVersion = "25.05";

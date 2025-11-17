@@ -8,7 +8,7 @@
   in {
     packages = cmdPackage.mkCmdPackage {
       pname = "9pfs";
-      description = "9P filesystem server (u9fs replacement)";
+      description = "9P filesystem server";
       version = "0.1.0";
     };
   };

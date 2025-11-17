@@ -27,10 +27,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:cachix/pre-commit-hooks.nix";
     };
-    u9fs = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:justinrubek/u9fs";
-    };
   };
   outputs = {flake-parts, ...} @ inputs:
     flake-parts.lib.mkFlake {inherit inputs;} {
