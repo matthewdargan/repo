@@ -5,7 +5,10 @@
 #include "base/inc.c"
 // clang-format on
 
-static void
+////////////////////////////////
+//~ Entry Point
+
+internal void
 entry_point(CmdLine *cmd_line)
 {
 	Temp scratch = scratch_begin(0, 0);

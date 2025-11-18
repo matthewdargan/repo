@@ -1,7 +1,9 @@
 #ifndef CORE_H
 #define CORE_H
 
-// Foreign Includes
+////////////////////////////////
+//~ Includes
+
 // clang-format off
 #include <stdio.h>
 #include <stdarg.h>
@@ -9,16 +11,25 @@
 #include <stdint.h>
 // clang-format on
 
-// Third Party Includes
+////////////////////////////////
+//~ Third Party Includes
+
 #define STB_SPRINTF_DECORATE(name) base_##name
 #define STB_SPRINTF_STATIC
 #include "stb_sprintf.h"
 
-// Codebase Keywords
+////////////////////////////////
+//~ Codebase Keywords
+
+#define internal static
+#define global static
+#define local_persist static
 #define read_only __attribute__((section(".rodata")))
 #define thread_static __thread
 
-// Units
+////////////////////////////////
+//~ Units
+
 #define KB(n) (((u64)(n)) << 10)
 #define MB(n) (((u64)(n)) << 20)
 #define GB(n) (((u64)(n)) << 30)
@@ -27,18 +38,26 @@
 #define Million(n) ((n) * 1000000)
 #define Billion(n) ((n) * 1000000000)
 
-// Clamps, Mins, Maxes
+////////////////////////////////
+//~ Clamps, Mins, Maxes
+
 #define Min(A, B) (((A) < (B)) ? (A) : (B))
 #define Max(A, B) (((A) > (B)) ? (A) : (B))
 #define Clamp(A, X, B) (((X) < (A)) ? (A) : ((X) > (B)) ? (B) : (X))
 
-// Type -> Alignment
+////////////////////////////////
+//~ Type -> Alignment
+
 #define AlignOf(T) __alignof(T)
 
-// For-Loop Construct Macros
+////////////////////////////////
+//~ For-Loop Construct Macros
+
 #define DeferLoop(begin, end) for(int _i_ = ((begin), 0); !_i_; _i_ += 1, (end))
 
-// Memory Operation Macros
+////////////////////////////////
+//~ Memory Operation Macros
+
 #define MemoryCopy(dst, src, size) memmove((dst), (src), (size))
 #define MemorySet(dst, byte, size) memset((dst), (byte), (size))
 #define MemoryCompare(a, b, size) memcmp((a), (b), (size))
@@ -54,7 +73,11 @@
 #define MemoryMatchStruct(a, b) MemoryMatch((a), (b), sizeof(*(a)))
 #define MemoryMatchArray(a, b) MemoryMatch((a), (b), sizeof(a))
 
-// Asserts
+#define MemoryIsZeroStruct(ptr) memory_is_zero((ptr), sizeof(*(ptr)))
+
+////////////////////////////////
+//~ Asserts
+
 #define Trap() __builtin_trap()
 #define AssertAlways(x)                                                                                                \
 	do                                                                                                                   \
@@ -71,24 +94,25 @@
 #endif
 #define StaticAssert(C, ID) static u8 Glue(ID, __LINE__)[(C) ? 1 : -1]
 
-// Linked List Building Macros
+////////////////////////////////
+//~ Linked List Building Macros
 
-// linked list macro helpers
+//- linked list macro helpers
 #define CheckNil(nil, p) ((p) == 0 || (p) == nil)
 #define SetNil(nil, p) ((p) = nil)
 
-// singly-linked, doubly-headed lists (queues)
+//- singly-linked, doubly-headed lists (queues)
 #define SLLQueuePush_NZ(nil, f, l, n, next)                                                                            \
 	(CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((l)->next = (n), (l) = (n), SetNil(nil, (n)->next)))
 #define SLLQueuePushFront_NZ(nil, f, l, n, next)                                                                       \
 	(CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((n)->next = (f), (f) = (n)))
 #define SLLQueuePop_NZ(nil, f, l, next) ((f) == (l) ? (SetNil(nil, f), SetNil(nil, l)) : ((f) = (f)->next))
 
-// singly-linked, singly-headed lists (stacks)
+//- singly-linked, singly-headed lists (stacks)
 #define SLLStackPush_N(f, n, next) ((n)->next = (f), (f) = (n))
 #define SLLStackPop_N(f, next) ((f) = (f)->next)
 
-// singly-linked, doubly-headed list helpers
+//- singly-linked, doubly-headed list helpers
 #define SLLQueuePush_N(f, l, n, next) SLLQueuePush_NZ(0, f, l, n, next)
 #define SLLQueuePushFront_N(f, l, n, next) SLLQueuePushFront_NZ(0, f, l, n, next)
 #define SLLQueuePop_N(f, l, next) SLLQueuePop_NZ(0, f, l, next)
@@ -96,11 +120,13 @@
 #define SLLQueuePushFront(f, l, n) SLLQueuePushFront_NZ(0, f, l, n, next)
 #define SLLQueuePop(f, l) SLLQueuePop_NZ(0, f, l, next)
 
-// singly-linked, singly-headed list helpers
+//- singly-linked, singly-headed list helpers
 #define SLLStackPush(f, n) SLLStackPush_N(f, n, next)
 #define SLLStackPop(f) SLLStackPop_N(f, next)
 
-// Address Sanitizer Markup
+////////////////////////////////
+//~ Address Sanitizer Markup
+
 #if defined(__has_feature)
 #if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
 #define ASAN_ENABLED 1
@@ -117,7 +143,9 @@ void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
 #define AsanUnpoisonMemoryRegion(addr, size) ((void)(addr), (void)(size))
 #endif
 
-// Misc. Helper Macros
+////////////////////////////////
+//~ Misc. Helper Macros
+
 #define ArrayCount(a) (sizeof(a) / sizeof((a)[0]))
 #define AlignPow2(x, b) (((x) + (b) - 1) & (~((b) - 1)))
 #define Glue_(A, B) A##B
@@ -130,7 +158,9 @@ void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
 		b = t__;                                                                                                           \
 	} while(0)
 
-// Base Types
+////////////////////////////////
+//~ Base Types
+
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -146,7 +176,9 @@ typedef s64 b64;
 typedef float f32;
 typedef double f64;
 
-// Array Types
+////////////////////////////////
+//~ Array Types
+
 typedef struct U64Array U64Array;
 struct U64Array
 {
@@ -154,23 +186,27 @@ struct U64Array
 	u64 *v;
 };
 
-// Basic Constants
-static u64 max_u64 = 0xffffffffffffffffull;
-static u32 max_u32 = 0xffffffffu;
-static u16 max_u16 = 0xffff;
-static u8 max_u8 = 0xff;
+////////////////////////////////
+//~ Basic Constants
 
-static s64 max_s64 = 0x7fffffffffffffffll;
-static s32 max_s32 = 0x7fffffff;
-static s16 max_s16 = 0x7fff;
-static s8 max_s8 = 0x7f;
+global u64 max_u64 = 0xffffffffffffffffull;
+global u32 max_u32 = 0xffffffffu;
+global u16 max_u16 = 0xffff;
+global u8 max_u8 = 0xff;
 
-static s64 min_s64 = (s64)0x8000000000000000ull;
-static s32 min_s32 = (s32)0x80000000u;
-static s16 min_s16 = (s16)0x8000;
-static s8 min_s8 = (s8)0x80;
+global s64 max_s64 = 0x7fffffffffffffffll;
+global s32 max_s32 = 0x7fffffff;
+global s16 max_s16 = 0x7fff;
+global s8 max_s8 = 0x7f;
 
-// Time Types
+global s64 min_s64 = (s64)0x8000000000000000ull;
+global s32 min_s32 = (s32)0x80000000u;
+global s16 min_s16 = (s16)0x8000;
+global s8 min_s8 = (s8)0x80;
+
+////////////////////////////////
+//~ Time Types
+
 typedef struct DateTime DateTime;
 struct DateTime
 {
@@ -185,10 +221,12 @@ struct DateTime
 
 typedef u64 DenseTime;
 
-// Bit Patterns
-static u16 bswap_u16(u16 x);
-static u32 bswap_u32(u32 x);
-static u64 bswap_u64(u64 x);
+////////////////////////////////
+//~ Bit Patterns
+
+internal u16 bswap_u16(u16 x);
+internal u32 bswap_u32(u32 x);
+internal u64 bswap_u64(u64 x);
 
 #if ARCH_LITTLE_ENDIAN
 #define from_be_u16(x) bswap_u16(x)
@@ -206,16 +244,25 @@ static u64 bswap_u64(u64 x);
 #define from_le_u64(x) bswap_u64(x)
 #endif
 
-// Raw byte IO
-static u16 read_u16(void const *ptr);
-static u32 read_u32(void const *ptr);
-static u64 read_u64(void const *ptr);
-static void write_u16(void *ptr, u16 x);
-static void write_u32(void *ptr, u32 x);
-static void write_u64(void *ptr, u64 x);
+////////////////////////////////
+//~ Raw byte IO
 
-// Time Functions
-static DenseTime dense_time_from_date_time(DateTime dt);
-static DateTime date_time_from_dense_time(DenseTime t);
+internal u16 read_u16(void const *ptr);
+internal u32 read_u32(void const *ptr);
+internal u64 read_u64(void const *ptr);
+internal void write_u16(void *ptr, u16 x);
+internal void write_u32(void *ptr, u32 x);
+internal void write_u64(void *ptr, u64 x);
+
+////////////////////////////////
+//~ Memory Functions
+
+internal b32 memory_is_zero(void *ptr, u64 size);
+
+////////////////////////////////
+//~ Time Functions
+
+internal DenseTime dense_time_from_date_time(DateTime dt);
+internal DateTime date_time_from_dense_time(DenseTime t);
 
 #endif // CORE_H

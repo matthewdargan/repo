@@ -1,5 +1,7 @@
-// Dial String Parsing
-static u16
+////////////////////////////////
+//~ Dial String Parsing
+
+internal u16
 dial9p_resolve_port(String8 port, String8 protocol)
 {
 	if(str8_is_integer(port, 10))
@@ -35,7 +37,7 @@ dial9p_resolve_port(String8 port, String8 protocol)
 	return result;
 }
 
-static Dial9PAddress
+internal Dial9PAddress
 dial9p_parse(Arena *arena, String8 dial_string, String8 default_protocol, String8 default_port)
 {
 	Dial9PAddress result = {0};
@@ -117,8 +119,10 @@ dial9p_parse(Arena *arena, String8 dial_string, String8 default_protocol, String
 	return result;
 }
 
-// Dial Operations
-static OS_Handle
+////////////////////////////////
+//~ Dial Operations
+
+internal OS_Handle
 dial9p_connect(Arena *scratch, String8 dial_string, String8 default_protocol, String8 default_port)
 {
 	Dial9PAddress address = dial9p_parse(scratch, dial_string, default_protocol, default_port);
@@ -137,7 +141,7 @@ dial9p_connect(Arena *scratch, String8 dial_string, String8 default_protocol, St
 	return os_handle_zero();
 }
 
-static OS_Handle
+internal OS_Handle
 dial9p_listen(String8 dial_string, String8 default_protocol, String8 default_port)
 {
 	Temp scratch = scratch_begin(0, 0);

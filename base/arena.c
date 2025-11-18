@@ -1,5 +1,7 @@
-// Arena Functions
-static Arena *
+////////////////////////////////
+//~ Arena Functions
+
+internal Arena *
 arena_alloc(void)
 {
 	ArenaParams params = {0};
@@ -9,7 +11,7 @@ arena_alloc(void)
 	return arena_alloc_(params);
 }
 
-static Arena *
+internal Arena *
 arena_alloc_(ArenaParams params)
 {
 	// round up reserve/commit sizes
@@ -61,7 +63,7 @@ arena_alloc_(ArenaParams params)
 	return arena;
 }
 
-static void
+internal void
 arena_release(Arena *arena)
 {
 	for(Arena *n = arena->current, *prev = 0; n != 0; n = prev)
@@ -71,7 +73,7 @@ arena_release(Arena *arena)
 	}
 }
 
-static void *
+internal void *
 arena_push(Arena *arena, u64 size, u64 align, b32 zero)
 {
 	Arena *current = arena->current;
@@ -163,7 +165,7 @@ arena_push(Arena *arena, u64 size, u64 align, b32 zero)
 	return result;
 }
 
-static u64
+internal u64
 arena_pos(Arena *arena)
 {
 	Arena *current = arena->current;
@@ -171,7 +173,7 @@ arena_pos(Arena *arena)
 	return pos;
 }
 
-static void
+internal void
 arena_pop_to(Arena *arena, u64 pos)
 {
 	u64 big_pos = Max(ARENA_HEADER_SIZE, pos);
@@ -199,13 +201,13 @@ arena_pop_to(Arena *arena, u64 pos)
 	current->pos = new_pos;
 }
 
-static void
+internal void
 arena_clear(Arena *arena)
 {
 	arena_pop_to(arena, 0);
 }
 
-static void
+internal void
 arena_pop(Arena *arena, u64 amt)
 {
 	u64 pos_old = arena_pos(arena);
@@ -217,7 +219,7 @@ arena_pop(Arena *arena, u64 amt)
 	arena_pop_to(arena, pos_new);
 }
 
-static Temp
+internal Temp
 temp_begin(Arena *arena)
 {
 	u64 pos = arena_pos(arena);
@@ -225,7 +227,7 @@ temp_begin(Arena *arena)
 	return temp;
 }
 
-static void
+internal void
 temp_end(Temp temp)
 {
 	arena_pop_to(temp.arena, temp.pos);

@@ -1,5 +1,7 @@
-// Command Line Parsing Functions
-static CmdLineOpt **
+////////////////////////////////
+//~ Command Line Parsing Functions
+
+internal CmdLineOpt **
 cmd_line_slot_from_string(CmdLine *cmd_line, String8 string)
 {
 	CmdLineOpt **slot = 0;
@@ -12,7 +14,7 @@ cmd_line_slot_from_string(CmdLine *cmd_line, String8 string)
 	return slot;
 }
 
-static CmdLineOpt *
+internal CmdLineOpt *
 cmd_line_opt_from_slot(CmdLineOpt **slot, String8 string)
 {
 	CmdLineOpt *result = 0;
@@ -27,14 +29,14 @@ cmd_line_opt_from_slot(CmdLineOpt **slot, String8 string)
 	return result;
 }
 
-static void
+internal void
 cmd_line_push_opt(CmdLineOptList *list, CmdLineOpt *opt)
 {
 	SLLQueuePush(list->first, list->last, opt);
 	list->count += 1;
 }
 
-static CmdLineOpt *
+internal CmdLineOpt *
 cmd_line_insert_opt(Arena *arena, CmdLine *cmd_line, String8 string, String8List values)
 {
 	CmdLineOpt *var = 0;
@@ -62,7 +64,7 @@ cmd_line_insert_opt(Arena *arena, CmdLine *cmd_line, String8 string, String8List
 	return var;
 }
 
-static CmdLine
+internal CmdLine
 cmd_line_from_string_list(Arena *arena, String8List arguments)
 {
 	CmdLine parsed = {0};
@@ -167,13 +169,13 @@ cmd_line_from_string_list(Arena *arena, String8List arguments)
 	return parsed;
 }
 
-static CmdLineOpt *
+internal CmdLineOpt *
 cmd_line_opt_from_string(CmdLine *cmd_line, String8 name)
 {
 	return cmd_line_opt_from_slot(cmd_line_slot_from_string(cmd_line, name), name);
 }
 
-static String8List
+internal String8List
 cmd_line_strings(CmdLine *cmd_line, String8 name)
 {
 	String8List result = {0};
@@ -185,7 +187,7 @@ cmd_line_strings(CmdLine *cmd_line, String8 name)
 	return result;
 }
 
-static String8
+internal String8
 cmd_line_string(CmdLine *cmd_line, String8 name)
 {
 	String8 result = str8_zero();
@@ -197,13 +199,13 @@ cmd_line_string(CmdLine *cmd_line, String8 name)
 	return result;
 }
 
-static b32
+internal b32
 cmd_line_has_flag(CmdLine *cmd_line, String8 name)
 {
 	return cmd_line_opt_from_string(cmd_line, name) != 0;
 }
 
-static b32
+internal b32
 cmd_line_has_argument(CmdLine *cmd_line, String8 name)
 {
 	CmdLineOpt *var = cmd_line_opt_from_string(cmd_line, name);

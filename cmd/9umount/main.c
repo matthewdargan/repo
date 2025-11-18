@@ -7,7 +7,10 @@
 #include "base/inc.c"
 // clang-format on
 
-static b32
+////////////////////////////////
+//~ Helper Functions
+
+internal b32
 is_mounted_by_user(Arena *arena, String8 mount_options, String8 username)
 {
 	String8List options = str8_split(arena, mount_options, (u8 *)",", 1, 0);
@@ -23,7 +26,10 @@ is_mounted_by_user(Arena *arena, String8 mount_options, String8 username)
 	return 0;
 }
 
-static void
+////////////////////////////////
+//~ Entry Point
+
+internal void
 entry_point(CmdLine *cmd_line)
 {
 	Temp scratch = scratch_begin(0, 0);

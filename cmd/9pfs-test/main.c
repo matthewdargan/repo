@@ -5,20 +5,23 @@
 #include "9p/inc.c"
 // clang-format on
 
-static b32
+////////////////////////////////
+//~ Test Functions
+
+internal b32
 test_version(Client9P *client)
 {
 	return client != 0 && client->max_message_size > 0;
 }
 
-static b32
+internal b32
 test_stat_root(Arena *arena, Client9P *client)
 {
 	Dir9P dir = client9p_stat(arena, client, str8_zero());
 	return dir.name.size > 0 || dir.qid.type == QidTypeFlag_Directory;
 }
 
-static b32
+internal b32
 test_create_file(Arena *arena, Client9P *client, String8 name)
 {
 	ClientFid9P *fid = client9p_create(arena, client, name, P9_OpenFlag_ReadWrite, 0666);
@@ -30,7 +33,7 @@ test_create_file(Arena *arena, Client9P *client, String8 name)
 	return 1;
 }
 
-static ClientFid9P *
+internal ClientFid9P *
 test_open_or_create(Arena *arena, Client9P *client, String8 name, u32 mode, u32 perm)
 {
 	ClientFid9P *fid = client9p_open(arena, client, name, mode);
@@ -46,7 +49,7 @@ test_open_or_create(Arena *arena, Client9P *client, String8 name, u32 mode, u32 
 	return fid;
 }
 
-static b32
+internal b32
 test_write_read(Arena *arena, Client9P *client, String8 name, String8 data)
 {
 	ClientFid9P *fid = test_open_or_create(arena, client, name, P9_OpenFlag_ReadWrite | P9_OpenFlag_Truncate, 0666);
@@ -75,7 +78,7 @@ test_write_read(Arena *arena, Client9P *client, String8 name, String8 data)
 	return match;
 }
 
-static b32
+internal b32
 test_stat_file(Arena *arena, Client9P *client, String8 name, u64 expected_size)
 {
 	Dir9P dir = client9p_stat(arena, client, name);
@@ -86,7 +89,7 @@ test_stat_file(Arena *arena, Client9P *client, String8 name, u64 expected_size)
 	return dir.length == expected_size;
 }
 
-static b32
+internal b32
 test_wstat_chmod(Arena *arena, Client9P *client, String8 name, u32 mode)
 {
 	Dir9P dir = client9p_stat(arena, client, name);
@@ -104,7 +107,7 @@ test_wstat_chmod(Arena *arena, Client9P *client, String8 name, u32 mode)
 	return (new_dir.mode & 0777) == (mode & 0777);
 }
 
-static b32
+internal b32
 test_wstat_truncate(Arena *arena, Client9P *client, String8 name, u64 new_size)
 {
 	Dir9P dir = client9p_stat(arena, client, name);
@@ -122,7 +125,7 @@ test_wstat_truncate(Arena *arena, Client9P *client, String8 name, u64 new_size)
 	return new_dir.length == new_size;
 }
 
-static b32
+internal b32
 test_wstat_rename(Arena *arena, Client9P *client, String8 old_name, String8 new_name)
 {
 	Dir9P dir = client9p_stat(arena, client, old_name);
@@ -140,7 +143,7 @@ test_wstat_rename(Arena *arena, Client9P *client, String8 old_name, String8 new_
 	return new_dir.name.size > 0;
 }
 
-static b32
+internal b32
 test_create_directory(Arena *arena, Client9P *client, String8 name)
 {
 	ClientFid9P *fid = client9p_create(arena, client, name, P9_OpenFlag_Read, P9_ModeFlag_Directory | 0755);
@@ -153,7 +156,7 @@ test_create_directory(Arena *arena, Client9P *client, String8 name)
 	return dir.name.size > 0 && (dir.mode & P9_ModeFlag_Directory) != 0;
 }
 
-static b32
+internal b32
 test_readdir(Arena *arena, Client9P *client, String8 dir_name)
 {
 	ClientFid9P *fid = client9p_open(arena, client, dir_name, P9_OpenFlag_Read);
@@ -167,7 +170,7 @@ test_readdir(Arena *arena, Client9P *client, String8 dir_name)
 	return result;
 }
 
-static b32
+internal b32
 test_walk(Arena *arena, Client9P *client, String8 path)
 {
 	ClientFid9P *root = client->root;
@@ -181,13 +184,13 @@ test_walk(Arena *arena, Client9P *client, String8 path)
 	return result;
 }
 
-static b32
+internal b32
 test_remove(Arena *arena, Client9P *client, String8 name)
 {
 	return client9p_remove(arena, client, name) != 0;
 }
 
-static b32
+internal b32
 test_empty_file(Arena *arena, Client9P *client)
 {
 	if(!test_create_file(arena, client, str8_lit("empty_file")))
@@ -198,7 +201,7 @@ test_empty_file(Arena *arena, Client9P *client)
 	return dir.length == 0;
 }
 
-static b32
+internal b32
 test_large_file(Arena *arena, Client9P *client)
 {
 	Temp scratch = scratch_begin(&arena, 1);
@@ -215,7 +218,7 @@ test_large_file(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_partial_read(Arena *arena, Client9P *client)
 {
 	String8 test_data = str8_lit("partial read test data");
@@ -238,7 +241,7 @@ test_partial_read(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_seek_read(Arena *arena, Client9P *client)
 {
 	String8 test_data = str8_lit("seek test data");
@@ -261,7 +264,7 @@ test_seek_read(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_partial_write(Arena *arena, Client9P *client)
 {
 	ClientFid9P *fid =
@@ -305,21 +308,21 @@ test_partial_write(Arena *arena, Client9P *client)
 	return match1 && match2;
 }
 
-static b32
+internal b32
 test_stat_nonexistent(Arena *arena, Client9P *client)
 {
 	Dir9P dir = client9p_stat(arena, client, str8_lit("nonexistent_file_xyz"));
 	return dir.name.size == 0;
 }
 
-static b32
+internal b32
 test_open_nonexistent(Arena *arena, Client9P *client)
 {
 	ClientFid9P *fid = client9p_open(arena, client, str8_lit("nonexistent_file_xyz"), P9_OpenFlag_Read);
 	return fid == 0;
 }
 
-static b32
+internal b32
 test_path_traversal(Arena *arena, Client9P *client)
 {
 	ClientFid9P *fid1 = client9p_open(arena, client, str8_lit("../"), P9_OpenFlag_Read);
@@ -328,7 +331,7 @@ test_path_traversal(Arena *arena, Client9P *client)
 	return fid1 == 0 && fid2 == 0 && fid3 == 0;
 }
 
-static b32
+internal b32
 test_long_filename(Arena *arena, Client9P *client)
 {
 	Temp scratch = scratch_begin(&arena, 1);
@@ -345,7 +348,7 @@ test_long_filename(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_special_chars(Arena *arena, Client9P *client)
 {
 	b32 result = 1;
@@ -355,7 +358,7 @@ test_special_chars(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_deep_nesting(Arena *arena, Client9P *client)
 {
 	if(!test_create_directory(arena, client, str8_lit("deep1")))
@@ -378,7 +381,7 @@ test_deep_nesting(Arena *arena, Client9P *client)
 	return dir.name.size > 0;
 }
 
-static b32
+internal b32
 test_many_files(Arena *arena, Client9P *client)
 {
 	if(!test_create_directory(arena, client, str8_lit("many_dir")))
@@ -401,7 +404,7 @@ test_many_files(Arena *arena, Client9P *client)
 	return created == 100;
 }
 
-static b32
+internal b32
 test_readdir_many(Arena *arena, Client9P *client)
 {
 	ClientFid9P *fid = client9p_open(arena, client, str8_lit("many_dir"), P9_OpenFlag_Read);
@@ -416,7 +419,7 @@ test_readdir_many(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_multiple_fids(Arena *arena, Client9P *client)
 {
 	ClientFid9P *fid1 = client9p_open(arena, client, str8_lit("partial_write"), P9_OpenFlag_Read);
@@ -432,7 +435,7 @@ test_multiple_fids(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_walk_partial(Arena *arena, Client9P *client)
 {
 	ClientFid9P *root = client->root;
@@ -440,7 +443,7 @@ test_walk_partial(Arena *arena, Client9P *client)
 	return fid == 0;
 }
 
-static b32
+internal b32
 test_walk_multiple(Arena *arena, Client9P *client)
 {
 	if(!test_create_directory(arena, client, str8_lit("walk_test")))
@@ -463,7 +466,7 @@ test_walk_multiple(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_permissions(Arena *arena, Client9P *client)
 {
 	if(!test_create_file(arena, client, str8_lit("perm_test")))
@@ -478,7 +481,7 @@ test_permissions(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_qid_consistency(Arena *arena, Client9P *client)
 {
 	Dir9P dir1 = client9p_stat(arena, client, str8_lit("partial_write"));
@@ -496,7 +499,7 @@ test_qid_consistency(Arena *arena, Client9P *client)
 	return dir1.qid.path == dir2.qid.path && dir1.qid.type == dir2.qid.type;
 }
 
-static b32
+internal b32
 test_truncate_grow(Arena *arena, Client9P *client)
 {
 	if(!test_wstat_truncate(arena, client, str8_lit("partial_write"), 0))
@@ -513,13 +516,13 @@ test_truncate_grow(Arena *arena, Client9P *client)
 	return test_stat_file(arena, client, str8_lit("partial_write"), new_data.size);
 }
 
-static b32
+internal b32
 test_remove_nonexistent(Arena *arena, Client9P *client)
 {
 	return client9p_remove(arena, client, str8_lit("nonexistent_remove_xyz")) == 0;
 }
 
-static b32
+internal b32
 test_create_existing(Arena *arena, Client9P *client)
 {
 	if(!test_create_file(arena, client, str8_lit("existing_file")))
@@ -531,26 +534,26 @@ test_create_existing(Arena *arena, Client9P *client)
 	return fid == 0;
 }
 
-static b32
+internal b32
 test_tmp_create_file(Arena *arena, Client9P *client)
 {
 	return test_create_file(arena, client, str8_lit("tmp/test_file"));
 }
 
-static b32
+internal b32
 test_tmp_write_read(Arena *arena, Client9P *client)
 {
 	String8 test_data = str8_lit("hello from tmp storage!");
 	return test_write_read(arena, client, str8_lit("tmp/tmp_rw_file"), test_data);
 }
 
-static b32
+internal b32
 test_tmp_create_directory(Arena *arena, Client9P *client)
 {
 	return test_create_directory(arena, client, str8_lit("tmp/test_dir"));
 }
 
-static b32
+internal b32
 test_tmp_nested_files(Arena *arena, Client9P *client)
 {
 	if(!test_create_directory(arena, client, str8_lit("tmp/nested")))
@@ -569,7 +572,7 @@ test_tmp_nested_files(Arena *arena, Client9P *client)
 	return dir.name.size > 0;
 }
 
-static b32
+internal b32
 test_tmp_readdir(Arena *arena, Client9P *client)
 {
 	ClientFid9P *fid = client9p_open(arena, client, str8_lit("tmp/nested"), P9_OpenFlag_Read);
@@ -583,7 +586,7 @@ test_tmp_readdir(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_tmp_stat(Arena *arena, Client9P *client)
 {
 	String8 test_data = str8_lit("test data");
@@ -594,7 +597,7 @@ test_tmp_stat(Arena *arena, Client9P *client)
 	return test_stat_file(arena, client, str8_lit("tmp/stat_test"), test_data.size);
 }
 
-static b32
+internal b32
 test_tmp_wstat_truncate(Arena *arena, Client9P *client)
 {
 	String8 test_data = str8_lit("truncate me");
@@ -605,7 +608,7 @@ test_tmp_wstat_truncate(Arena *arena, Client9P *client)
 	return test_wstat_truncate(arena, client, str8_lit("tmp/truncate_test"), 5);
 }
 
-static b32
+internal b32
 test_tmp_wstat_chmod(Arena *arena, Client9P *client)
 {
 	if(!test_create_file(arena, client, str8_lit("tmp/chmod_test")))
@@ -618,7 +621,7 @@ test_tmp_wstat_chmod(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_tmp_wstat_rename(Arena *arena, Client9P *client)
 {
 	if(!test_create_file(arena, client, str8_lit("tmp/rename_old")))
@@ -641,7 +644,7 @@ test_tmp_wstat_rename(Arena *arena, Client9P *client)
 	return renamed_dir.name.size > 0 && str8_match(renamed_dir.name, str8_lit("rename_new"), 0);
 }
 
-static b32
+internal b32
 test_tmp_remove_file(Arena *arena, Client9P *client)
 {
 	if(!test_create_file(arena, client, str8_lit("tmp/remove_me")))
@@ -651,7 +654,7 @@ test_tmp_remove_file(Arena *arena, Client9P *client)
 	return test_remove(arena, client, str8_lit("tmp/remove_me"));
 }
 
-static b32
+internal b32
 test_tmp_remove_directory(Arena *arena, Client9P *client)
 {
 	if(!test_create_directory(arena, client, str8_lit("tmp/remove_dir")))
@@ -661,7 +664,7 @@ test_tmp_remove_directory(Arena *arena, Client9P *client)
 	return test_remove(arena, client, str8_lit("tmp/remove_dir"));
 }
 
-static b32
+internal b32
 test_tmp_large_file(Arena *arena, Client9P *client)
 {
 	Temp scratch = scratch_begin(&arena, 1);
@@ -678,7 +681,7 @@ test_tmp_large_file(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_tmp_partial_write(Arena *arena, Client9P *client)
 {
 	ClientFid9P *fid =
@@ -722,7 +725,7 @@ test_tmp_partial_write(Arena *arena, Client9P *client)
 	return match1 && match2;
 }
 
-static b32
+internal b32
 test_tmp_seek_read(Arena *arena, Client9P *client)
 {
 	String8 test_data = str8_lit("seek test in tmp");
@@ -745,7 +748,7 @@ test_tmp_seek_read(Arena *arena, Client9P *client)
 	return result;
 }
 
-static b32
+internal b32
 test_tmp_qid_consistency(Arena *arena, Client9P *client)
 {
 	if(!test_create_file(arena, client, str8_lit("tmp/qid_test")))
@@ -768,7 +771,10 @@ test_tmp_qid_consistency(Arena *arena, Client9P *client)
 	return dir1.qid.path == dir2.qid.path && dir1.qid.type == dir2.qid.type;
 }
 
-static void
+////////////////////////////////
+//~ Test Runner
+
+internal void
 run_tests(Arena *arena, String8 address)
 {
 	OS_Handle socket = dial9p_connect(arena, address, str8_lit("tcp"), str8_lit("9pfs"));
@@ -1358,7 +1364,10 @@ run_tests(Arena *arena, String8 address)
 	log_infof("test: %u passed, %u failed\n", passed, failed);
 }
 
-static void
+////////////////////////////////
+//~ Entry Point
+
+internal void
 entry_point(CmdLine *cmd_line)
 {
 	Temp scratch = scratch_begin(0, 0);

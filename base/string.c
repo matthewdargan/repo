@@ -1,29 +1,29 @@
 // Character Classification/Conversion Functions
-static b32
+internal b32
 char_is_space(u8 c)
 {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
 }
 
-static b32
+internal b32
 char_is_upper(u8 c)
 {
 	return 'A' <= c && c <= 'Z';
 }
 
-static b32
+internal b32
 char_is_lower(u8 c)
 {
 	return 'a' <= c && c <= 'z';
 }
 
-static b32
+internal b32
 char_is_alpha(u8 c)
 {
 	return char_is_upper(c) || char_is_lower(c);
 }
 
-static b32
+internal b32
 char_is_digit(u8 c, u32 base)
 {
 	b32 result = 0;
@@ -38,7 +38,7 @@ char_is_digit(u8 c, u32 base)
 	return result;
 }
 
-static u8
+internal u8
 lower_from_char(u8 c)
 {
 	if(char_is_upper(c))
@@ -48,7 +48,7 @@ lower_from_char(u8 c)
 	return c;
 }
 
-static u8
+internal u8
 upper_from_char(u8 c)
 {
 	if(char_is_lower(c))
@@ -58,7 +58,7 @@ upper_from_char(u8 c)
 	return c;
 }
 
-static u64
+internal u64
 cstring8_length(u8 *c)
 {
 	u64 length = 0;
@@ -73,28 +73,28 @@ cstring8_length(u8 *c)
 }
 
 // String Constructors
-static String8
+internal String8
 str8(u8 *str, u64 size)
 {
 	String8 result = {str, size};
 	return result;
 }
 
-static String8
+internal String8
 str8_range(u8 *first, u8 *one_past_last)
 {
 	String8 result = {first, (u64)(one_past_last - first)};
 	return result;
 }
 
-static String8
+internal String8
 str8_zero(void)
 {
 	String8 result = {0};
 	return result;
 }
 
-static String8
+internal String8
 str8_cstring(char *c)
 {
 	String8 result = {(u8 *)c, cstring8_length((u8 *)c)};
@@ -102,7 +102,7 @@ str8_cstring(char *c)
 }
 
 // String Stylization
-static String8
+internal String8
 upper_from_str8(Arena *arena, String8 string)
 {
 	string = str8_copy(arena, string);
@@ -113,7 +113,7 @@ upper_from_str8(Arena *arena, String8 string)
 	return string;
 }
 
-static String8
+internal String8
 lower_from_str8(Arena *arena, String8 string)
 {
 	string = str8_copy(arena, string);
@@ -125,7 +125,7 @@ lower_from_str8(Arena *arena, String8 string)
 }
 
 // String Matching
-static b32
+internal b32
 str8_match(String8 a, String8 b, StringMatchFlags flags)
 {
 	b32 result = 0;
@@ -157,7 +157,7 @@ str8_match(String8 a, String8 b, StringMatchFlags flags)
 	return result;
 }
 
-static u64
+internal u64
 str8_find_needle(String8 string, u64 start_pos, String8 needle, StringMatchFlags flags)
 {
 	u8 *ptr = string.str + start_pos;
@@ -197,7 +197,7 @@ str8_find_needle(String8 string, u64 start_pos, String8 needle, StringMatchFlags
 	return result;
 }
 
-static u64
+internal u64
 str8_find_needle_reverse(String8 string, u64 start_pos, String8 needle, StringMatchFlags flags)
 {
 	u64 result = 0;
@@ -214,7 +214,7 @@ str8_find_needle_reverse(String8 string, u64 start_pos, String8 needle, StringMa
 }
 
 // String Slicing
-static String8
+internal String8
 str8_substr(String8 str, Rng1U64 range)
 {
 	range.min = Min(range.min, str.size);
@@ -224,14 +224,14 @@ str8_substr(String8 str, Rng1U64 range)
 	return str;
 }
 
-static String8
+internal String8
 str8_prefix(String8 str, u64 size)
 {
 	str.size = Min(size, str.size);
 	return str;
 }
 
-static String8
+internal String8
 str8_skip(String8 str, u64 amt)
 {
 	amt = Min(amt, str.size);
@@ -240,7 +240,7 @@ str8_skip(String8 str, u64 amt)
 	return str;
 }
 
-static String8
+internal String8
 str8_postfix(String8 str, u64 size)
 {
 	size = Min(size, str.size);
@@ -249,7 +249,7 @@ str8_postfix(String8 str, u64 size)
 	return str;
 }
 
-static String8
+internal String8
 str8_chop(String8 str, u64 amt)
 {
 	amt = Min(amt, str.size);
@@ -257,7 +257,7 @@ str8_chop(String8 str, u64 amt)
 	return str;
 }
 
-static String8
+internal String8
 str8_skip_chop_whitespace(String8 string)
 {
 	u8 *first = string.str;
@@ -283,7 +283,7 @@ str8_skip_chop_whitespace(String8 string)
 }
 
 // String Formatting/Copying
-static String8
+internal String8
 str8_cat(Arena *arena, String8 s1, String8 s2)
 {
 	String8 str;
@@ -295,7 +295,7 @@ str8_cat(Arena *arena, String8 s1, String8 s2)
 	return str;
 }
 
-static String8
+internal String8
 str8_copy(Arena *arena, String8 s)
 {
 	String8 str;
@@ -306,7 +306,7 @@ str8_copy(Arena *arena, String8 s)
 	return str;
 }
 
-static String8
+internal String8
 str8fv(Arena *arena, char *fmt, va_list args)
 {
 	va_list args2;
@@ -320,7 +320,7 @@ str8fv(Arena *arena, char *fmt, va_list args)
 	return result;
 }
 
-static String8
+internal String8
 str8f(Arena *arena, char *fmt, ...)
 {
 	va_list args;
@@ -331,7 +331,7 @@ str8f(Arena *arena, char *fmt, ...)
 }
 
 // String <-> Integer Conversions
-static b32
+internal b32
 str8_is_integer(String8 string, u32 radix)
 {
 	b32 result = 0;
@@ -354,7 +354,7 @@ str8_is_integer(String8 string, u32 radix)
 	return result;
 }
 
-static u64
+internal u64
 u64_from_str8(String8 string, u32 radix)
 {
 	u64 x = 0;
@@ -369,7 +369,7 @@ u64_from_str8(String8 string, u32 radix)
 	return x;
 }
 
-static u32
+internal u32
 u32_from_str8(String8 string, u32 radix)
 {
 	u64 x64 = u64_from_str8(string, radix);
@@ -377,7 +377,7 @@ u32_from_str8(String8 string, u32 radix)
 	return x32;
 }
 
-static b32
+internal b32
 try_u64_from_str8(String8 string, u64 *x)
 {
 	// unpack radix / prefix size based on string prefix
@@ -417,7 +417,7 @@ try_u64_from_str8(String8 string, u64 *x)
 	return is_integer;
 }
 
-static String8
+internal String8
 str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_separator)
 {
 	String8 result = str8_zero();
@@ -526,7 +526,7 @@ str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_
 }
 
 // String <-> DateTime Conversions
-static String8
+internal String8
 str8_from_datetime(Arena *arena, DateTime dt)
 {
 	String8 result = str8f(arena, "%04u-%02u-%02u %02u:%02u:%02u", dt.year, dt.mon, dt.day, dt.hour, dt.min, dt.sec);
@@ -534,7 +534,7 @@ str8_from_datetime(Arena *arena, DateTime dt)
 }
 
 // String List Construction Functions
-static String8Node *
+internal String8Node *
 str8_list_push_node(String8List *list, String8Node *node, String8 string)
 {
 	SLLQueuePush(list->first, list->last, node);
@@ -544,7 +544,7 @@ str8_list_push_node(String8List *list, String8Node *node, String8 string)
 	return node;
 }
 
-static String8Node *
+internal String8Node *
 str8_list_push(Arena *arena, String8List *list, String8 string)
 {
 	String8Node *node = push_array_no_zero(arena, String8Node, 1);
@@ -552,7 +552,7 @@ str8_list_push(Arena *arena, String8List *list, String8 string)
 	return node;
 }
 
-static String8Node *
+internal String8Node *
 str8_list_pushf(Arena *arena, String8List *list, char *fmt, ...)
 {
 	va_list args;
@@ -564,7 +564,7 @@ str8_list_pushf(Arena *arena, String8List *list, char *fmt, ...)
 }
 
 // String Splitting/Joining
-static String8List
+internal String8List
 str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count, StringSplitFlags flags)
 {
 	String8List list = {0};
@@ -599,7 +599,7 @@ str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count, 
 	return list;
 }
 
-static String8
+internal String8
 str8_list_join(Arena *arena, String8List *list, StringJoin *optional_params)
 {
 	StringJoin join = {0};
@@ -634,7 +634,7 @@ str8_list_join(Arena *arena, String8List *list, StringJoin *optional_params)
 }
 
 // String Arrays
-static String8Array
+internal String8Array
 str8_array_from_list(Arena *arena, String8List *list)
 {
 	String8Array array;
@@ -649,7 +649,7 @@ str8_array_from_list(Arena *arena, String8List *list)
 	return array;
 }
 
-static String8Array
+internal String8Array
 str8_array_reserve(Arena *arena, u64 count)
 {
 	String8Array array;
@@ -659,7 +659,7 @@ str8_array_reserve(Arena *arena, u64 count)
 }
 
 // String Path Helpers
-static String8
+internal String8
 str8_chop_last_slash(String8 string)
 {
 	if(string.size > 0)
@@ -684,7 +684,7 @@ str8_chop_last_slash(String8 string)
 	return string;
 }
 
-static String8
+internal String8
 str8_skip_last_slash(String8 string)
 {
 	if(string.size > 0)
@@ -707,7 +707,7 @@ str8_skip_last_slash(String8 string)
 	return string;
 }
 
-static String8
+internal String8
 str8_chop_last_dot(String8 string)
 {
 	String8 result = string;
@@ -724,7 +724,7 @@ str8_chop_last_dot(String8 string)
 	return result;
 }
 
-static String8
+internal String8
 str8_skip_last_dot(String8 string)
 {
 	String8 result = string;
@@ -742,11 +742,11 @@ str8_skip_last_dot(String8 string)
 }
 
 // Basic Text Indentation
-static String8
+internal String8
 indented_from_string(Arena *arena, String8 string)
 {
 	Temp scratch = scratch_begin(&arena, 1);
-	read_only static u8 indentation_bytes[] =
+	read_only local_persist u8 indentation_bytes[] =
 	    "                                                                                                                "
 	    "                ";
 	String8List indented_strings = {0};
@@ -801,7 +801,7 @@ indented_from_string(Arena *arena, String8 string)
 }
 
 // Basic String Hashes
-static u64
+internal u64
 u64_hash_from_str8(String8 string)
 {
 	u64 hash = 5381;

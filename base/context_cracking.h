@@ -1,7 +1,9 @@
 #ifndef CONTEXT_CRACKING_H
 #define CONTEXT_CRACKING_H
 
-// Architecture Detection
+////////////////////////////////
+//~ Arch Cracking
+
 #if defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64) || defined(_M_AMD64)
 #define ARCH_X64 1
 #elif defined(i386) || defined(__i386) || defined(__i386__) || defined(_M_IX86)
@@ -20,12 +22,16 @@
 #error Endianness of this architecture not understood.
 #endif
 
-// Build Option Cracking
+////////////////////////////////
+//~ Build Option Cracking
+
 #if !defined(BUILD_DEBUG)
 #define BUILD_DEBUG 1
 #endif
 
-// Zero All Undefined Options
+////////////////////////////////
+//~ Zero All Undefined Options
+
 #if !defined(ARCH_X64)
 #define ARCH_X64 0
 #endif

@@ -1,5 +1,7 @@
-// Request Management
-static ServerRequest9P *
+////////////////////////////////
+//~ Request Management
+
+internal ServerRequest9P *
 server9p_request_alloc(Server9P *server, u32 tag)
 {
 	u32 hash = tag % server->max_request_count;
@@ -15,7 +17,7 @@ server9p_request_alloc(Server9P *server, u32 tag)
 	return request;
 }
 
-static ServerRequest9P *
+internal ServerRequest9P *
 server9p_request_remove(Server9P *server, u32 tag)
 {
 	u32 hash = tag % server->max_request_count;
@@ -29,8 +31,10 @@ server9p_request_remove(Server9P *server, u32 tag)
 	return 0;
 }
 
-// Server Lifecycle
-static Server9P *
+////////////////////////////////
+//~ Server Lifecycle
+
+internal Server9P *
 server9p_alloc(Arena *arena, u64 input_fd, u64 output_fd)
 {
 	Server9P *server = push_array(arena, Server9P, 1);
@@ -48,8 +52,10 @@ server9p_alloc(Arena *arena, u64 input_fd, u64 output_fd)
 	return server;
 }
 
-// Request Handling
-static ServerRequest9P *
+////////////////////////////////
+//~ Request Handling
+
+internal ServerRequest9P *
 server9p_get_request(Server9P *server)
 {
 	String8 msg = read_9p_msg(server->arena, server->input_fd);
@@ -142,7 +148,7 @@ server9p_get_request(Server9P *server)
 	return request;
 }
 
-static b32
+internal b32
 server9p_respond(ServerRequest9P *request, String8 err)
 {
 	Server9P *server = request->server;
@@ -186,8 +192,10 @@ server9p_respond(ServerRequest9P *request, String8 err)
 	return total_num_bytes_written == total_num_bytes_to_write;
 }
 
-// Fid Management
-static ServerFid9P *
+////////////////////////////////
+//~ Fid Management
+
+internal ServerFid9P *
 server9p_fid_alloc(Server9P *server, u32 fid)
 {
 	u32 hash = fid % server->max_fid_count;
@@ -204,7 +212,7 @@ server9p_fid_alloc(Server9P *server, u32 fid)
 	return f;
 }
 
-static ServerFid9P *
+internal ServerFid9P *
 server9p_fid_lookup(Server9P *server, u32 fid)
 {
 	u32 hash = fid % server->max_fid_count;
@@ -216,7 +224,7 @@ server9p_fid_lookup(Server9P *server, u32 fid)
 	return 0;
 }
 
-static ServerFid9P *
+internal ServerFid9P *
 server9p_fid_remove(Server9P *server, u32 fid)
 {
 	u32 hash = fid % server->max_fid_count;

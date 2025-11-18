@@ -1,5 +1,7 @@
-// Context Management
-static FsContext9P *
+////////////////////////////////
+//~ Context Management
+
+internal FsContext9P *
 fs9p_context_alloc(Arena *arena, String8 root_path, String8 tmp_path, b32 readonly)
 {
 	FsContext9P *ctx = push_array(arena, FsContext9P, 1);
@@ -12,8 +14,10 @@ fs9p_context_alloc(Arena *arena, String8 root_path, String8 tmp_path, b32 readon
 	return ctx;
 }
 
-// Path Operations
-static String8
+////////////////////////////////
+//~ Path Operations
+
+internal String8
 fs9p_path_join(Arena *arena, String8 base, String8 name)
 {
 	if(base.size == 0)
@@ -52,7 +56,7 @@ fs9p_path_join(Arena *arena, String8 base, String8 name)
 	}
 }
 
-static String8
+internal String8
 fs9p_basename(Arena *arena, String8 path)
 {
 	if(path.size == 0)
@@ -95,7 +99,7 @@ fs9p_basename(Arena *arena, String8 path)
 	}
 }
 
-static String8
+internal String8
 fs9p_dirname(Arena *arena, String8 path)
 {
 	if(path.size == 0)
@@ -128,7 +132,7 @@ fs9p_dirname(Arena *arena, String8 path)
 	}
 }
 
-static b32
+internal b32
 fs9p_path_is_safe(String8 path)
 {
 	if(str8_match(path, str8_lit(".."), 0))
@@ -157,7 +161,7 @@ fs9p_path_is_safe(String8 path)
 	return 1;
 }
 
-static b32
+internal b32
 fs9p_path_is_under_root(Arena *arena, FsContext9P *ctx, String8 canonical_path)
 {
 	String8 root_canonical = os_full_path_from_path(arena, ctx->root_path);
@@ -190,7 +194,7 @@ fs9p_path_is_under_root(Arena *arena, FsContext9P *ctx, String8 canonical_path)
 	return 1;
 }
 
-static PathResolution9P
+internal PathResolution9P
 fs9p_resolve_path(Arena *arena, FsContext9P *ctx, String8 base_path, String8 name)
 {
 	PathResolution9P result = {0};
@@ -372,14 +376,16 @@ fs9p_resolve_path(Arena *arena, FsContext9P *ctx, String8 base_path, String8 nam
 	return result;
 }
 
-static String8
+internal String8
 os_path_from_fs9p_path(Arena *arena, FsContext9P *ctx, String8 relative_path)
 {
 	return fs9p_path_join(arena, ctx->root_path, relative_path);
 }
 
-// File Operations
-static FsHandle9P *
+////////////////////////////////
+//~ File Operations
+
+internal FsHandle9P *
 fs9p_open(Arena *arena, FsContext9P *ctx, String8 path, u32 mode)
 {
 	StorageBackend9P backend = fs9p_get_backend(path);
@@ -443,7 +449,7 @@ fs9p_open(Arena *arena, FsContext9P *ctx, String8 path, u32 mode)
 	return handle;
 }
 
-static void
+internal void
 fs9p_close(FsHandle9P *handle)
 {
 	if(handle->fd >= 0)
@@ -458,7 +464,7 @@ fs9p_close(FsHandle9P *handle)
 	}
 }
 
-static String8
+internal String8
 fs9p_read(Arena *arena, FsHandle9P *handle, u64 offset, u64 count)
 {
 	if(handle->tmp_node != 0)
@@ -486,7 +492,7 @@ fs9p_read(Arena *arena, FsHandle9P *handle, u64 offset, u64 count)
 	return str8(buffer, bytes_read);
 }
 
-static u64
+internal u64
 fs9p_write(FsHandle9P *handle, u64 offset, String8 data)
 {
 	if(handle->tmp_node != 0 && handle->ctx != 0)
@@ -513,7 +519,7 @@ fs9p_write(FsHandle9P *handle, u64 offset, String8 data)
 	return bytes_written;
 }
 
-static b32
+internal b32
 fs9p_create(FsContext9P *ctx, String8 path, u32 permissions, u32 mode)
 {
 	StorageBackend9P backend = fs9p_get_backend(path);
@@ -563,7 +569,7 @@ fs9p_create(FsContext9P *ctx, String8 path, u32 permissions, u32 mode)
 	return result;
 }
 
-static void
+internal void
 fs9p_remove(FsContext9P *ctx, String8 path)
 {
 	StorageBackend9P backend = fs9p_get_backend(path);
@@ -585,8 +591,10 @@ fs9p_remove(FsContext9P *ctx, String8 path)
 	scratch_end(scratch);
 }
 
-// Metadata Operations
-static Dir9P
+////////////////////////////////
+//~ Metadata Operations
+
+internal Dir9P
 fs9p_stat(Arena *arena, FsContext9P *ctx, String8 path)
 {
 	StorageBackend9P backend = fs9p_get_backend(path);
@@ -624,7 +632,7 @@ fs9p_stat(Arena *arena, FsContext9P *ctx, String8 path)
 	return dir;
 }
 
-static void
+internal b32
 fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir)
 {
 	StorageBackend9P backend = fs9p_get_backend(path);
@@ -632,22 +640,29 @@ fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir)
 	{
 		TempNode9P *node = temp9p_node_lookup(ctx->tmp_root, path);
 		temp9p_wstat(ctx->tmp_arena, node, dir);
-		return;
+		return 1;
 	}
 
 	Temp scratch = scratch_begin(0, 0);
 	String8 os_path = os_path_from_fs9p_path(scratch.arena, ctx, path);
 	String8 cpath = str8_copy(scratch.arena, os_path);
+	b32 success = 1;
 
 	if(dir->mode != max_u32)
 	{
 		mode_t mode_bits = dir->mode & 07777;
-		chmod((char *)cpath.str, mode_bits);
+		if(chmod((char *)cpath.str, mode_bits) != 0)
+		{
+			success = 0;
+		}
 	}
 
 	if(dir->length != max_u64)
 	{
-		truncate((char *)cpath.str, (off_t)dir->length);
+		if(truncate((char *)cpath.str, (off_t)dir->length) != 0)
+		{
+			success = 0;
+		}
 	}
 
 	if(dir->name.size > 0)
@@ -659,7 +674,10 @@ fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir)
 			String8 new_relative_path = fs9p_path_join(scratch.arena, parent_path, dir->name);
 			String8 new_os_path = os_path_from_fs9p_path(scratch.arena, ctx, new_relative_path);
 			String8 new_cpath = str8_copy(scratch.arena, new_os_path);
-			rename((char *)cpath.str, (char *)new_cpath.str);
+			if(rename((char *)cpath.str, (char *)new_cpath.str) != 0)
+			{
+				success = 0;
+			}
 		}
 	}
 
@@ -697,7 +715,10 @@ fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir)
 				times[1].tv_nsec = st.st_mtim.tv_nsec;
 			}
 		}
-		utimensat(AT_FDCWD, (char *)cpath.str, times, 0);
+		if(utimensat(AT_FDCWD, (char *)cpath.str, times, 0) != 0)
+		{
+			success = 0;
+		}
 	}
 
 	b32 update_owner = 0;
@@ -756,14 +777,20 @@ fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir)
 
 	if(update_owner)
 	{
-		chown((char *)cpath.str, uid, gid);
+		if(chown((char *)cpath.str, uid, gid) != 0)
+		{
+			success = 0;
+		}
 	}
 
 	scratch_end(scratch);
+	return success;
 }
 
-// Directory Operations
-static DirIterator9P *
+////////////////////////////////
+//~ Directory Operations
+
+internal DirIterator9P *
 fs9p_opendir(Arena *arena, FsContext9P *ctx, String8 path)
 {
 	StorageBackend9P backend = fs9p_get_backend(path);
@@ -790,7 +817,7 @@ fs9p_opendir(Arena *arena, FsContext9P *ctx, String8 path)
 	return iter;
 }
 
-static String8
+internal String8
 fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u64 count)
 {
 	if(iter->tmp_node != 0)
@@ -915,7 +942,7 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 	return str8(result_buffer, bytes_used);
 }
 
-static void
+internal void
 fs9p_closedir(DirIterator9P *iter)
 {
 	if(iter->dir_handle != 0)
@@ -925,8 +952,10 @@ fs9p_closedir(DirIterator9P *iter)
 	}
 }
 
-// Temporary Storage Helpers
-static TempNode9P *
+////////////////////////////////
+//~ Temporary Storage Helpers
+
+internal TempNode9P *
 temp9p_node_lookup(TempNode9P *root, String8 path)
 {
 	if(path.size == 0 || str8_match(path, str8_lit("tmp"), 0))
@@ -975,7 +1004,7 @@ temp9p_node_lookup(TempNode9P *root, String8 path)
 	return node;
 }
 
-static TempNode9P *
+internal TempNode9P *
 temp9p_node_create(Arena *arena, FsContext9P *ctx, String8 path, String8 name, b32 is_dir, u32 mode)
 {
 	TempNode9P *node = push_array(arena, TempNode9P, 1);
@@ -995,8 +1024,10 @@ temp9p_node_create(Arena *arena, FsContext9P *ctx, String8 path, String8 name, b
 	return node;
 }
 
-// Temporary Storage Operations
-static b32
+////////////////////////////////
+//~ Temporary Storage Operations
+
+internal b32
 temp9p_create(Arena *arena, FsContext9P *ctx, String8 path, u32 permissions)
 {
 	String8 parent_path = fs9p_dirname(arena, path);
@@ -1023,13 +1054,13 @@ temp9p_create(Arena *arena, FsContext9P *ctx, String8 path, u32 permissions)
 	return 1;
 }
 
-static TempNode9P *
+internal TempNode9P *
 temp9p_open(FsContext9P *ctx, String8 path)
 {
 	return temp9p_node_lookup(ctx->tmp_root, path);
 }
 
-static String8
+internal String8
 temp9p_read(Arena *arena, TempNode9P *node, u64 offset, u64 count)
 {
 	if(node == 0 || node->is_directory || offset >= node->content.size)
@@ -1040,7 +1071,7 @@ temp9p_read(Arena *arena, TempNode9P *node, u64 offset, u64 count)
 	return str8_copy(arena, str8(node->content.str + offset, read_size));
 }
 
-static u64
+internal u64
 temp9p_write(Arena *arena, TempNode9P *node, u64 offset, String8 data)
 {
 	if(node == 0 || node->is_directory)
@@ -1070,7 +1101,7 @@ temp9p_write(Arena *arena, TempNode9P *node, u64 offset, String8 data)
 	return data.size;
 }
 
-static void
+internal void
 temp9p_remove(FsContext9P *ctx, String8 path)
 {
 	TempNode9P *node = temp9p_node_lookup(ctx->tmp_root, path);
@@ -1097,7 +1128,7 @@ temp9p_remove(FsContext9P *ctx, String8 path)
 	}
 }
 
-static Dir9P
+internal Dir9P
 temp9p_stat(Arena *arena, TempNode9P *node)
 {
 	Dir9P dir = dir9p_zero();
@@ -1123,7 +1154,7 @@ temp9p_stat(Arena *arena, TempNode9P *node)
 	return dir;
 }
 
-static void
+internal void
 temp9p_wstat(Arena *arena, TempNode9P *node, Dir9P *dir)
 {
 	if(node == 0)
@@ -1174,7 +1205,7 @@ temp9p_wstat(Arena *arena, TempNode9P *node, Dir9P *dir)
 	}
 }
 
-static String8
+internal String8
 temp9p_readdir(Arena *arena, TempNode9P *node, TempNode9P **iter, u64 offset, u64 count)
 {
 	if(node == 0 || !node->is_directory)
@@ -1236,8 +1267,10 @@ temp9p_readdir(Arena *arena, TempNode9P *node, TempNode9P **iter, u64 offset, u6
 	return str8(buf, buf_pos);
 }
 
-// Backend Routing
-static StorageBackend9P
+////////////////////////////////
+//~ Backend Routing
+
+internal StorageBackend9P
 fs9p_get_backend(String8 path)
 {
 	if(str8_match(path, str8_lit("tmp"), 0) || (path.size >= 4 && str8_match(str8_prefix(path, 4), str8_lit("tmp/"), 0)))
@@ -1247,8 +1280,10 @@ fs9p_get_backend(String8 path)
 	return StorageBackend9P_Disk;
 }
 
-// UID/GID Conversion
-static String8
+////////////////////////////////
+//~ UID/GID Conversion
+
+internal String8
 str8_from_uid(Arena *arena, u32 uid)
 {
 	struct passwd *pw = getpwuid((uid_t)uid);
@@ -1259,7 +1294,7 @@ str8_from_uid(Arena *arena, u32 uid)
 	return str8_from_u64(arena, uid, 10, 0, 0);
 }
 
-static String8
+internal String8
 str8_from_gid(Arena *arena, u32 gid)
 {
 	struct group *gr = getgrgid((gid_t)gid);

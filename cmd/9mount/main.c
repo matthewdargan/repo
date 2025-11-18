@@ -7,7 +7,10 @@
 #include "9p/inc.c"
 // clang-format on
 
-static String8
+////////////////////////////////
+//~ Helper Functions
+
+internal String8
 resolve_host(Arena *arena, String8 host)
 {
 	String8 host_copy = str8_copy(arena, host);
@@ -30,7 +33,10 @@ resolve_host(Arena *arena, String8 host)
 	return result;
 }
 
-static void
+////////////////////////////////
+//~ Entry Point
+
+internal void
 entry_point(CmdLine *cmd_line)
 {
 	Temp scratch = scratch_begin(0, 0);
@@ -142,6 +148,7 @@ entry_point(CmdLine *cmd_line)
 
 					str8_list_push(scratch.arena, &mount_options, str8_lit("noextend"));
 					str8_list_push(scratch.arena, &mount_options, str8f(scratch.arena, "dfltuid=%d,dfltgid=%d", uid, gid));
+					str8_list_push(scratch.arena, &mount_options, str8_lit("access=any"));
 
 					StringJoin join = {0};
 					join.pre = str8_zero();

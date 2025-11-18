@@ -1,19 +1,23 @@
-// Handle Type Functions
-static OS_Handle
+////////////////////////////////
+//~ Handle Type Functions
+
+internal OS_Handle
 os_handle_zero(void)
 {
 	OS_Handle handle = {0};
 	return handle;
 }
 
-static b32
+internal b32
 os_handle_match(OS_Handle a, OS_Handle b)
 {
 	return a.u64[0] == b.u64[0];
 }
 
-// Filesystem Helpers
-static String8
+////////////////////////////////
+//~ Filesystem Helpers
+
+internal String8
 os_data_from_file_path(Arena *arena, String8 path)
 {
 	OS_Handle file = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
@@ -23,7 +27,7 @@ os_data_from_file_path(Arena *arena, String8 path)
 	return data;
 }
 
-static b32
+internal b32
 os_write_data_to_file_path(String8 path, String8 data)
 {
 	b32 good = 0;
@@ -37,7 +41,7 @@ os_write_data_to_file_path(String8 path, String8 data)
 	return good;
 }
 
-static b32
+internal b32
 os_append_data_to_file_path(String8 path, String8 data)
 {
 	b32 good = 0;
@@ -55,7 +59,7 @@ os_append_data_to_file_path(String8 path, String8 data)
 	return good;
 }
 
-static String8
+internal String8
 os_string_from_file_range(Arena *arena, OS_Handle file, Rng1U64 range)
 {
 	u64 pre_pos = arena_pos(arena);
@@ -71,8 +75,10 @@ os_string_from_file_range(Arena *arena, OS_Handle file, Rng1U64 range)
 	return result;
 }
 
-// Helpers
-static DateTime
+////////////////////////////////
+//~ Helpers
+
+internal DateTime
 os_date_time_from_tm(tm in, u32 msec)
 {
 	DateTime dt = {0};
@@ -86,7 +92,7 @@ os_date_time_from_tm(tm in, u32 msec)
 	return dt;
 }
 
-static tm
+internal tm
 os_tm_from_date_time(DateTime dt)
 {
 	tm result = {0};
@@ -99,7 +105,7 @@ os_tm_from_date_time(DateTime dt)
 	return result;
 }
 
-static timespec
+internal timespec
 os_timespec_from_date_time(DateTime dt)
 {
 	tm tm_val = os_tm_from_date_time(dt);
@@ -109,7 +115,7 @@ os_timespec_from_date_time(DateTime dt)
 	return result;
 }
 
-static u64
+internal u64
 os_dense_time_from_timespec(timespec in)
 {
 	u64 result = 0;
@@ -122,7 +128,7 @@ os_dense_time_from_timespec(timespec in)
 	return result;
 }
 
-static OS_FileProperties
+internal OS_FileProperties
 os_file_properties_from_stat(struct stat *s)
 {
 	OS_FileProperties props = {0};
@@ -136,16 +142,18 @@ os_file_properties_from_stat(struct stat *s)
 	return props;
 }
 
-// System Info
-static OS_SystemInfo os_system_info = {0};
+////////////////////////////////
+//~ System Info
 
-static OS_SystemInfo *
+global OS_SystemInfo os_system_info = {0};
+
+internal OS_SystemInfo *
 os_get_system_info(void)
 {
 	return &os_system_info;
 }
 
-static String8
+internal String8
 os_get_current_path(Arena *arena)
 {
 	char *cwdir = getcwd(0, 0);
@@ -154,8 +162,10 @@ os_get_current_path(Arena *arena)
 	return string;
 }
 
-// Memory Allocation
-static void *
+////////////////////////////////
+//~ Memory Allocation
+
+internal void *
 os_reserve(u64 size)
 {
 	void *result = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -166,27 +176,27 @@ os_reserve(u64 size)
 	return result;
 }
 
-static b32
+internal b32
 os_commit(void *ptr, u64 size)
 {
 	mprotect(ptr, size, PROT_READ | PROT_WRITE);
 	return 1;
 }
 
-static void
+internal void
 os_decommit(void *ptr, u64 size)
 {
 	madvise(ptr, size, MADV_DONTNEED);
 	mprotect(ptr, size, PROT_NONE);
 }
 
-static void
+internal void
 os_release(void *ptr, u64 size)
 {
 	munmap(ptr, size);
 }
 
-static void *
+internal void *
 os_reserve_large(u64 size)
 {
 	void *result = mmap(0, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
@@ -197,8 +207,10 @@ os_reserve_large(u64 size)
 	return result;
 }
 
-// File System
-static OS_Handle
+////////////////////////////////
+//~ File System
+
+internal OS_Handle
 os_file_open(OS_AccessFlags flags, String8 path)
 {
 	Temp scratch = scratch_begin(0, 0);
@@ -234,7 +246,7 @@ os_file_open(OS_AccessFlags flags, String8 path)
 	return handle;
 }
 
-static void
+internal void
 os_file_close(OS_Handle file)
 {
 	if(os_handle_match(file, os_handle_zero()))
@@ -245,7 +257,7 @@ os_file_close(OS_Handle file)
 	close(fd);
 }
 
-static u64
+internal u64
 os_file_read(OS_Handle file, Rng1U64 rng, void *out_data)
 {
 	if(os_handle_match(file, os_handle_zero()))
@@ -273,7 +285,7 @@ os_file_read(OS_Handle file, Rng1U64 rng, void *out_data)
 	return total_num_bytes_read;
 }
 
-static u64
+internal u64
 os_file_write(OS_Handle file, Rng1U64 rng, void *data)
 {
 	if(os_handle_match(file, os_handle_zero()))
@@ -301,7 +313,7 @@ os_file_write(OS_Handle file, Rng1U64 rng, void *data)
 	return total_num_bytes_written;
 }
 
-static b32
+internal b32
 os_file_set_times(OS_Handle file, DateTime date_time)
 {
 	if(os_handle_match(file, os_handle_zero()))
@@ -316,7 +328,7 @@ os_file_set_times(OS_Handle file, DateTime date_time)
 	return good;
 }
 
-static OS_FileProperties
+internal OS_FileProperties
 os_properties_from_file(OS_Handle file)
 {
 	if(os_handle_match(file, os_handle_zero()))
@@ -334,7 +346,7 @@ os_properties_from_file(OS_Handle file)
 	return props;
 }
 
-static b32
+internal b32
 os_delete_file_at_path(String8 path)
 {
 	Temp scratch = scratch_begin(0, 0);
@@ -348,7 +360,7 @@ os_delete_file_at_path(String8 path)
 	return result;
 }
 
-static String8
+internal String8
 os_full_path_from_path(Arena *arena, String8 path)
 {
 	Temp scratch = scratch_begin(&arena, 1);
@@ -367,7 +379,7 @@ os_full_path_from_path(Arena *arena, String8 path)
 	return result;
 }
 
-static b32
+internal b32
 os_file_path_exists(String8 path)
 {
 	Temp scratch = scratch_begin(0, 0);
@@ -382,7 +394,7 @@ os_file_path_exists(String8 path)
 	return result;
 }
 
-static b32
+internal b32
 os_directory_path_exists(String8 path)
 {
 	Temp scratch = scratch_begin(0, 0);
@@ -398,7 +410,7 @@ os_directory_path_exists(String8 path)
 	return exists;
 }
 
-static OS_FileProperties
+internal OS_FileProperties
 os_properties_from_file_path(String8 path)
 {
 	Temp scratch = scratch_begin(0, 0);
@@ -414,7 +426,7 @@ os_properties_from_file_path(String8 path)
 	return props;
 }
 
-static b32
+internal b32
 os_make_directory(String8 path)
 {
 	Temp scratch = scratch_begin(0, 0);
@@ -428,8 +440,10 @@ os_make_directory(String8 path)
 	return result;
 }
 
-// Socket Operations
-static OS_Handle
+////////////////////////////////
+//~ Socket Operations
+
+internal OS_Handle
 os_socket_connect_tcp(String8 host, u16 port)
 {
 	char host_buffer[1024] = {0};
@@ -506,7 +520,7 @@ os_socket_connect_tcp(String8 host, u16 port)
 	return handle;
 }
 
-static OS_Handle
+internal OS_Handle
 os_socket_connect_unix(String8 path)
 {
 	if(path.size == 0)
@@ -553,7 +567,7 @@ os_socket_connect_unix(String8 path)
 	return handle;
 }
 
-static OS_Handle
+internal OS_Handle
 os_socket_listen_tcp(u16 port)
 {
 	if(port == 0)
@@ -604,7 +618,7 @@ os_socket_listen_tcp(u16 port)
 	return handle;
 }
 
-static OS_Handle
+internal OS_Handle
 os_socket_listen_unix(String8 path)
 {
 	if(path.size == 0)
@@ -651,7 +665,7 @@ os_socket_listen_unix(String8 path)
 	return handle;
 }
 
-static OS_Handle
+internal OS_Handle
 os_socket_accept(OS_Handle listen_socket)
 {
 	if(os_handle_match(listen_socket, os_handle_zero()))
@@ -671,8 +685,10 @@ os_socket_accept(OS_Handle listen_socket)
 	return handle;
 }
 
-// Time
-static u64
+////////////////////////////////
+//~ Time
+
+internal u64
 os_now_microseconds(void)
 {
 	timespec t;
@@ -681,14 +697,14 @@ os_now_microseconds(void)
 	return result;
 }
 
-static u32
+internal u32
 os_now_unix(void)
 {
 	time_t t = time(0);
 	return (u32)t;
 }
 
-static DateTime
+internal DateTime
 os_now_universal_time(void)
 {
 	time_t t = 0;
@@ -699,7 +715,7 @@ os_now_universal_time(void)
 	return result;
 }
 
-static DateTime
+internal DateTime
 os_universal_time_from_local(DateTime *date_time)
 {
 	tm local_tm = os_tm_from_date_time(*date_time);
@@ -712,7 +728,7 @@ os_universal_time_from_local(DateTime *date_time)
 	return result;
 }
 
-static DateTime
+internal DateTime
 os_local_time_from_universal(DateTime *date_time)
 {
 	tm universal_tm = os_tm_from_date_time(*date_time);
@@ -725,13 +741,15 @@ os_local_time_from_universal(DateTime *date_time)
 	return result;
 }
 
-static void
+internal void
 os_sleep_milliseconds(u32 msec)
 {
 	usleep(msec * Thousand(1));
 }
 
-// Entry Point
+////////////////////////////////
+//~ Entry Point
+
 int
 main(int argc, char **argv)
 {
@@ -746,6 +764,9 @@ main(int argc, char **argv)
 	// set up thread context
 	TCTX *tctx = tctx_alloc();
 	tctx_select(tctx);
+
+	// set up threading
+	thread_init();
 
 	// call into base entry point
 	main_thread_base_entry_point(argc, argv);

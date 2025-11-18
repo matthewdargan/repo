@@ -1,4 +1,7 @@
-static void
+////////////////////////////////
+//~ Entry Point Functions
+
+internal void
 main_thread_base_entry_point(int arguments_count, char **arguments)
 {
 	Temp scratch = scratch_begin(0, 0);
@@ -17,4 +20,13 @@ main_thread_base_entry_point(int arguments_count, char **arguments)
 	entry_point(&cmd_line);
 
 	scratch_end(scratch);
+}
+
+internal void
+supplement_thread_base_entry_point(ThreadEntryPointFunctionType *entry_point, void *params)
+{
+	TCTX *tctx = tctx_alloc();
+	tctx_select(tctx);
+	entry_point(params);
+	tctx_release(tctx);
 }

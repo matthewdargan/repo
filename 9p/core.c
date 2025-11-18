@@ -1,12 +1,12 @@
 // Type Constructors
-static Message9P
+internal Message9P
 msg9p_zero(void)
 {
 	Message9P msg = {0};
 	return msg;
 }
 
-static Dir9P
+internal Dir9P
 dir9p_zero(void)
 {
 	Dir9P dir = {0};
@@ -14,7 +14,7 @@ dir9p_zero(void)
 }
 
 // Encoding/Decoding Helpers
-static u8 *
+internal u8 *
 encode_str8(u8 *ptr, String8 string)
 {
 	write_u16(ptr, from_le_u16(string.size));
@@ -27,7 +27,7 @@ encode_str8(u8 *ptr, String8 string)
 	return ptr;
 }
 
-static u8 *
+internal u8 *
 encode_qid(u8 *ptr, Qid qid)
 {
 	*ptr = (u8)qid.type;
@@ -39,7 +39,7 @@ encode_qid(u8 *ptr, Qid qid)
 	return ptr;
 }
 
-static u8 *
+internal u8 *
 decode_str8(u8 *ptr, u8 *end, String8 *out_string)
 {
 	if(ptr + P9_STRING8_SIZE_FIELD_SIZE > end)
@@ -65,7 +65,7 @@ decode_str8(u8 *ptr, u8 *end, String8 *out_string)
 	return ptr;
 }
 
-static u8 *
+internal u8 *
 decode_qid(u8 *ptr, u8 *end, Qid *out_qid)
 {
 	// Bounds check: Qid is type(1) + version(4) + path(8)
@@ -83,7 +83,7 @@ decode_qid(u8 *ptr, u8 *end, Qid *out_qid)
 }
 
 // Message Encoding/Decoding
-static u32
+internal u32
 msg9p_size(Message9P msg)
 {
 	// Message header is size(4) + type(1) + tag(2)
@@ -233,7 +233,7 @@ msg9p_size(Message9P msg)
 	return total_size;
 }
 
-static String8
+internal String8
 str8_from_msg9p(Arena *arena, Message9P msg)
 {
 	u32 msg_size = msg9p_size(msg);
@@ -457,7 +457,7 @@ str8_from_msg9p(Arena *arena, Message9P msg)
 	return result;
 }
 
-static Message9P
+internal Message9P
 msg9p_from_str8(String8 data)
 {
 	Message9P result = msg9p_zero();
@@ -836,7 +836,7 @@ msg9p_from_str8(String8 data)
 }
 
 // Message Formatting
-static String8
+internal String8
 str8_from_msg9p__fmt(Arena *arena, Message9P msg)
 {
 	String8 result = str8_zero();
@@ -998,7 +998,7 @@ str8_from_msg9p__fmt(Arena *arena, Message9P msg)
 }
 
 // Directory Encoding/Decoding
-static u32
+internal u32
 dir9p_size(Dir9P dir)
 {
 	u32 total_size = P9_STAT_DATA_FIXED_SIZE;
@@ -1009,7 +1009,7 @@ dir9p_size(Dir9P dir)
 	return total_size;
 }
 
-static String8
+internal String8
 str8_from_dir9p(Arena *arena, Dir9P dir)
 {
 	u32 entry_size = dir9p_size(dir);
@@ -1053,7 +1053,7 @@ str8_from_dir9p(Arena *arena, Dir9P dir)
 	return encoded_dir;
 }
 
-static Dir9P
+internal Dir9P
 dir9p_from_str8(String8 data)
 {
 	Dir9P result = dir9p_zero();
@@ -1114,7 +1114,7 @@ dir9p_from_str8(String8 data)
 }
 
 // Directory List Operations
-static void
+internal void
 dir9p_list_push(Arena *arena, DirList9P *list, Dir9P dir)
 {
 	DirNode9P *node = push_array_no_zero(arena, DirNode9P, 1);
@@ -1125,7 +1125,7 @@ dir9p_list_push(Arena *arena, DirList9P *list, Dir9P dir)
 }
 
 // Message I/O
-static String8
+internal String8
 read_9p_msg(Arena *arena, u64 fd)
 {
 	u8 len_buf[4];

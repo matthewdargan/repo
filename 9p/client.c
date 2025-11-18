@@ -1,5 +1,7 @@
-// Client Connection
-static Client9P *
+////////////////////////////////
+//~ Client Connection
+
+internal Client9P *
 client9p_init(Arena *arena, u64 fd)
 {
 	Client9P *client = push_array(arena, Client9P, 1);
@@ -14,7 +16,7 @@ client9p_init(Arena *arena, u64 fd)
 	return client;
 }
 
-static String8
+internal String8
 get_user_name(Arena *arena)
 {
 	uid_t uid = getuid();
@@ -27,7 +29,7 @@ get_user_name(Arena *arena)
 	return str8_copy(arena, name);
 }
 
-static Client9P *
+internal Client9P *
 client9p_mount(Arena *arena, u64 fd, String8 attach_path)
 {
 	Client9P *client = client9p_init(arena, fd);
@@ -46,7 +48,7 @@ client9p_mount(Arena *arena, u64 fd, String8 attach_path)
 	return client;
 }
 
-static void
+internal void
 client9p_unmount(Arena *arena, Client9P *client)
 {
 	client9p_fid_close(arena, client->root);
@@ -55,7 +57,7 @@ client9p_unmount(Arena *arena, Client9P *client)
 	client->fd = -1;
 }
 
-static Message9P
+internal Message9P
 client9p_rpc(Arena *arena, Client9P *client, Message9P tx)
 {
 	Message9P result = msg9p_zero();
@@ -104,7 +106,7 @@ client9p_rpc(Arena *arena, Client9P *client, Message9P tx)
 	return rx;
 }
 
-static b32
+internal b32
 client9p_version(Arena *arena, Client9P *client, u32 max_message_size)
 {
 	Message9P tx = msg9p_zero();
@@ -125,7 +127,7 @@ client9p_version(Arena *arena, Client9P *client, u32 max_message_size)
 	return 1;
 }
 
-static ClientFid9P *
+internal ClientFid9P *
 client9p_auth(Arena *arena, Client9P *client, String8 user_name, String8 attach_path)
 {
 	ClientFid9P *auth_fid_result = push_array(arena, ClientFid9P, 1);
@@ -146,7 +148,7 @@ client9p_auth(Arena *arena, Client9P *client, String8 user_name, String8 attach_
 	return auth_fid_result;
 }
 
-static ClientFid9P *
+internal ClientFid9P *
 client9p_attach(Arena *arena, Client9P *client, u32 auth_fid, String8 user_name, String8 attach_path)
 {
 	ClientFid9P *fid = push_array(arena, ClientFid9P, 1);
@@ -168,8 +170,10 @@ client9p_attach(Arena *arena, Client9P *client, u32 auth_fid, String8 user_name,
 	return fid;
 }
 
-// Fid Operations
-static void
+////////////////////////////////
+//~ Fid Operations
+
+internal void
 client9p_fid_close(Arena *arena, ClientFid9P *fid)
 {
 	if(fid == 0)
@@ -182,7 +186,7 @@ client9p_fid_close(Arena *arena, ClientFid9P *fid)
 	client9p_rpc(arena, fid->client, tx);
 }
 
-static ClientFid9P *
+internal ClientFid9P *
 client9p_fid_walk(Arena *arena, ClientFid9P *fid, String8 path)
 {
 	if(fid == 0)
@@ -246,7 +250,7 @@ client9p_fid_walk(Arena *arena, ClientFid9P *fid, String8 path)
 	return walk_fid;
 }
 
-static b32
+internal b32
 client9p_fid_create(Arena *arena, ClientFid9P *fid, String8 name, u32 mode, u32 permissions)
 {
 	if(fid == 0)
@@ -268,7 +272,7 @@ client9p_fid_create(Arena *arena, ClientFid9P *fid, String8 name, u32 mode, u32 
 	return 1;
 }
 
-static ClientFid9P *
+internal ClientFid9P *
 client9p_create(Arena *arena, Client9P *client, String8 name, u32 mode, u32 permissions)
 {
 	if(client == 0 || client->root == 0)
@@ -290,7 +294,7 @@ client9p_create(Arena *arena, Client9P *client, String8 name, u32 mode, u32 perm
 	return fid;
 }
 
-static b32
+internal b32
 client9p_fid_remove(Arena *arena, ClientFid9P *fid)
 {
 	if(fid == 0)
@@ -308,7 +312,7 @@ client9p_fid_remove(Arena *arena, ClientFid9P *fid)
 	return 1;
 }
 
-static b32
+internal b32
 client9p_remove(Arena *arena, Client9P *client, String8 name)
 {
 	if(client == 0 || client->root == 0)
@@ -327,7 +331,7 @@ client9p_remove(Arena *arena, Client9P *client, String8 name)
 	return 1;
 }
 
-static b32
+internal b32
 client9p_fid_open(Arena *arena, ClientFid9P *fid, u32 mode)
 {
 	if(fid == 0)
@@ -347,7 +351,7 @@ client9p_fid_open(Arena *arena, ClientFid9P *fid, u32 mode)
 	return 1;
 }
 
-static ClientFid9P *
+internal ClientFid9P *
 client9p_open(Arena *arena, Client9P *client, String8 name, u32 mode)
 {
 	if(client == 0 || client->root == 0)
@@ -367,7 +371,7 @@ client9p_open(Arena *arena, Client9P *client, String8 name, u32 mode)
 	return fid;
 }
 
-static s64
+internal s64
 client9p_fid_pread(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset)
 {
 	if(fid == 0 || buf == 0)
@@ -424,7 +428,7 @@ client9p_fid_pread(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset)
 	return total_num_bytes_read;
 }
 
-static s64
+internal s64
 client9p_fid_read_range(Arena *arena, ClientFid9P *fid, void *buf, Rng1U64 range)
 {
 	if(fid == 0 || buf == 0)
@@ -435,7 +439,7 @@ client9p_fid_read_range(Arena *arena, ClientFid9P *fid, void *buf, Rng1U64 range
 	return client9p_fid_pread(arena, fid, buf, num_bytes, range.min);
 }
 
-static s64
+internal s64
 client9p_fid_pwrite(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset)
 {
 	if(fid == 0 || buf == 0)
@@ -491,7 +495,7 @@ client9p_fid_pwrite(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset
 	return total_num_bytes_written;
 }
 
-static s64
+internal s64
 client9p_fid_write_range(Arena *arena, ClientFid9P *fid, void *buf, Rng1U64 range)
 {
 	if(fid == 0 || buf == 0)
@@ -502,7 +506,7 @@ client9p_fid_write_range(Arena *arena, ClientFid9P *fid, void *buf, Rng1U64 rang
 	return client9p_fid_pwrite(arena, fid, buf, num_bytes, range.min);
 }
 
-static DirList9P
+internal DirList9P
 client9p_dir_list_from_str8(Arena *arena, String8 buffer)
 {
 	DirList9P result = {0};
@@ -532,7 +536,7 @@ client9p_dir_list_from_str8(Arena *arena, String8 buffer)
 	return result;
 }
 
-static DirList9P
+internal DirList9P
 client9p_fid_read_dirs(Arena *arena, ClientFid9P *fid)
 {
 	DirList9P result = {0};
@@ -558,7 +562,7 @@ client9p_fid_read_dirs(Arena *arena, ClientFid9P *fid)
 	return result;
 }
 
-static Dir9P
+internal Dir9P
 client9p_fid_stat(Arena *arena, ClientFid9P *fid)
 {
 	Dir9P result = dir9p_zero();
@@ -578,7 +582,7 @@ client9p_fid_stat(Arena *arena, ClientFid9P *fid)
 	return result;
 }
 
-static Dir9P
+internal Dir9P
 client9p_stat(Arena *arena, Client9P *client, String8 name)
 {
 	Dir9P result = dir9p_zero();
@@ -596,7 +600,7 @@ client9p_stat(Arena *arena, Client9P *client, String8 name)
 	return result;
 }
 
-static b32
+internal b32
 client9p_fid_wstat(Arena *arena, ClientFid9P *fid, Dir9P dir)
 {
 	if(fid == 0)
@@ -621,7 +625,7 @@ client9p_fid_wstat(Arena *arena, ClientFid9P *fid, Dir9P dir)
 	return 1;
 }
 
-static b32
+internal b32
 client9p_wstat(Arena *arena, Client9P *client, String8 name, Dir9P dir)
 {
 	if(client == 0 || client->root == 0)
@@ -638,7 +642,7 @@ client9p_wstat(Arena *arena, Client9P *client, String8 name, Dir9P dir)
 	return result;
 }
 
-static b32
+internal b32
 client9p_access(Arena *arena, Client9P *client, String8 name, u32 mode)
 {
 	if(client == 0 || client->root == 0)
@@ -663,7 +667,7 @@ client9p_access(Arena *arena, Client9P *client, String8 name, u32 mode)
 	return 1;
 }
 
-static s64
+internal s64
 client9p_fid_seek(Arena *arena, ClientFid9P *fid, s64 offset, u32 type)
 {
 	if(fid == 0)

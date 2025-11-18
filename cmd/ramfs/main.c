@@ -5,6 +5,9 @@
 #include "9p/inc.c"
 // clang-format on
 
+////////////////////////////////
+//~ Types
+
 typedef struct Ramfile Ramfile;
 struct Ramfile
 {
@@ -21,10 +24,16 @@ struct Ramentry
 	Ramentry *next;
 };
 
-static Ramentry *filelist = 0;
-static u64 next_qid_path = 1;
+////////////////////////////////
+//~ Globals
 
-static Ramentry *
+global Ramentry *filelist = 0;
+global u64 next_qid_path = 1;
+
+////////////////////////////////
+//~ Helper Functions
+
+internal Ramentry *
 find_file(String8 name)
 {
 	for(Ramentry *entry = filelist; entry != 0; entry = entry->next)
@@ -37,7 +46,7 @@ find_file(String8 name)
 	return 0;
 }
 
-static Ramentry *
+internal Ramentry *
 add_file(Arena *arena, String8 name)
 {
 	Ramentry *entry = push_array(arena, Ramentry, 1);
@@ -50,7 +59,10 @@ add_file(Arena *arena, String8 name)
 	return entry;
 }
 
-static void
+////////////////////////////////
+//~ 9P Handlers
+
+internal void
 ramfs_read(ServerRequest9P *request)
 {
 	Ramentry *entry = request->fid->auxiliary;
@@ -132,7 +144,7 @@ ramfs_read(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 ramfs_write(ServerRequest9P *request)
 {
 	Ramentry *entry = request->fid->auxiliary;
@@ -162,7 +174,7 @@ ramfs_write(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 ramfs_create(ServerRequest9P *request)
 {
 	Ramentry *entry = find_file(request->in_msg.name);
@@ -187,7 +199,7 @@ ramfs_create(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 ramfs_version(ServerRequest9P *request)
 {
 	request->out_msg.max_message_size = request->in_msg.max_message_size;
@@ -195,7 +207,7 @@ ramfs_version(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 ramfs_attach(ServerRequest9P *request)
 {
 	request->fid->qid.path = 0;
@@ -205,7 +217,7 @@ ramfs_attach(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 ramfs_walk(ServerRequest9P *request)
 {
 	if(request->in_msg.walk_name_count == 0)
@@ -243,7 +255,7 @@ ramfs_walk(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 ramfs_stat(ServerRequest9P *request)
 {
 	Ramentry *entry = request->fid->auxiliary;
@@ -278,7 +290,7 @@ ramfs_stat(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 ramfs_remove(ServerRequest9P *request)
 {
 	Ramentry *entry = request->fid->auxiliary;
@@ -307,7 +319,7 @@ ramfs_remove(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 ramfs_open(ServerRequest9P *request)
 {
 	Ramentry *entry = request->fid->auxiliary;
@@ -343,7 +355,10 @@ ramfs_open(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+////////////////////////////////
+//~ Entry Point
+
+internal void
 entry_point(CmdLine *cmd_line)
 {
 	Temp scratch = scratch_begin(0, 0);

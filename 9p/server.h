@@ -1,7 +1,9 @@
 #ifndef _9P_SERVER_H
 #define _9P_SERVER_H
 
-// Server Types
+////////////////////////////////
+//~ Server Types
+
 typedef struct ServerFid9P ServerFid9P;
 struct ServerFid9P
 {
@@ -53,7 +55,9 @@ struct Server9P
 	void *auxiliary;
 };
 
-// Qid Type Flags
+////////////////////////////////
+//~ Qid Type Flags
+
 typedef u32 QidTypeFlags;
 enum
 {
@@ -67,20 +71,28 @@ enum
 	QidTypeFlag_File = 0x00,
 };
 
-// Request Management
-static ServerRequest9P *server9p_request_alloc(Server9P *server, u32 tag);
-static ServerRequest9P *server9p_request_remove(Server9P *server, u32 tag);
+////////////////////////////////
+//~ Request Management
 
-// Server Lifecycle
-static Server9P *server9p_alloc(Arena *arena, u64 input_fd, u64 output_fd);
+internal ServerRequest9P *server9p_request_alloc(Server9P *server, u32 tag);
+internal ServerRequest9P *server9p_request_remove(Server9P *server, u32 tag);
 
-// Request Handling
-static ServerRequest9P *server9p_get_request(Server9P *server);
-static b32 server9p_respond(ServerRequest9P *request, String8 err);
+////////////////////////////////
+//~ Server Lifecycle
 
-// Fid Management
-static ServerFid9P *server9p_fid_alloc(Server9P *server, u32 fid);
-static ServerFid9P *server9p_fid_lookup(Server9P *server, u32 fid);
-static ServerFid9P *server9p_fid_remove(Server9P *server, u32 fid);
+internal Server9P *server9p_alloc(Arena *arena, u64 input_fd, u64 output_fd);
+
+////////////////////////////////
+//~ Request Handling
+
+internal ServerRequest9P *server9p_get_request(Server9P *server);
+internal b32 server9p_respond(ServerRequest9P *request, String8 err);
+
+////////////////////////////////
+//~ Fid Management
+
+internal ServerFid9P *server9p_fid_alloc(Server9P *server, u32 fid);
+internal ServerFid9P *server9p_fid_lookup(Server9P *server, u32 fid);
+internal ServerFid9P *server9p_fid_remove(Server9P *server, u32 fid);
 
 #endif // _9P_SERVER_H

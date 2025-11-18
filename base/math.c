@@ -1,5 +1,7 @@
-// Range Ops
-static Rng1U64
+////////////////////////////////
+//~ Range Ops
+
+internal Rng1U64
 rng_1u64(u64 min, u64 max)
 {
 	Rng1U64 r = {min, max};
@@ -10,7 +12,7 @@ rng_1u64(u64 min, u64 max)
 	return r;
 }
 
-static Rng1U64
+internal Rng1U64
 shift_1u64(Rng1U64 r, u64 x)
 {
 	r.min += x;
@@ -18,7 +20,7 @@ shift_1u64(Rng1U64 r, u64 x)
 	return r;
 }
 
-static Rng1U64
+internal Rng1U64
 pad_1u64(Rng1U64 r, u64 x)
 {
 	r.min -= x;
@@ -26,42 +28,42 @@ pad_1u64(Rng1U64 r, u64 x)
 	return r;
 }
 
-static u64
+internal u64
 center_1u64(Rng1U64 r)
 {
 	u64 c = (r.min + r.max) / 2;
 	return c;
 }
 
-static b32
+internal b32
 contains_1u64(Rng1U64 r, u64 x)
 {
 	b32 c = (r.min <= x && x < r.max);
 	return c;
 }
 
-static u64
+internal u64
 dim_1u64(Rng1U64 r)
 {
 	u64 c = ((r.max > r.min) ? (r.max - r.min) : 0);
 	return c;
 }
 
-static Rng1U64
+internal Rng1U64
 union_1u64(Rng1U64 a, Rng1U64 b)
 {
 	Rng1U64 c = {Min(a.min, b.min), Max(a.max, b.max)};
 	return c;
 }
 
-static Rng1U64
+internal Rng1U64
 intersect_1u64(Rng1U64 a, Rng1U64 b)
 {
 	Rng1U64 c = {Max(a.min, b.min), Min(a.max, b.max)};
 	return c;
 }
 
-static u64
+internal u64
 clamp_1u64(Rng1U64 r, u64 v)
 {
 	v = Clamp(r.min, v, r.max);

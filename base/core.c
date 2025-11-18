@@ -1,18 +1,22 @@
-// Third Party Includes
+////////////////////////////////
+//~ Third Party Includes
+
 #define STB_SPRINTF_IMPLEMENTATION
 #define STB_SPRINTF_STATIC
 #define STB_SPRINTF_DECORATE(name) base_##name
 #include "stb_sprintf.h"
 
-// Bit Patterns
-static u16
+////////////////////////////////
+//~ Bit Patterns
+
+internal u16
 bswap_u16(u16 x)
 {
 	u16 result = (((x & 0xff00) >> 8) | ((x & 0x00ff) << 8));
 	return result;
 }
 
-static u32
+internal u32
 bswap_u32(u32 x)
 {
 	u32 result =
@@ -20,7 +24,7 @@ bswap_u32(u32 x)
 	return result;
 }
 
-static u64
+internal u64
 bswap_u64(u64 x)
 {
 	u64 result =
@@ -30,8 +34,10 @@ bswap_u64(u64 x)
 	return result;
 }
 
-// Raw byte IO
-static u16
+////////////////////////////////
+//~ Raw Byte IO
+
+internal u16
 read_u16(void const *ptr)
 {
 	u16 x;
@@ -39,7 +45,7 @@ read_u16(void const *ptr)
 	return x;
 }
 
-static u32
+internal u32
 read_u32(void const *ptr)
 {
 	u32 x;
@@ -47,7 +53,7 @@ read_u32(void const *ptr)
 	return x;
 }
 
-static u64
+internal u64
 read_u64(void const *ptr)
 {
 	u64 x;
@@ -55,26 +61,72 @@ read_u64(void const *ptr)
 	return x;
 }
 
-static void
+internal void
 write_u16(void *ptr, u16 x)
 {
 	MemoryCopy(ptr, &x, sizeof(x));
 }
 
-static void
+internal void
 write_u32(void *ptr, u32 x)
 {
 	MemoryCopy(ptr, &x, sizeof(x));
 }
 
-static void
+internal void
 write_u64(void *ptr, u64 x)
 {
 	MemoryCopy(ptr, &x, sizeof(x));
 }
 
-// Time Functions
-static DenseTime
+////////////////////////////////
+//~ Memory Functions
+
+internal b32
+memory_is_zero(void *ptr, u64 size)
+{
+	b32 result = 1;
+
+	// break down size
+	u64 extra = (size & 0x7);
+	u64 count8 = (size >> 3);
+
+	// check with 8-byte stride
+	u64 *p64 = (u64 *)ptr;
+	if(result)
+	{
+		for(u64 i = 0; i < count8; i += 1, p64 += 1)
+		{
+			if(*p64 != 0)
+			{
+				result = 0;
+				goto done;
+			}
+		}
+	}
+
+	// check extra
+	if(result)
+	{
+		u8 *p8 = (u8 *)p64;
+		for(u64 i = 0; i < extra; i += 1, p8 += 1)
+		{
+			if(*p8 != 0)
+			{
+				result = 0;
+				goto done;
+			}
+		}
+	}
+
+done:
+	return result;
+}
+
+////////////////////////////////
+//~ Time Functions
+
+internal DenseTime
 dense_time_from_date_time(DateTime date_time)
 {
 	DenseTime result = 0;
@@ -94,7 +146,7 @@ dense_time_from_date_time(DateTime date_time)
 	return result;
 }
 
-static DateTime
+internal DateTime
 date_time_from_dense_time(DenseTime time)
 {
 	DateTime result = {0};

@@ -5,7 +5,10 @@
 #include "9p/inc.c"
 /* clang-format on */
 
-static void
+////////////////////////////////
+//~ Helper Functions
+
+internal void
 usage(void)
 {
 	log_error(
@@ -13,7 +16,7 @@ usage(void)
 	             "cmds: create <name>..., read <name>, write <name>, remove <name>..., stat <name>, ls <name>...\n"));
 }
 
-static Client9P *
+internal Client9P *
 client9p_connect(Arena *arena, String8 address, String8 aname)
 {
 	if(address.size == 0)
@@ -41,7 +44,10 @@ client9p_connect(Arena *arena, String8 address, String8 aname)
 	return client;
 }
 
-static void
+////////////////////////////////
+//~ Entry Point
+
+internal void
 entry_point(CmdLine *cmd_line)
 {
 	Temp scratch = scratch_begin(0, 0);

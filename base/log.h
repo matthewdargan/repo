@@ -1,7 +1,9 @@
 #ifndef LOG_H
 #define LOG_H
 
-// Log Types
+////////////////////////////////
+//~ Log Types
+
 typedef enum LogMsgKind
 {
 	LogMsgKind_Info,
@@ -30,14 +32,18 @@ struct Log
 	LogScope *top_scope;
 };
 
-// Log Creation/Selection
-static Log *log_alloc(void);
-static void log_release(Log *log);
-static void log_select(Log *log);
+////////////////////////////////
+//~ Log Creation/Selection
 
-// Log Building
-static void log_msg(LogMsgKind kind, String8 string);
-static void log_msgf(LogMsgKind kind, char *fmt, ...);
+internal Log *log_alloc(void);
+internal void log_release(Log *log);
+internal void log_select(Log *log);
+
+////////////////////////////////
+//~ Log Building
+
+internal void log_msg(LogMsgKind kind, String8 string);
+internal void log_msgf(LogMsgKind kind, char *fmt, ...);
 #define log_info(s) log_msg(LogMsgKind_Info, (s))
 #define log_infof(...) log_msgf(LogMsgKind_Info, __VA_ARGS__)
 #define log_error(s) log_msg(LogMsgKind_Error, (s))
@@ -46,8 +52,10 @@ static void log_msgf(LogMsgKind kind, char *fmt, ...);
 #define LogInfoNamedBlock(s) DeferLoop(log_infof("%S:\n{\n", (s)), log_infof("}\n"))
 #define LogInfoNamedBlockF(...) DeferLoop((log_infof(__VA_ARGS__), log_infof(":\n{\n")), log_infof("}\n"))
 
-// Log Scopes
-static void log_scope_begin(void);
-static LogScopeResult log_scope_end(Arena *arena);
+////////////////////////////////
+//~ Log Scopes
+
+internal void log_scope_begin(void);
+internal LogScopeResult log_scope_end(Arena *arena);
 
 #endif // LOG_H

@@ -1,7 +1,9 @@
 #ifndef ARENA_H
 #define ARENA_H
 
-// Arena Types
+////////////////////////////////
+//~ Arena Types
+
 #define ARENA_HEADER_SIZE 128
 #define ARENA_FREE_LIST 1
 
@@ -46,21 +48,23 @@ struct Temp
 	u64 pos;
 };
 
-// Arena Functions
-read_only static ArenaFlags arena_default_flags = 0;
-read_only static u64 arena_default_reserve_size = MB(64);
-read_only static u64 arena_default_commit_size = KB(64);
+////////////////////////////////
+//~ Arena Functions
 
-static Arena *arena_alloc(void);
-static Arena *arena_alloc_(ArenaParams params);
-static void arena_release(Arena *arena);
-static void *arena_push(Arena *arena, u64 size, u64 align, b32 zero);
-static u64 arena_pos(Arena *arena);
-static void arena_pop_to(Arena *arena, u64 pos);
-static void arena_clear(Arena *arena);
-static void arena_pop(Arena *arena, u64 amt);
-static Temp temp_begin(Arena *arena);
-static void temp_end(Temp temp);
+read_only global ArenaFlags arena_default_flags = 0;
+read_only global u64 arena_default_reserve_size = MB(64);
+read_only global u64 arena_default_commit_size = KB(64);
+
+internal Arena *arena_alloc(void);
+internal Arena *arena_alloc_(ArenaParams params);
+internal void arena_release(Arena *arena);
+internal void *arena_push(Arena *arena, u64 size, u64 align, b32 zero);
+internal u64 arena_pos(Arena *arena);
+internal void arena_pop_to(Arena *arena, u64 pos);
+internal void arena_clear(Arena *arena);
+internal void arena_pop(Arena *arena, u64 amt);
+internal Temp temp_begin(Arena *arena);
+internal void temp_end(Temp temp);
 
 #define push_array_no_zero_aligned(a, T, c, align) (T *)arena_push((a), sizeof(T) * (c), (align), (0))
 #define push_array_aligned(a, T, c, align) (T *)arena_push((a), sizeof(T) * (c), (align), (1))

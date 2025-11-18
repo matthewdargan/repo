@@ -5,9 +5,113 @@
 #include "9p/inc.c"
 // clang-format on
 
-static FsContext9P *fs_context = 0;
+#include <signal.h>
 
-static FidAuxiliary9P *
+global FsContext9P *fs_context = 0;
+
+////////////////////////////////
+//~ Worker Thread Pool
+
+typedef struct Worker Worker;
+struct Worker
+{
+	u64 id;
+	Thread handle;
+};
+
+typedef struct WorkQueueNode WorkQueueNode;
+struct WorkQueueNode
+{
+	WorkQueueNode *next;
+	OS_Handle connection;
+};
+
+typedef struct WorkerPool WorkerPool;
+struct WorkerPool
+{
+	b32 is_live;
+	Semaphore semaphore;
+	pthread_mutex_t mutex;
+	Arena *arena;
+	WorkQueueNode *queue_first;
+	WorkQueueNode *queue_last;
+	WorkQueueNode *node_free_list;
+	Worker *workers;
+	u64 worker_count;
+};
+
+global WorkerPool *worker_pool = 0;
+
+internal WorkQueueNode *
+work_queue_node_alloc(WorkerPool *pool)
+{
+	WorkQueueNode *node = 0;
+	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
+	{
+		node = pool->node_free_list;
+		if(node != 0)
+		{
+			SLLStackPop(pool->node_free_list);
+		}
+		else
+		{
+			node = push_array_no_zero(pool->arena, WorkQueueNode, 1);
+		}
+	}
+	MemoryZeroStruct(node);
+	return node;
+}
+
+internal void
+work_queue_node_release(WorkerPool *pool, WorkQueueNode *node)
+{
+	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
+	{
+		SLLStackPush(pool->node_free_list, node);
+	}
+}
+
+internal void
+work_queue_push(WorkerPool *pool, OS_Handle connection)
+{
+	WorkQueueNode *node = work_queue_node_alloc(pool);
+	node->connection = connection;
+	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
+	{
+		SLLQueuePush(pool->queue_first, pool->queue_last, node);
+	}
+	semaphore_drop(pool->semaphore);
+}
+
+internal OS_Handle
+work_queue_pop(WorkerPool *pool)
+{
+	if(!semaphore_take(pool->semaphore, max_u64))
+	{
+		return os_handle_zero();
+	}
+
+	OS_Handle result = os_handle_zero();
+	WorkQueueNode *node = 0;
+	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
+	{
+		if(pool->queue_first != 0)
+		{
+			node = pool->queue_first;
+			result = node->connection;
+			SLLQueuePop(pool->queue_first, pool->queue_last);
+		}
+	}
+
+	if(node != 0)
+	{
+		work_queue_node_release(pool, node);
+	}
+
+	return result;
+}
+
+internal FidAuxiliary9P *
 get_fid_aux(Arena *arena, ServerFid9P *fid)
 {
 	if(fid->auxiliary == 0)
@@ -19,7 +123,7 @@ get_fid_aux(Arena *arena, ServerFid9P *fid)
 }
 
 // 9P Operation Handlers
-static void
+internal void
 srv_version(ServerRequest9P *request)
 {
 	request->out_msg.max_message_size = request->in_msg.max_message_size;
@@ -27,13 +131,13 @@ srv_version(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 srv_auth(ServerRequest9P *request)
 {
 	server9p_respond(request, str8_lit("authentication not required"));
 }
 
-static void
+internal void
 srv_attach(ServerRequest9P *request)
 {
 	Dir9P root_stat = fs9p_stat(request->server->arena, fs_context, str8_zero());
@@ -52,7 +156,7 @@ srv_attach(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 srv_walk(ServerRequest9P *request)
 {
 	FidAuxiliary9P *from_aux = get_fid_aux(request->server->arena, request->fid);
@@ -75,7 +179,14 @@ srv_walk(ServerRequest9P *request)
 
 		if(str8_match(name, str8_lit("."), 0))
 		{
-			request->out_msg.walk_qids[i] = request->fid->qid;
+			if(i == 0)
+			{
+				request->out_msg.walk_qids[i] = request->fid->qid;
+			}
+			else
+			{
+				request->out_msg.walk_qids[i] = request->out_msg.walk_qids[i - 1];
+			}
 			continue;
 		}
 
@@ -85,6 +196,10 @@ srv_walk(ServerRequest9P *request)
 		{
 			if(i == 0)
 			{
+				if(request->new_fid != request->fid)
+				{
+					server9p_fid_remove(request->server, request->in_msg.new_fid);
+				}
 				server9p_respond(request, res.error);
 				return;
 			}
@@ -101,6 +216,10 @@ srv_walk(ServerRequest9P *request)
 		{
 			if(i == 0)
 			{
+				if(request->new_fid != request->fid)
+				{
+					server9p_fid_remove(request->server, request->in_msg.new_fid);
+				}
 				server9p_respond(request, str8_lit("file not found"));
 				return;
 			}
@@ -123,7 +242,7 @@ srv_walk(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 srv_open(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
@@ -155,7 +274,7 @@ srv_open(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 srv_create(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
@@ -207,7 +326,7 @@ srv_create(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 srv_read(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
@@ -248,7 +367,7 @@ srv_read(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 srv_write(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
@@ -271,7 +390,7 @@ srv_write(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 srv_stat(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
@@ -287,7 +406,7 @@ srv_stat(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 srv_wstat(ServerRequest9P *request)
 {
 	if(fs_context->readonly)
@@ -305,13 +424,12 @@ srv_wstat(ServerRequest9P *request)
 	}
 
 	Dir9P stat = dir9p_from_str8(request->in_msg.stat_data);
-	if(stat.name.size == 0 && request->in_msg.stat_data.size > 0)
+
+	if(!fs9p_wstat(fs_context, aux->path, &stat))
 	{
-		server9p_respond(request, str8_lit("invalid stat format"));
+		server9p_respond(request, str8_lit("wstat failed"));
 		return;
 	}
-
-	fs9p_wstat(fs_context, aux->path, &stat);
 
 	if(stat.name.size > 0)
 	{
@@ -326,7 +444,7 @@ srv_wstat(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 srv_remove(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
@@ -353,7 +471,7 @@ srv_remove(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-static void
+internal void
 srv_clunk(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
@@ -373,11 +491,17 @@ srv_clunk(ServerRequest9P *request)
 	server9p_respond(request, str8_zero());
 }
 
-// Server Loop
-static void
+////////////////////////////////
+//~ Server Loop
+
+internal void
 handle_connection(OS_Handle connection_socket)
 {
 	Temp scratch = scratch_begin(0, 0);
+	Log *log = log_alloc();
+	log_select(log);
+	log_scope_begin();
+
 	DateTime now = os_now_universal_time();
 	String8 timestamp = str8_from_datetime(scratch.arena, now);
 	u64 connection_fd = connection_socket.u64[0];
@@ -454,17 +578,105 @@ handle_connection(OS_Handle connection_socket)
 	String8 end_timestamp = str8_from_datetime(scratch.arena, end_time);
 	log_infof("[%S] 9pfs: connection closed\n", end_timestamp);
 
+	LogScopeResult result = log_scope_end(scratch.arena);
+	if(result.strings[LogMsgKind_Info].size > 0)
+	{
+		fwrite(result.strings[LogMsgKind_Info].str, 1, result.strings[LogMsgKind_Info].size, stdout);
+		fflush(stdout);
+	}
+	if(result.strings[LogMsgKind_Error].size > 0)
+	{
+		fwrite(result.strings[LogMsgKind_Error].str, 1, result.strings[LogMsgKind_Error].size, stderr);
+		fflush(stderr);
+	}
+
+	log_release(log);
 	scratch_end(scratch);
 }
 
-// Entry Point
-static void
+////////////////////////////////
+//~ Worker Thread Entry Point
+
+internal void
+worker_thread_entry_point(void *ptr)
+{
+	WorkerPool *pool = (WorkerPool *)ptr;
+	for(; pool->is_live;)
+	{
+		OS_Handle connection = work_queue_pop(pool);
+		if(!os_handle_match(connection, os_handle_zero()))
+		{
+			handle_connection(connection);
+		}
+	}
+}
+
+////////////////////////////////
+//~ Worker Pool Lifecycle
+
+internal WorkerPool *
+worker_pool_alloc(Arena *arena, u64 worker_count)
+{
+	WorkerPool *pool = push_array(arena, WorkerPool, 1);
+	pool->arena = arena_alloc();
+
+	int mutex_result = pthread_mutex_init(&pool->mutex, 0);
+	AssertAlways(mutex_result == 0);
+
+	pool->semaphore = semaphore_alloc(0, 1024, str8_zero());
+	AssertAlways(pool->semaphore.u64[0] != 0);
+
+	pool->worker_count = worker_count;
+	pool->workers = push_array(arena, Worker, worker_count);
+
+	return pool;
+}
+
+internal void
+worker_pool_start(WorkerPool *pool)
+{
+	pool->is_live = 1;
+	for(u64 i = 0; i < pool->worker_count; i += 1)
+	{
+		Worker *worker = &pool->workers[i];
+		worker->id = i;
+		worker->handle = thread_launch(worker_thread_entry_point, pool);
+		AssertAlways(worker->handle.u64[0] != 0);
+	}
+}
+
+internal void
+worker_pool_shutdown(WorkerPool *pool)
+{
+	pool->is_live = 0;
+
+	// Wake all workers so they can exit
+	for(u64 i = 0; i < pool->worker_count; i += 1)
+	{
+		semaphore_drop(pool->semaphore);
+	}
+
+	// Wait for all workers to finish
+	for(u64 i = 0; i < pool->worker_count; i += 1)
+	{
+		Worker *worker = &pool->workers[i];
+		if(worker->handle.u64[0] != 0)
+		{
+			thread_join(worker->handle);
+		}
+	}
+
+	semaphore_release(pool->semaphore);
+	pthread_mutex_destroy(&pool->mutex);
+}
+
+////////////////////////////////
+//~ Entry Point
+
+internal void
 entry_point(CmdLine *cmd_line)
 {
 	Temp scratch = scratch_begin(0, 0);
-	Log *log = log_alloc();
-	log_select(log);
-	log_scope_begin();
 	Arena *arena = arena_alloc();
 
 	String8 root_path = str8_lit(".");
@@ -494,12 +706,13 @@ entry_point(CmdLine *cmd_line)
 
 	if(address.size == 0)
 	{
-		log_error(str8_lit("usage: 9pfs [options] <address>\n"
-		                   "options:\n"
-		                   "  --root=<path>     Root directory to serve (default: current directory)\n"
-		                   "  --readonly        Serve in read-only mode\n"
-		                   "arguments:\n"
-		                   "  <address>         Dial string (e.g., tcp!host!port)\n"));
+		fprintf(stderr, "usage: 9pfs [options] <address>\n"
+		                "options:\n"
+		                "  --root=<path>     Root directory to serve (default: current directory)\n"
+		                "  --readonly        Serve in read-only mode\n"
+		                "arguments:\n"
+		                "  <address>         Dial string (e.g., tcp!host!port)\n");
+		fflush(stderr);
 	}
 	else
 	{
@@ -508,55 +721,44 @@ entry_point(CmdLine *cmd_line)
 		OS_Handle listen_socket = dial9p_listen(address, str8_lit("tcp"), str8_lit("9pfs"));
 		if(os_handle_match(listen_socket, os_handle_zero()))
 		{
-			log_errorf("9pfs: failed to listen on address '%S'\n", address);
+			fprintf(stderr, "9pfs: failed to listen on address '%.*s'\n", (int)address.size, address.str);
+			fflush(stderr);
 		}
 		else
 		{
-			log_infof("9pfs: serving '%S' on %S%S\n", root_path, address, readonly ? str8_lit(" (read-only)") : str8_zero());
+			fprintf(stdout, "9pfs: serving '%.*s' on %.*s%s\n", (int)root_path.size, root_path.str, (int)address.size,
+			        address.str, readonly ? " (read-only)" : "");
+			fflush(stdout);
+
+			u64 worker_count = os_get_system_info()->logical_processor_count;
+			worker_count = Max(1, worker_count);
+
+			worker_pool = worker_pool_alloc(arena, worker_count);
+			worker_pool_start(worker_pool);
+
+			fprintf(stdout, "9pfs: launched %lu worker threads\n", (unsigned long)worker_count);
+			fflush(stdout);
 
 			for(;;)
 			{
 				OS_Handle connection_socket = os_socket_accept(listen_socket);
 				if(os_handle_match(connection_socket, os_handle_zero()))
 				{
-					log_error(str8_lit("9pfs: failed to accept connection\n"));
+					fprintf(stderr, "9pfs: failed to accept connection\n");
+					fflush(stderr);
 					continue;
 				}
 
 				DateTime accept_time = os_now_universal_time();
 				String8 accept_timestamp = str8_from_datetime(scratch.arena, accept_time);
-				log_infof("[%S] 9pfs: accepted connection\n", accept_timestamp);
+				fprintf(stdout, "[%.*s] 9pfs: accepted connection\n", (int)accept_timestamp.size, accept_timestamp.str);
+				fflush(stdout);
 
-				handle_connection(connection_socket);
-
-				LogScopeResult conn_result = log_scope_end(scratch.arena);
-				log_scope_begin();
-				if(conn_result.strings[LogMsgKind_Info].size > 0)
-				{
-					fwrite(conn_result.strings[LogMsgKind_Info].str, 1, conn_result.strings[LogMsgKind_Info].size, stdout);
-					fflush(stdout);
-				}
-				if(conn_result.strings[LogMsgKind_Error].size > 0)
-				{
-					fwrite(conn_result.strings[LogMsgKind_Error].str, 1, conn_result.strings[LogMsgKind_Error].size, stderr);
-					fflush(stderr);
-				}
+				work_queue_push(worker_pool, connection_socket);
 			}
 		}
 	}
 
 	arena_release(arena);
-
-	LogScopeResult result = log_scope_end(scratch.arena);
-	if(result.strings[LogMsgKind_Info].size > 0)
-	{
-		fwrite(result.strings[LogMsgKind_Info].str, 1, result.strings[LogMsgKind_Info].size, stdout);
-		fflush(stdout);
-	}
-	if(result.strings[LogMsgKind_Error].size > 0)
-	{
-		fwrite(result.strings[LogMsgKind_Error].str, 1, result.strings[LogMsgKind_Error].size, stderr);
-		fflush(stderr);
-	}
 	scratch_end(scratch);
 }
