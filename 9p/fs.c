@@ -678,6 +678,10 @@ fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir)
 			{
 				success = 0;
 			}
+			else
+			{
+				cpath = new_cpath;
+			}
 		}
 	}
 

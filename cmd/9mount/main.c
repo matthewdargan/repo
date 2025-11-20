@@ -151,9 +151,7 @@ entry_point(CmdLine *cmd_line)
 					str8_list_push(scratch.arena, &mount_options, str8_lit("access=any"));
 
 					StringJoin join = {0};
-					join.pre = str8_zero();
 					join.sep = str8_lit(",");
-					join.post = str8_zero();
 					String8 option_string = str8_list_join(scratch.arena, &mount_options, &join);
 					String8 device_address_copy = str8_copy(scratch.arena, device_address);
 

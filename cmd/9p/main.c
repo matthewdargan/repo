@@ -1,9 +1,9 @@
-/* clang-format off */
+// clang-format off
 #include "base/inc.h"
 #include "9p/inc.h"
 #include "base/inc.c"
 #include "9p/inc.c"
-/* clang-format on */
+// clang-format on
 
 ////////////////////////////////
 //~ Helper Functions

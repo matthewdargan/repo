@@ -2,6 +2,7 @@
   imports = [
     ./9bind.nix
     ./9mount.nix
+    ./mount-9p.nix
     ./9umount.nix
     ./9p.nix
     ./ramfs.nix

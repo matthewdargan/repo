@@ -76,7 +76,7 @@ os_string_from_file_range(Arena *arena, OS_Handle file, Rng1U64 range)
 }
 
 ////////////////////////////////
-//~ Helpers
+//~ Helper Functions
 
 internal DateTime
 os_date_time_from_tm(tm in, u32 msec)

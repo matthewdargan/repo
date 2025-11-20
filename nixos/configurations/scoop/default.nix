@@ -2,7 +2,34 @@
   pkgs,
   self,
   ...
-}: {
+}: let
+  mounts = [
+    {
+      what = "nas";
+      where = "/home/mpd/n/nas";
+      type = "9p";
+      options = "port=4500";
+      after = ["network-online.target"];
+      wants = ["network-online.target"];
+    }
+    {
+      what = "/home/mpd/n/nas/movies";
+      where = "/home/mpd/n/movies";
+      type = "none";
+      options = "bind";
+      requires = ["home-mpd-n-nas.mount"];
+      after = ["home-mpd-n-nas.mount"];
+    }
+    {
+      what = "/home/mpd/n/nas/shows";
+      where = "/home/mpd/n/shows";
+      type = "none";
+      options = "bind";
+      requires = ["home-mpd-n-nas.mount"];
+      after = ["home-mpd-n-nas.mount"];
+    }
+  ];
+in {
   imports = [
     ./hardware.nix
     self.nixosModules."9p-tools"
@@ -45,32 +72,37 @@
       };
     };
   };
-  systemd.services."nas-mount" = {
-    after = [
-      "network-online.target"
-    ];
-    description = "mount nas";
-    serviceConfig = {
-      ExecStart = [
-        ''/bin/sh -c "if ${pkgs.util-linux}/bin/mountpoint -q /home/mpd/n/nas; then /run/wrappers/bin/9umount /home/mpd/n/nas; fi"''
-        ''/bin/sh -c "if ${pkgs.util-linux}/bin/mountpoint -q /home/mpd/n/movies; then /run/wrappers/bin/9umount /home/mpd/n/movies; fi"''
-        ''/bin/sh -c "if ${pkgs.util-linux}/bin/mountpoint -q /home/mpd/n/shows; then /run/wrappers/bin/9umount /home/mpd/n/shows; fi"''
-        "/run/wrappers/bin/9mount 'tcp!nas!4500' /home/mpd/n/nas"
-        "/run/wrappers/bin/9bind /home/mpd/n/nas/movies /home/mpd/n/movies"
-        "/run/wrappers/bin/9bind /home/mpd/n/nas/shows /home/mpd/n/shows"
-      ];
-      ExecStartPre = [
-        "${pkgs.coreutils}/bin/mkdir -p /home/mpd/n/nas /home/mpd/n/movies /home/mpd/n/shows"
-      ];
-      RemainAfterExit = true;
-      Restart = "on-failure";
-      RestartSec = "5s";
-      Type = "oneshot";
+  systemd = {
+    mounts = map (m: m // {wantedBy = [];}) mounts;
+    automounts =
+      map (m: {
+        inherit (m) where;
+        wantedBy = ["multi-user.target"];
+        automountConfig.TimeoutIdleSec = "600";
+      })
+      mounts;
+    services."9p-health-check" = {
+      description = "Check 9P mount health and restart if stale";
+      serviceConfig = {
+        Type = "oneshot";
+        User = "mpd";
+      };
+      script = ''
+        if ${pkgs.systemd}/bin/systemctl is-active --quiet home-mpd-n-nas.mount; then
+          if ! ${pkgs.coreutils}/bin/timeout 5 ${pkgs.coreutils}/bin/stat /home/mpd/n/nas >/dev/null 2>&1; then
+            echo "9P mount at /home/mpd/n/nas is unresponsive, restarting..."
+            ${pkgs.systemd}/bin/systemctl restart home-mpd-n-nas.mount
+          fi
+        fi
+      '';
     };
-    wantedBy = ["multi-user.target"];
-    wants = [
-      "network-online.target"
-    ];
+    timers."9p-health-check" = {
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "5min";
+        OnUnitActiveSec = "5min";
+      };
+    };
   };
   system.stateVersion = "25.05";
   users.users.mpd = {

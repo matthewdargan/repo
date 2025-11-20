@@ -52,9 +52,10 @@ Implementation of the 9P protocol for network file systems.
 ### `cmd/` - Command-line Tools
 
 - **`9p/`** - 9P protocol inspection tool
-- **`9bind/`** - Bind 9P namespace operations
-- **`9mount/`** - Mount 9P file systems via FUSE
-- **`9umount/`** - Unmount 9P file systems
+- **`9bind/`** - Bind mount directories
+- **`9mount/`** - Mount 9P filesystems
+- **`mount-9p/`** - mount(8) helper for 9P filesystems
+- **`9umount/`** - Unmount 9P filesystems
 - **`9pfs/`** - 9P file server (disk-backed with arena-based tmp/)
 - **`ramfs/`** - In-memory 9P file server (arena-backed)
 - **`9pfs-test/`** - Test program for 9P file server implementations

@@ -682,6 +682,7 @@ entry_point(CmdLine *cmd_line)
 	String8 root_path = str8_lit(".");
 	String8 address = str8_zero();
 	b32 readonly = 0;
+	u64 worker_count = 0;
 
 	for(CmdLineOpt *opt = cmd_line->options.first; opt != 0; opt = opt->next)
 	{
@@ -697,6 +698,13 @@ entry_point(CmdLine *cmd_line)
 				root_path = opt->value_string;
 			}
 		}
+		else if(str8_match(option, str8_lit("threads"), 0))
+		{
+			if(opt->value_string.size > 0)
+			{
+				worker_count = u64_from_str8(opt->value_string, 10);
+			}
+		}
 	}
 
 	if(cmd_line->inputs.node_count > 0)
@@ -710,6 +718,7 @@ entry_point(CmdLine *cmd_line)
 		                "options:\n"
 		                "  --root=<path>     Root directory to serve (default: current directory)\n"
 		                "  --readonly        Serve in read-only mode\n"
+		                "  --threads=<n>     Number of worker threads (default: max(4, cores/4))\n"
 		                "arguments:\n"
 		                "  <address>         Dial string (e.g., tcp!host!port)\n");
 		fflush(stderr);
@@ -730,8 +739,11 @@ entry_point(CmdLine *cmd_line)
 			        address.str, readonly ? " (read-only)" : "");
 			fflush(stdout);
 
-			u64 worker_count = os_get_system_info()->logical_processor_count;
-			worker_count = Max(1, worker_count);
+			if(worker_count == 0)
+			{
+				u64 logical_cores = os_get_system_info()->logical_processor_count;
+				worker_count = Max(4, logical_cores / 4);
+			}
 
 			worker_pool = worker_pool_alloc(arena, worker_count);
 			worker_pool_start(worker_pool);

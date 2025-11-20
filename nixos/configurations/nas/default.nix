@@ -3,7 +3,35 @@
   pkgs,
   self,
   ...
-}: {
+}: let
+  mounts = [
+    {
+      what = "127.0.0.1";
+      where = "/home/media/n/nas";
+      type = "9p";
+      options = "port=4500";
+      requires = ["9pfs.service"];
+      after = ["9pfs.service" "network-online.target"];
+      wants = ["network-online.target"];
+    }
+    {
+      what = "/home/media/n/nas/movies";
+      where = "/home/media/n/movies";
+      type = "none";
+      options = "bind";
+      requires = ["home-media-n-nas.mount"];
+      after = ["home-media-n-nas.mount"];
+    }
+    {
+      what = "/home/media/n/nas/shows";
+      where = "/home/media/n/shows";
+      type = "none";
+      options = "bind";
+      requires = ["home-media-n-nas.mount"];
+      after = ["home-media-n-nas.mount"];
+    }
+  ];
+in {
   imports = [
     ./hardware.nix
     self.nixosModules."9p-tools"
@@ -52,46 +80,24 @@
     tailscale.enable = true;
   };
   systemd = {
+    mounts = map (m: m // {wantedBy = [];}) mounts;
+    automounts =
+      map (m: {
+        inherit (m) where;
+        wantedBy = ["multi-user.target"];
+        automountConfig.TimeoutIdleSec = "600";
+      })
+      mounts;
     services = {
       jellyfin = {
-        after = ["nas-mount.service"];
-        wants = ["nas-mount.service"];
-      };
-      "nas-mount" = {
-        after = [
-          "network-online.target"
-          "9pfs.service"
-        ];
-        description = "mount nas";
-        serviceConfig = {
-          ExecStart = [
-            ''/bin/sh -c "if ${pkgs.util-linux}/bin/mountpoint -q /home/media/n/nas; then /run/wrappers/bin/9umount /home/media/n/nas; fi"''
-            ''/bin/sh -c "if ${pkgs.util-linux}/bin/mountpoint -q /home/media/n/movies; then /run/wrappers/bin/9umount /home/media/n/movies; fi"''
-            ''/bin/sh -c "if ${pkgs.util-linux}/bin/mountpoint -q /home/media/n/shows; then /run/wrappers/bin/9umount /home/media/n/shows; fi"''
-            "/run/wrappers/bin/9mount 'tcp!nas!4500' /home/media/n/nas"
-            "/run/wrappers/bin/9bind /home/media/n/nas/movies /home/media/n/movies"
-            "/run/wrappers/bin/9bind /home/media/n/nas/shows /home/media/n/shows"
-          ];
-          ExecStartPre = [
-            "${pkgs.coreutils}/bin/mkdir -p /home/media/n/nas /home/media/n/movies /home/media/n/shows"
-          ];
-          RemainAfterExit = true;
-          Restart = "on-failure";
-          RestartSec = "5s";
-          Type = "oneshot";
-          User = "media";
-        };
-        wantedBy = ["multi-user.target"];
-        wants = [
-          "network-online.target"
-          "9pfs.service"
-        ];
+        after = ["home-media-n-movies.automount" "home-media-n-shows.automount"];
+        wants = ["home-media-n-movies.automount" "home-media-n-shows.automount"];
       };
       "9pfs" = {
         after = ["network.target"];
-        description = "9P filesystem server (debug)";
+        description = "9P filesystem server";
         serviceConfig = {
-          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs-debug"}/bin/9pfs --root=/media tcp!*!4500";
+          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs"}/bin/9pfs --root=/media tcp!*!4500";
           Restart = "always";
           RestartSec = "5s";
           StandardError = "journal";
@@ -99,6 +105,28 @@
           User = "storage";
         };
         wantedBy = ["multi-user.target"];
+      };
+      "9p-health-check" = {
+        description = "Check 9P mount health and restart if stale";
+        serviceConfig = {
+          Type = "oneshot";
+          User = "media";
+        };
+        script = ''
+          if ${pkgs.systemd}/bin/systemctl is-active --quiet home-media-n-nas.mount; then
+            if ! ${pkgs.coreutils}/bin/timeout 5 ${pkgs.coreutils}/bin/stat /home/media/n/nas >/dev/null 2>&1; then
+              echo "9P mount at /home/media/n/nas is unresponsive, restarting..."
+              ${pkgs.systemd}/bin/systemctl restart home-media-n-nas.mount
+            fi
+          fi
+        '';
+      };
+    };
+    timers."9p-health-check" = {
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "5min";
+        OnUnitActiveSec = "5min";
       };
     };
   };

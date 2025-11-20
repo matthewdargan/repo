@@ -3,6 +3,9 @@
   self,
   ...
 }: {
+  environment.systemPackages = [
+    self.packages.${pkgs.stdenv.hostPlatform.system}.mount-9p
+  ];
   security.wrappers = {
     "9bind" = {
       owner = "root";

@@ -58,8 +58,9 @@ cmd/      Command-line tools (depend on base/ and 9p/)
 
 ### Tool Documentation
 
-- **[cmd/9mount/README.md](cmd/9mount/README.md)** - Mount 9P filesystems via FUSE
-- **[cmd/9bind/README.md](cmd/9bind/README.md)** - Bind 9P namespaces
+- **[cmd/9mount/README.md](cmd/9mount/README.md)** - Mount 9P filesystems
+- **[cmd/mount-9p/README.md](cmd/mount-9p/README.md)** - mount(8) helper for 9P filesystems
+- **[cmd/9bind/README.md](cmd/9bind/README.md)** - Bind mount directories
 - **[cmd/9umount/README.md](cmd/9umount/README.md)** - Unmount 9P filesystems
 - **[cmd/9p/README.md](cmd/9p/README.md)** - 9P protocol inspection tool
 - **[cmd/9pfs/](cmd/9pfs/)** - 9P file server (disk-backed with arena tmp/) (coming soon)
