@@ -836,27 +836,97 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 
 	DIR *dir = (DIR *)iter->dir_handle;
 
-	if(offset == 0)
+	// If offset doesn't match our current position, we need to seek
+	if(offset != iter->position)
 	{
+		// rewinddir and skip entries until we reach the byte offset
 		rewinddir(dir);
 		iter->position = 0;
 	}
 
-	for(; iter->position < offset; iter->position += 1)
+	Temp scratch = scratch_begin(&arena, 1);
+	int dir_fd = dirfd(dir);
+
+	// Skip entries until we reach the requested byte offset
+	if(iter->position < offset)
 	{
-		struct dirent *entry = readdir(dir);
-		if(entry == 0)
+		u64 skip_bytes = 0;
+		for(;;)
 		{
-			return str8_zero();
+			struct dirent *entry = readdir(dir);
+			if(entry == 0)
+			{
+				// Reached end while seeking
+				scratch_end(scratch);
+				return str8_zero();
+			}
+
+			String8 entry_name = str8_cstring(entry->d_name);
+			if(str8_match(entry_name, str8_lit("."), 0) || str8_match(entry_name, str8_lit(".."), 0))
+			{
+				continue;
+			}
+
+			String8 entry_path = fs9p_path_join(scratch.arena, iter->path, entry_name);
+			Dir9P dir_entry = dir9p_zero();
+			struct stat st = {0};
+			b32 stat_success = 0;
+
+			if(dir_fd >= 0)
+			{
+				if(fstatat(dir_fd, (char *)entry_name.str, &st, 0) == 0)
+				{
+					stat_success = 1;
+				}
+			}
+
+			if(!stat_success)
+			{
+				String8 entry_os_path = os_path_from_fs9p_path(scratch.arena, ctx, entry_path);
+				String8 entry_cpath = str8_copy(scratch.arena, entry_os_path);
+				if(stat((char *)entry_cpath.str, &st) == 0)
+				{
+					stat_success = 1;
+				}
+			}
+
+			if(!stat_success)
+			{
+				continue;
+			}
+
+			dir_entry.length = st.st_size;
+			dir_entry.qid.path = st.st_ino;
+			dir_entry.qid.version = st.st_mtime;
+			dir_entry.qid.type = S_ISDIR(st.st_mode) ? QidTypeFlag_Directory : QidTypeFlag_File;
+			dir_entry.mode = st.st_mode & 0777;
+			if(S_ISDIR(st.st_mode))
+			{
+				dir_entry.mode |= P9_ModeFlag_Directory;
+			}
+			dir_entry.access_time = st.st_atime;
+			dir_entry.modify_time = st.st_mtime;
+			dir_entry.user_id = str8_from_uid(scratch.arena, st.st_uid);
+			dir_entry.group_id = str8_from_gid(scratch.arena, st.st_gid);
+			dir_entry.modify_user_id = dir_entry.user_id;
+			dir_entry.name = str8_copy(scratch.arena, entry_name);
+
+			String8 encoded = str8_from_dir9p(scratch.arena, dir_entry);
+			skip_bytes += encoded.size;
+
+			if(skip_bytes >= offset)
+			{
+				// We've reached the target offset
+				iter->position = offset;
+				break;
+			}
 		}
 	}
 
+	// Now read entries starting from the current position
 	u64 result_capacity = Min(count, P9_DIR_ENTRY_MAX);
 	u8 *result_buffer = push_array(arena, u8, result_capacity);
 	u64 bytes_used = 0;
-
-	Temp scratch = scratch_begin(&arena, 1);
-	int dir_fd = dirfd(dir);
 
 	for(; bytes_used < count;)
 	{
@@ -869,7 +939,6 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 		String8 entry_name = str8_cstring(entry->d_name);
 		if(str8_match(entry_name, str8_lit("."), 0) || str8_match(entry_name, str8_lit(".."), 0))
 		{
-			iter->position += 1;
 			continue;
 		}
 
@@ -898,7 +967,6 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 
 		if(!stat_success)
 		{
-			iter->position += 1;
 			continue;
 		}
 
@@ -939,8 +1007,10 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 
 		MemoryCopy(result_buffer + bytes_used, encoded.str, encoded.size);
 		bytes_used += encoded.size;
-		iter->position += 1;
 	}
+
+	// Update position to reflect how many bytes we've returned
+	iter->position += bytes_used;
 
 	scratch_end(scratch);
 	return str8(result_buffer, bytes_used);
@@ -1217,15 +1287,47 @@ temp9p_readdir(Arena *arena, TempNode9P *node, TempNode9P **iter, u64 offset, u6
 		return str8_zero();
 	}
 
-	if(offset == 0)
+	Temp scratch = scratch_begin(&arena, 1);
+
+	// Always start from the beginning and skip to the requested byte offset
+	*iter = node->first_child;
+	u64 skip_bytes = 0;
+
+	// Skip entries until we reach the target byte offset
+	while(*iter != 0 && skip_bytes < offset)
 	{
-		*iter = node->first_child;
+		TempNode9P *child = *iter;
+		Dir9P entry = dir9p_zero();
+		entry.length = child->content.size;
+		entry.qid = child->qid;
+		entry.mode = child->mode;
+		if(child->is_directory)
+		{
+			entry.mode |= P9_ModeFlag_Directory;
+		}
+		entry.access_time = child->access_time;
+		entry.modify_time = child->modify_time;
+		entry.user_id = str8_copy(scratch.arena, child->user_id);
+		entry.group_id = str8_copy(scratch.arena, child->group_id);
+		entry.modify_user_id = entry.user_id;
+		entry.name = str8_copy(scratch.arena, child->name);
+
+		String8 encoded = str8_from_dir9p(scratch.arena, entry);
+		skip_bytes += encoded.size;
+
+		if(skip_bytes >= offset)
+		{
+			// We've reached the target offset, don't advance the iterator
+			break;
+		}
+
+		*iter = (*iter)->next_sibling;
 	}
 
+	// Now read entries starting from the current position
 	u64 buf_cap = Min(count, P9_DIR_ENTRY_MAX);
 	u8 *buf = push_array(arena, u8, buf_cap);
 	u64 buf_pos = 0;
-	Temp scratch = scratch_begin(&arena, 1);
 
 	for(; buf_pos < count && *iter != 0; *iter = (*iter)->next_sibling)
 	{
