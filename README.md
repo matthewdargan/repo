@@ -4,11 +4,9 @@ Systems programming monorepo centered on a custom C99 standard library. Built fo
 
 ## Overview
 
-This is a systems programming monorepo centered around a custom C99 standard library. The base layer provides arena allocators, length-prefixed strings (`String8`), and explicit integer types (`u8`, `u64`, `s64`) as alternatives to malloc/free, null-terminated strings, and standard C integer types.
+Custom C99 standard library for systems programming. Layered architecture, unity builds, zero dependencies.
 
-Built on this foundation are additional components: a [9P protocol](https://9fans.github.io/plan9port/man/man9/intro.html) implementation, command-line utilities for 9P filesystems, and NixOS/Home Manager system configurations.
-
-The codebase uses a layered architecture with explicit dependencies, unity builds for compilation, and namespace prefixes for code organization.
+Layer README.md files document APIs (see [base/README.md](base/README.md)). [CLAUDE.md](CLAUDE.md) covers project structure and coding standards.
 
 ## Quick Start
 
@@ -53,8 +51,8 @@ cmd/      Command-line tools (depend on base/ and 9p/)
 
 ### Layer Documentation
 
-- **[base/README.md](base/)** - Base layer API reference (coming soon)
-- **[9p/README.md](9p/)** - 9P protocol implementation (coming soon)
+- **[base/README.md](base/README.md)** - Base layer API reference
+- **[9p/README.md](9p/README.md)** - 9P protocol implementation
 
 ### Tool Documentation
 
@@ -86,15 +84,3 @@ home/           Home Manager user environment configurations
 nixos/          NixOS system configurations
 packages/       Nix package definitions for each binary
 ```
-
-## Coding Standards
-
-When writing code, use base layer abstractions:
-
-- **Arena allocators** (`arena_alloc`, `temp_begin`/`temp_end`) instead of malloc/free
-- **Length-prefixed strings** (`String8`) instead of null-terminated `char*`
-- **Explicit types** (`u8`, `u64`, `s64`, `f32`, etc.) instead of int/long/float
-- **Unity builds** - add new files to the layer's `inc.h` (for headers) and `inc.c` (for implementation)
-- **Namespace conventions** - prefix functions and types with the layer's namespace
-
-Complete standards and layer descriptions are in **[CLAUDE.md](CLAUDE.md)**.

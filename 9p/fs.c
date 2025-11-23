@@ -834,7 +834,7 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 		return str8_zero();
 	}
 
-	if(iter->cached_entries.str == 0)
+	if(iter->cached_entries.size == 0)
 	{
 		Temp scratch = scratch_begin(&arena, 1);
 		DIR *dir = (DIR *)iter->dir_handle;
