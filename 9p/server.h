@@ -37,6 +37,7 @@ struct ServerRequest9P
 	void *auxiliary;
 	Server9P *server;
 	ServerRequest9P *hash_next;
+	Temp scratch;
 };
 
 struct Server9P

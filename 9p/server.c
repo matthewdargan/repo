@@ -75,6 +75,9 @@ server9p_get_request(Server9P *server)
 	{
 		return 0;
 	}
+
+	Temp scratch = scratch_begin(&server->arena, 1);
+
 	ServerRequest9P *request = server9p_request_alloc(server, f.tag);
 	if(request == 0)
 	{
@@ -85,6 +88,7 @@ server9p_get_request(Server9P *server)
 		request->buffer = msg.str;
 		request->responded = 0;
 		request->server = server;
+		request->scratch = scratch;
 		return request;
 	}
 
@@ -93,6 +97,7 @@ server9p_get_request(Server9P *server)
 	request->buffer = msg.str;
 	request->in_msg = f;
 	request->out_msg = msg9p_zero();
+	request->scratch = scratch;
 	switch(f.type)
 	{
 		case Msg9P_Tattach:
@@ -173,9 +178,10 @@ server9p_respond(ServerRequest9P *request, String8 err)
 		request->out_msg.type = Msg9P_Rerror;
 	}
 
-	String8 buf = str8_from_msg9p(server->arena, request->out_msg);
+	String8 buf = str8_from_msg9p(request->scratch.arena, request->out_msg);
 	if(buf.size == 0)
 	{
+		scratch_end(request->scratch);
 		return 0;
 	}
 	server9p_request_remove(server, request->in_msg.tag);
@@ -193,9 +199,11 @@ server9p_respond(ServerRequest9P *request, String8 err)
 		}
 		else if(errno != EINTR)
 		{
+			scratch_end(request->scratch);
 			return 0;
 		}
 	}
+	scratch_end(request->scratch);
 	return total_num_bytes_written == total_num_bytes_to_write;
 }
 

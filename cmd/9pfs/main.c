@@ -140,7 +140,7 @@ srv_auth(ServerRequest9P *request)
 internal void
 srv_attach(ServerRequest9P *request)
 {
-	Dir9P root_stat = fs9p_stat(request->server->arena, fs_context, str8_zero());
+	Dir9P root_stat = fs9p_stat(request->scratch.arena, fs_context, str8_zero());
 	if(root_stat.name.size == 0)
 	{
 		request->fid->qid.path = 0;
@@ -190,7 +190,7 @@ srv_walk(ServerRequest9P *request)
 			continue;
 		}
 
-		PathResolution9P res = fs9p_resolve_path(request->server->arena, fs_context, current_path, name);
+		PathResolution9P res = fs9p_resolve_path(request->scratch.arena, fs_context, current_path, name);
 
 		if(!res.valid)
 		{
@@ -211,7 +211,7 @@ srv_walk(ServerRequest9P *request)
 			}
 		}
 
-		Dir9P stat = fs9p_stat(request->server->arena, fs_context, res.absolute_path);
+		Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, res.absolute_path);
 		if(stat.name.size == 0)
 		{
 			if(i == 0)
@@ -236,7 +236,7 @@ srv_walk(ServerRequest9P *request)
 	}
 
 	FidAuxiliary9P *new_aux = get_fid_aux(request->server->arena, request->new_fid);
-	new_aux->path = current_path;
+	new_aux->path = str8_copy(request->server->arena, current_path);
 	request->new_fid->qid = request->out_msg.walk_qids[request->in_msg.walk_name_count - 1];
 	request->out_msg.walk_qid_count = request->in_msg.walk_name_count;
 	server9p_respond(request, str8_zero());
@@ -285,7 +285,7 @@ srv_create(ServerRequest9P *request)
 		return;
 	}
 
-	String8 new_path = fs9p_path_join(request->server->arena, aux->path, request->in_msg.name);
+	String8 new_path = fs9p_path_join(request->scratch.arena, aux->path, request->in_msg.name);
 
 	if(!fs9p_path_is_safe(request->in_msg.name))
 	{
@@ -299,14 +299,14 @@ srv_create(ServerRequest9P *request)
 		return;
 	}
 
-	Dir9P stat = fs9p_stat(request->server->arena, fs_context, new_path);
+	Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, new_path);
 	if(stat.name.size == 0)
 	{
 		server9p_respond(request, str8_lit("failed to create"));
 		return;
 	}
 
-	aux->path = new_path;
+	aux->path = str8_copy(request->server->arena, new_path);
 	request->fid->qid = stat.qid;
 
 	FsHandle9P *handle = fs9p_open(request->server->arena, fs_context, new_path, request->in_msg.open_mode);
@@ -360,7 +360,7 @@ srv_read(ServerRequest9P *request)
 	}
 
 	String8 data =
-	    fs9p_read(request->server->arena, aux->handle, request->in_msg.file_offset, request->in_msg.byte_count);
+	    fs9p_read(request->scratch.arena, aux->handle, request->in_msg.file_offset, request->in_msg.byte_count);
 
 	request->out_msg.payload_data = data;
 	request->out_msg.byte_count = data.size;
@@ -395,14 +395,14 @@ srv_stat(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
 
-	Dir9P stat = fs9p_stat(request->server->arena, fs_context, aux->path);
+	Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, aux->path);
 	if(stat.name.size == 0)
 	{
 		server9p_respond(request, str8_lit("cannot stat file"));
 		return;
 	}
 
-	request->out_msg.stat_data = str8_from_dir9p(request->server->arena, stat);
+	request->out_msg.stat_data = str8_from_dir9p(request->scratch.arena, stat);
 	server9p_respond(request, str8_zero());
 }
 
@@ -433,11 +433,12 @@ srv_wstat(ServerRequest9P *request)
 
 	if(stat.name.size > 0)
 	{
-		String8 current_basename = fs9p_basename(request->server->arena, aux->path);
+		String8 current_basename = fs9p_basename(request->scratch.arena, aux->path);
 		if(!str8_match(stat.name, current_basename, 0))
 		{
-			String8 parent_path = fs9p_dirname(request->server->arena, aux->path);
-			aux->path = fs9p_path_join(request->server->arena, parent_path, stat.name);
+			String8 parent_path = fs9p_dirname(request->scratch.arena, aux->path);
+			String8 new_path = fs9p_path_join(request->scratch.arena, parent_path, stat.name);
+			aux->path = str8_copy(request->server->arena, new_path);
 		}
 	}
 
