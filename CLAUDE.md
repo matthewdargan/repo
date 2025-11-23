@@ -57,7 +57,6 @@ Implementation of the 9P protocol for network file systems.
 - **`mount-9p/`** - mount(8) helper for 9P filesystems
 - **`9umount/`** - Unmount 9P filesystems
 - **`9pfs/`** - 9P file server (disk-backed with arena-based tmp/)
-- **`ramfs/`** - In-memory 9P file server (arena-backed)
 - **`9pfs-test/`** - Test program for 9P file server implementations
 
 ### `packages/` - Nix Packages

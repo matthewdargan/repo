@@ -64,7 +64,6 @@ cmd/      Command-line tools (depend on base/ and 9p/)
 - **[cmd/9umount/README.md](cmd/9umount/README.md)** - Unmount 9P filesystems
 - **[cmd/9p/README.md](cmd/9p/README.md)** - 9P protocol inspection tool
 - **[cmd/9pfs/](cmd/9pfs/)** - 9P file server (disk-backed with arena tmp/) (coming soon)
-- **[cmd/ramfs/](cmd/ramfs/)** - In-memory 9P server (arena-backed) (coming soon)
 
 ### Conceptual Documentation
 
@@ -76,7 +75,7 @@ cmd/      Command-line tools (depend on base/ and 9p/)
 ```
 base/           Custom standard library (arena allocators, strings, OS abstraction)
 9p/             9P protocol implementation (client, server, message encoding)
-cmd/            Command-line binaries (9mount, 9bind, ramfs, etc.)
+cmd/            Command-line binaries (9mount, 9bind, 9pfs, etc.)
 docs/           Architecture and design documentation
 ```
 
