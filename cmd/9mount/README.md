@@ -1,6 +1,6 @@
 # 9mount
 
-Mount a [9P filesystem](https://9fans.github.io/plan9port/man/man9/intro.html) at a mount point.
+Mount a [9P](https://9fans.github.io/plan9port/man/man9/intro.html) filesystem at a mount point.
 
 ## Usage
 

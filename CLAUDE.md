@@ -51,13 +51,13 @@ Implementation of the 9P protocol for network file systems.
 
 ### `cmd/` - Command-line Tools
 
-- **`9p/`** - 9P protocol inspection tool
-- **`9bind/`** - Bind mount directories
-- **`9mount/`** - Mount 9P filesystems
-- **`mount-9p/`** - mount(8) helper for 9P filesystems
-- **`9umount/`** - Unmount 9P filesystems
 - **`9pfs/`** - 9P file server (disk-backed with arena-based tmp/)
 - **`9pfs-test/`** - Test program for 9P file server implementations
+- **`9mount/`** - Mount 9P filesystems
+- **`9bind/`** - Bind mount directories
+- **`9umount/`** - Unmount 9P filesystems
+- **`mount-9p/`** - mount(8) helper for 9P filesystems
+- **`9p/`** - 9P protocol inspection tool
 
 ### `packages/` - Nix Packages
 

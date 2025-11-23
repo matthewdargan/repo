@@ -1,6 +1,6 @@
 # 9p
 
-A command-line tool for interacting with 9P file servers. Provides basic file operations over the [9P protocol](https://9fans.github.io/plan9port/man/man9/intro.html).
+A command-line tool for interacting with [9P](https://9fans.github.io/plan9port/man/man9/intro.html) file servers. Provides basic file operations over the 9P protocol.
 
 ## Usage
 
