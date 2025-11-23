@@ -834,107 +834,100 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 		return str8_zero();
 	}
 
-	DIR *dir = (DIR *)iter->dir_handle;
-	rewinddir(dir);
-	iter->position = 0;
-
-	Temp scratch = scratch_begin(&arena, 1);
-	int dir_fd = dirfd(dir);
-
-	u64 buf_cap = Min(count, P9_DIR_ENTRY_MAX);
-	u8 *buf = push_array(arena, u8, buf_cap);
-	u64 buf_pos = 0;
-
-	for(;;)
+	if(iter->cached_entries.str == 0)
 	{
-		struct dirent *entry = readdir(dir);
-		if(entry == 0)
-		{
-			break;
-		}
+		Temp scratch = scratch_begin(&arena, 1);
+		DIR *dir = (DIR *)iter->dir_handle;
+		int dir_fd = dirfd(dir);
+		rewinddir(dir);
 
-		String8 name = str8_cstring(entry->d_name);
-		if(str8_match(name, str8_lit("."), 0) || str8_match(name, str8_lit(".."), 0))
-		{
-			continue;
-		}
+		u64 encode_buffer_cap = P9_DIR_ENTRY_MAX;
+		u8 *encode_buffer = push_array(scratch.arena, u8, encode_buffer_cap);
+		u64 encode_buffer_size = 0;
 
-		String8 path = fs9p_path_join(scratch.arena, iter->path, name);
-		struct stat st = {0};
-		b32 has_stat = 0;
-
-		if(dir_fd >= 0)
+		for(struct dirent *entry = readdir(dir); entry != 0; entry = readdir(dir))
 		{
-			if(fstatat(dir_fd, (char *)name.str, &st, 0) == 0)
+			String8 entry_name = str8_cstring(entry->d_name);
+			if(str8_match(entry_name, str8_lit("."), 0) || str8_match(entry_name, str8_lit(".."), 0))
 			{
-				has_stat = 1;
+				continue;
 			}
-		}
 
-		if(!has_stat)
-		{
-			String8 os_path = os_path_from_fs9p_path(scratch.arena, ctx, path);
-			String8 cpath = str8_copy(scratch.arena, os_path);
-			if(stat((char *)cpath.str, &st) == 0)
+			String8 entry_path = fs9p_path_join(scratch.arena, iter->path, entry_name);
+			struct stat entry_stat = {0};
+			b32 stat_success = 0;
+
+			if(dir_fd >= 0)
 			{
-				has_stat = 1;
+				if(fstatat(dir_fd, (char *)entry_name.str, &entry_stat, 0) == 0)
+				{
+					stat_success = 1;
+				}
 			}
-		}
 
-		if(!has_stat)
-		{
-			continue;
-		}
-
-		Dir9P dir = dir9p_zero();
-		dir.length = st.st_size;
-		dir.qid.path = st.st_ino;
-		dir.qid.version = st.st_mtime;
-		dir.qid.type = S_ISDIR(st.st_mode) ? QidTypeFlag_Directory : QidTypeFlag_File;
-		dir.mode = st.st_mode & 0777;
-		if(S_ISDIR(st.st_mode))
-		{
-			dir.mode |= P9_ModeFlag_Directory;
-		}
-		dir.access_time = st.st_atime;
-		dir.modify_time = st.st_mtime;
-		dir.user_id = str8_from_uid(scratch.arena, st.st_uid);
-		dir.group_id = str8_from_gid(scratch.arena, st.st_gid);
-		dir.modify_user_id = dir.user_id;
-		dir.name = str8_copy(scratch.arena, name);
-
-		String8 encoded = str8_from_dir9p(scratch.arena, dir);
-
-		if(iter->position + encoded.size <= offset)
-		{
-			iter->position += encoded.size;
-			continue;
-		}
-
-		if(buf_pos + encoded.size > count)
-		{
-			break;
-		}
-
-		if(buf_pos + encoded.size > buf_cap)
-		{
-			u64 new_cap = buf_cap * 2;
-			for(; buf_pos + encoded.size > new_cap; new_cap *= 2)
+			if(!stat_success)
 			{
+				String8 entry_os_path = os_path_from_fs9p_path(scratch.arena, ctx, entry_path);
+				String8 entry_cpath = str8_copy(scratch.arena, entry_os_path);
+				if(stat((char *)entry_cpath.str, &entry_stat) == 0)
+				{
+					stat_success = 1;
+				}
 			}
-			u8 *new_buf = push_array(arena, u8, new_cap);
-			MemoryCopy(new_buf, buf, buf_pos);
-			buf = new_buf;
-			buf_cap = new_cap;
+
+			if(!stat_success)
+			{
+				continue;
+			}
+
+			Dir9P entry_dir = dir9p_zero();
+			entry_dir.length = entry_stat.st_size;
+			entry_dir.qid.path = entry_stat.st_ino;
+			entry_dir.qid.version = entry_stat.st_mtime;
+			entry_dir.qid.type = S_ISDIR(entry_stat.st_mode) ? QidTypeFlag_Directory : QidTypeFlag_File;
+			entry_dir.mode = entry_stat.st_mode & 0777;
+			if(S_ISDIR(entry_stat.st_mode))
+			{
+				entry_dir.mode |= P9_ModeFlag_Directory;
+			}
+			entry_dir.access_time = entry_stat.st_atime;
+			entry_dir.modify_time = entry_stat.st_mtime;
+			entry_dir.user_id = str8_from_uid(scratch.arena, entry_stat.st_uid);
+			entry_dir.group_id = str8_from_gid(scratch.arena, entry_stat.st_gid);
+			entry_dir.modify_user_id = entry_dir.user_id;
+			entry_dir.name = str8_copy(scratch.arena, entry_name);
+
+			String8 encoded_entry = str8_from_dir9p(scratch.arena, entry_dir);
+
+			if(encode_buffer_size + encoded_entry.size > encode_buffer_cap)
+			{
+				u64 new_encode_cap = encode_buffer_cap * 2;
+				for(; encode_buffer_size + encoded_entry.size > new_encode_cap; new_encode_cap *= 2)
+				{
+				}
+				u8 *new_encode_buffer = push_array(scratch.arena, u8, new_encode_cap);
+				MemoryCopy(new_encode_buffer, encode_buffer, encode_buffer_size);
+				encode_buffer = new_encode_buffer;
+				encode_buffer_cap = new_encode_cap;
+			}
+
+			MemoryCopy(encode_buffer + encode_buffer_size, encoded_entry.str, encoded_entry.size);
+			encode_buffer_size += encoded_entry.size;
 		}
 
-		MemoryCopy(buf + buf_pos, encoded.str, encoded.size);
-		buf_pos += encoded.size;
-		iter->position += encoded.size;
+		iter->cached_entries = str8_copy(arena, str8(encode_buffer, encode_buffer_size));
+		scratch_end(scratch);
 	}
 
-	scratch_end(scratch);
-	return str8(buf, buf_pos);
+	if(offset >= iter->cached_entries.size)
+	{
+		return str8_zero();
+	}
+
+	u64 bytes_available = iter->cached_entries.size - offset;
+	u64 bytes_to_read = Min(bytes_available, count);
+
+	return str8_copy(arena, str8(iter->cached_entries.str + offset, bytes_to_read));
 }
 
 internal void
@@ -1074,20 +1067,20 @@ temp9p_write(Arena *arena, TempNode9P *node, u64 offset, String8 data)
 		return 0;
 	}
 
-	u64 new_size = offset + data.size;
-	if(new_size > node->content.size)
+	u64 required_size = offset + data.size;
+	if(required_size > node->content.size)
 	{
-		u8 *new_buf = push_array(arena, u8, new_size);
+		u8 *expanded_content = push_array(arena, u8, required_size);
 		if(node->content.size > 0)
 		{
-			MemoryCopy(new_buf, node->content.str, node->content.size);
+			MemoryCopy(expanded_content, node->content.str, node->content.size);
 		}
 		if(offset > node->content.size)
 		{
-			MemoryZero(new_buf + node->content.size, offset - node->content.size);
+			MemoryZero(expanded_content + node->content.size, offset - node->content.size);
 		}
-		node->content.str = new_buf;
-		node->content.size = new_size;
+		node->content.str = expanded_content;
+		node->content.size = required_size;
 	}
 
 	MemoryCopy(node->content.str + offset, data.str, data.size);
@@ -1209,62 +1202,63 @@ temp9p_readdir(Arena *arena, TempNode9P *node, TempNode9P **iter, u64 offset, u6
 	}
 
 	*iter = node->first_child;
-	u64 pos = 0;
+	u64 current_byte_position = 0;
 
-	u64 buf_cap = Min(count, P9_DIR_ENTRY_MAX);
-	u8 *buf = push_array(arena, u8, buf_cap);
-	u64 buf_pos = 0;
+	u64 encode_buffer_cap = Min(count, P9_DIR_ENTRY_MAX);
+	u8 *encode_buffer = push_array(arena, u8, encode_buffer_cap);
+	u64 encode_buffer_size = 0;
 	Temp scratch = scratch_begin(&arena, 1);
 
-	for(; *iter != 0; *iter = (*iter)->next_sibling)
+	for(TempNode9P *child = *iter; child != 0; child = child->next_sibling)
 	{
-		TempNode9P *child = *iter;
-		Dir9P dir = dir9p_zero();
-		dir.length = child->content.size;
-		dir.qid = child->qid;
-		dir.mode = child->mode;
+		*iter = child->next_sibling;
+
+		Dir9P child_dir = dir9p_zero();
+		child_dir.length = child->content.size;
+		child_dir.qid = child->qid;
+		child_dir.mode = child->mode;
 		if(child->is_directory)
 		{
-			dir.mode |= P9_ModeFlag_Directory;
+			child_dir.mode |= P9_ModeFlag_Directory;
 		}
-		dir.access_time = child->access_time;
-		dir.modify_time = child->modify_time;
-		dir.user_id = str8_copy(scratch.arena, child->user_id);
-		dir.group_id = str8_copy(scratch.arena, child->group_id);
-		dir.modify_user_id = dir.user_id;
-		dir.name = str8_copy(scratch.arena, child->name);
+		child_dir.access_time = child->access_time;
+		child_dir.modify_time = child->modify_time;
+		child_dir.user_id = str8_copy(scratch.arena, child->user_id);
+		child_dir.group_id = str8_copy(scratch.arena, child->group_id);
+		child_dir.modify_user_id = child_dir.user_id;
+		child_dir.name = str8_copy(scratch.arena, child->name);
 
-		String8 encoded = str8_from_dir9p(scratch.arena, dir);
+		String8 encoded_entry = str8_from_dir9p(scratch.arena, child_dir);
 
-		if(pos + encoded.size <= offset)
+		if(current_byte_position + encoded_entry.size <= offset)
 		{
-			pos += encoded.size;
+			current_byte_position += encoded_entry.size;
 			continue;
 		}
 
-		if(buf_pos + encoded.size > count)
+		if(encode_buffer_size + encoded_entry.size > count)
 		{
 			break;
 		}
 
-		if(buf_pos + encoded.size > buf_cap)
+		if(encode_buffer_size + encoded_entry.size > encode_buffer_cap)
 		{
-			u64 new_cap = buf_cap * 2;
-			for(; buf_pos + encoded.size > new_cap; new_cap *= 2)
+			u64 new_encode_cap = encode_buffer_cap * 2;
+			for(; encode_buffer_size + encoded_entry.size > new_encode_cap; new_encode_cap *= 2)
 			{
 			}
-			u8 *new_buf = push_array(arena, u8, new_cap);
-			MemoryCopy(new_buf, buf, buf_pos);
-			buf = new_buf;
-			buf_cap = new_cap;
+			u8 *new_encode_buffer = push_array(arena, u8, new_encode_cap);
+			MemoryCopy(new_encode_buffer, encode_buffer, encode_buffer_size);
+			encode_buffer = new_encode_buffer;
+			encode_buffer_cap = new_encode_cap;
 		}
 
-		MemoryCopy(buf + buf_pos, encoded.str, encoded.size);
-		buf_pos += encoded.size;
+		MemoryCopy(encode_buffer + encode_buffer_size, encoded_entry.str, encoded_entry.size);
+		encode_buffer_size += encoded_entry.size;
 	}
 
 	scratch_end(scratch);
-	return str8(buf, buf_pos);
+	return str8(encode_buffer, encode_buffer_size);
 }
 
 ////////////////////////////////

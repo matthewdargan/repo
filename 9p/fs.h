@@ -64,8 +64,9 @@ typedef struct DirIterator9P DirIterator9P;
 struct DirIterator9P
 {
 	void *dir_handle;
-	u64 position; // byte offset in directory stream
+	u64 position;
 	String8 path;
+	String8 cached_entries;
 	TempNode9P *tmp_node;
 	TempNode9P *tmp_current;
 };
