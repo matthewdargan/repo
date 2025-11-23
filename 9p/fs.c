@@ -835,30 +835,17 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 	}
 
 	DIR *dir = (DIR *)iter->dir_handle;
-
-	if(offset == 0)
-	{
-		rewinddir(dir);
-		iter->position = 0;
-	}
-
-	for(; iter->position < offset; iter->position += 1)
-	{
-		struct dirent *entry = readdir(dir);
-		if(entry == 0)
-		{
-			return str8_zero();
-		}
-	}
-
-	u64 result_capacity = Min(count, P9_DIR_ENTRY_MAX);
-	u8 *result_buffer = push_array(arena, u8, result_capacity);
-	u64 bytes_used = 0;
+	rewinddir(dir);
+	iter->position = 0;
 
 	Temp scratch = scratch_begin(&arena, 1);
 	int dir_fd = dirfd(dir);
 
-	for(; bytes_used < count;)
+	u64 buf_cap = Min(count, P9_DIR_ENTRY_MAX);
+	u8 *buf = push_array(arena, u8, buf_cap);
+	u64 buf_pos = 0;
+
+	for(;;)
 	{
 		struct dirent *entry = readdir(dir);
 		if(entry == 0)
@@ -866,84 +853,88 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 			break;
 		}
 
-		String8 entry_name = str8_cstring(entry->d_name);
-		if(str8_match(entry_name, str8_lit("."), 0) || str8_match(entry_name, str8_lit(".."), 0))
+		String8 name = str8_cstring(entry->d_name);
+		if(str8_match(name, str8_lit("."), 0) || str8_match(name, str8_lit(".."), 0))
 		{
-			iter->position += 1;
 			continue;
 		}
 
-		String8 entry_path = fs9p_path_join(scratch.arena, iter->path, entry_name);
-		Dir9P dir_entry = dir9p_zero();
+		String8 path = fs9p_path_join(scratch.arena, iter->path, name);
 		struct stat st = {0};
-		b32 stat_success = 0;
+		b32 has_stat = 0;
 
 		if(dir_fd >= 0)
 		{
-			if(fstatat(dir_fd, (char *)entry_name.str, &st, 0) == 0)
+			if(fstatat(dir_fd, (char *)name.str, &st, 0) == 0)
 			{
-				stat_success = 1;
+				has_stat = 1;
 			}
 		}
 
-		if(!stat_success)
+		if(!has_stat)
 		{
-			String8 entry_os_path = os_path_from_fs9p_path(scratch.arena, ctx, entry_path);
-			String8 entry_cpath = str8_copy(scratch.arena, entry_os_path);
-			if(stat((char *)entry_cpath.str, &st) == 0)
+			String8 os_path = os_path_from_fs9p_path(scratch.arena, ctx, path);
+			String8 cpath = str8_copy(scratch.arena, os_path);
+			if(stat((char *)cpath.str, &st) == 0)
 			{
-				stat_success = 1;
+				has_stat = 1;
 			}
 		}
 
-		if(!stat_success)
+		if(!has_stat)
 		{
-			iter->position += 1;
 			continue;
 		}
 
-		dir_entry.length = st.st_size;
-		dir_entry.qid.path = st.st_ino;
-		dir_entry.qid.version = st.st_mtime;
-		dir_entry.qid.type = S_ISDIR(st.st_mode) ? QidTypeFlag_Directory : QidTypeFlag_File;
-		dir_entry.mode = st.st_mode & 0777;
+		Dir9P dir = dir9p_zero();
+		dir.length = st.st_size;
+		dir.qid.path = st.st_ino;
+		dir.qid.version = st.st_mtime;
+		dir.qid.type = S_ISDIR(st.st_mode) ? QidTypeFlag_Directory : QidTypeFlag_File;
+		dir.mode = st.st_mode & 0777;
 		if(S_ISDIR(st.st_mode))
 		{
-			dir_entry.mode |= P9_ModeFlag_Directory;
+			dir.mode |= P9_ModeFlag_Directory;
 		}
-		dir_entry.access_time = st.st_atime;
-		dir_entry.modify_time = st.st_mtime;
-		dir_entry.user_id = str8_from_uid(scratch.arena, st.st_uid);
-		dir_entry.group_id = str8_from_gid(scratch.arena, st.st_gid);
-		dir_entry.modify_user_id = dir_entry.user_id;
-		dir_entry.name = str8_copy(scratch.arena, entry_name);
+		dir.access_time = st.st_atime;
+		dir.modify_time = st.st_mtime;
+		dir.user_id = str8_from_uid(scratch.arena, st.st_uid);
+		dir.group_id = str8_from_gid(scratch.arena, st.st_gid);
+		dir.modify_user_id = dir.user_id;
+		dir.name = str8_copy(scratch.arena, name);
 
-		String8 encoded = str8_from_dir9p(scratch.arena, dir_entry);
+		String8 encoded = str8_from_dir9p(scratch.arena, dir);
 
-		if(bytes_used + encoded.size > count)
+		if(iter->position + encoded.size <= offset)
+		{
+			iter->position += encoded.size;
+			continue;
+		}
+
+		if(buf_pos + encoded.size > count)
 		{
 			break;
 		}
 
-		if(bytes_used + encoded.size > result_capacity)
+		if(buf_pos + encoded.size > buf_cap)
 		{
-			u64 new_capacity = result_capacity * 2;
-			for(; bytes_used + encoded.size > new_capacity; new_capacity *= 2)
+			u64 new_cap = buf_cap * 2;
+			for(; buf_pos + encoded.size > new_cap; new_cap *= 2)
 			{
 			}
-			u8 *new_buffer = push_array(arena, u8, new_capacity);
-			MemoryCopy(new_buffer, result_buffer, bytes_used);
-			result_buffer = new_buffer;
-			result_capacity = new_capacity;
+			u8 *new_buf = push_array(arena, u8, new_cap);
+			MemoryCopy(new_buf, buf, buf_pos);
+			buf = new_buf;
+			buf_cap = new_cap;
 		}
 
-		MemoryCopy(result_buffer + bytes_used, encoded.str, encoded.size);
-		bytes_used += encoded.size;
-		iter->position += 1;
+		MemoryCopy(buf + buf_pos, encoded.str, encoded.size);
+		buf_pos += encoded.size;
+		iter->position += encoded.size;
 	}
 
 	scratch_end(scratch);
-	return str8(result_buffer, bytes_used);
+	return str8(buf, buf_pos);
 }
 
 internal void
@@ -1217,35 +1208,40 @@ temp9p_readdir(Arena *arena, TempNode9P *node, TempNode9P **iter, u64 offset, u6
 		return str8_zero();
 	}
 
-	if(offset == 0)
-	{
-		*iter = node->first_child;
-	}
+	*iter = node->first_child;
+	u64 pos = 0;
 
 	u64 buf_cap = Min(count, P9_DIR_ENTRY_MAX);
 	u8 *buf = push_array(arena, u8, buf_cap);
 	u64 buf_pos = 0;
 	Temp scratch = scratch_begin(&arena, 1);
 
-	for(; buf_pos < count && *iter != 0; *iter = (*iter)->next_sibling)
+	for(; *iter != 0; *iter = (*iter)->next_sibling)
 	{
 		TempNode9P *child = *iter;
-		Dir9P entry = dir9p_zero();
-		entry.length = child->content.size;
-		entry.qid = child->qid;
-		entry.mode = child->mode;
+		Dir9P dir = dir9p_zero();
+		dir.length = child->content.size;
+		dir.qid = child->qid;
+		dir.mode = child->mode;
 		if(child->is_directory)
 		{
-			entry.mode |= P9_ModeFlag_Directory;
+			dir.mode |= P9_ModeFlag_Directory;
 		}
-		entry.access_time = child->access_time;
-		entry.modify_time = child->modify_time;
-		entry.user_id = str8_copy(scratch.arena, child->user_id);
-		entry.group_id = str8_copy(scratch.arena, child->group_id);
-		entry.modify_user_id = entry.user_id;
-		entry.name = str8_copy(scratch.arena, child->name);
+		dir.access_time = child->access_time;
+		dir.modify_time = child->modify_time;
+		dir.user_id = str8_copy(scratch.arena, child->user_id);
+		dir.group_id = str8_copy(scratch.arena, child->group_id);
+		dir.modify_user_id = dir.user_id;
+		dir.name = str8_copy(scratch.arena, child->name);
 
-		String8 encoded = str8_from_dir9p(scratch.arena, entry);
+		String8 encoded = str8_from_dir9p(scratch.arena, dir);
+
+		if(pos + encoded.size <= offset)
+		{
+			pos += encoded.size;
+			continue;
+		}
+
 		if(buf_pos + encoded.size > count)
 		{
 			break;

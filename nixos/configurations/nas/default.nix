@@ -95,9 +95,9 @@ in {
       };
       "9pfs" = {
         after = ["network.target"];
-        description = "9P filesystem server";
+        description = "9P filesystem server (debug)";
         serviceConfig = {
-          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs"}/bin/9pfs --root=/media tcp!*!4500";
+          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs-debug"}/bin/9pfs --root=/media tcp!*!4500";
           Restart = "always";
           RestartSec = "5s";
           StandardError = "journal";
