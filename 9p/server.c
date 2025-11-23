@@ -5,13 +5,17 @@ internal ServerRequest9P *
 server9p_request_alloc(Server9P *server, u32 tag)
 {
 	u32 hash = tag % server->max_request_count;
-	if(server->request_table[hash] != 0)
+	for(ServerRequest9P *check = server->request_table[hash]; check != 0; check = check->hash_next)
 	{
-		return 0;
+		if(check->tag == tag)
+		{
+			return 0;
+		}
 	}
 	ServerRequest9P *request = push_array(server->arena, ServerRequest9P, 1);
 	request->tag = tag;
 	request->server = server;
+	request->hash_next = server->request_table[hash];
 	server->request_table[hash] = request;
 	server->request_count += 1;
 	return request;
@@ -21,12 +25,15 @@ internal ServerRequest9P *
 server9p_request_remove(Server9P *server, u32 tag)
 {
 	u32 hash = tag % server->max_request_count;
-	ServerRequest9P *request = server->request_table[hash];
-	if(request != 0 && request->tag == tag)
+	ServerRequest9P **prev = &server->request_table[hash];
+	for(ServerRequest9P *request = *prev; request != 0; prev = &request->hash_next, request = request->hash_next)
 	{
-		server->request_table[hash] = 0;
-		server->request_count -= 1;
-		return request;
+		if(request->tag == tag)
+		{
+			*prev = request->hash_next;
+			server->request_count -= 1;
+			return request;
+		}
 	}
 	return 0;
 }
@@ -42,8 +49,8 @@ server9p_alloc(Arena *arena, u64 input_fd, u64 output_fd)
 	server->input_fd = input_fd;
 	server->output_fd = output_fd;
 	server->max_message_size = P9_IOUNIT_DEFAULT + P9_MESSAGE_HEADER_SIZE;
-	server->max_fid_count = 256;
-	server->max_request_count = 256;
+	server->max_fid_count = 4096;
+	server->max_request_count = 4096;
 	server->fid_table = push_array(arena, ServerFid9P *, server->max_fid_count);
 	server->request_table = push_array(arena, ServerRequest9P *, server->max_request_count);
 	server->next_tag = 1;
@@ -199,14 +206,18 @@ internal ServerFid9P *
 server9p_fid_alloc(Server9P *server, u32 fid)
 {
 	u32 hash = fid % server->max_fid_count;
-	if(server->fid_table[hash] != 0)
+	for(ServerFid9P *check = server->fid_table[hash]; check != 0; check = check->hash_next)
 	{
-		return 0;
+		if(check->fid == fid)
+		{
+			return 0;
+		}
 	}
 	ServerFid9P *f = push_array(server->arena, ServerFid9P, 1);
 	f->fid = fid;
 	f->open_mode = P9_OPEN_MODE_NONE;
 	f->server = server;
+	f->hash_next = server->fid_table[hash];
 	server->fid_table[hash] = f;
 	server->fid_count += 1;
 	return f;
@@ -216,10 +227,12 @@ internal ServerFid9P *
 server9p_fid_lookup(Server9P *server, u32 fid)
 {
 	u32 hash = fid % server->max_fid_count;
-	ServerFid9P *f = server->fid_table[hash];
-	if(f != 0 && f->fid == fid)
+	for(ServerFid9P *f = server->fid_table[hash]; f != 0; f = f->hash_next)
 	{
-		return f;
+		if(f->fid == fid)
+		{
+			return f;
+		}
 	}
 	return 0;
 }
@@ -228,12 +241,15 @@ internal ServerFid9P *
 server9p_fid_remove(Server9P *server, u32 fid)
 {
 	u32 hash = fid % server->max_fid_count;
-	ServerFid9P *f = server->fid_table[hash];
-	if(f != 0 && f->fid == fid)
+	ServerFid9P **prev = &server->fid_table[hash];
+	for(ServerFid9P *f = *prev; f != 0; prev = &f->hash_next, f = f->hash_next)
 	{
-		server->fid_table[hash] = 0;
-		server->fid_count -= 1;
-		return f;
+		if(f->fid == fid)
+		{
+			*prev = f->hash_next;
+			server->fid_count -= 1;
+			return f;
+		}
 	}
 	return 0;
 }

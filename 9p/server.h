@@ -4,6 +4,7 @@
 ////////////////////////////////
 //~ Server Types
 
+typedef struct Server9P Server9P;
 typedef struct ServerFid9P ServerFid9P;
 struct ServerFid9P
 {
@@ -13,7 +14,8 @@ struct ServerFid9P
 	String8 user_id;
 	u64 offset;
 	void *auxiliary;
-	struct Server9P *server;
+	Server9P *server;
+	ServerFid9P *hash_next;
 };
 
 typedef struct ServerRequest9P ServerRequest9P;
@@ -33,10 +35,10 @@ struct ServerRequest9P
 	u8 *buffer;
 	u8 *read_buffer;
 	void *auxiliary;
-	struct Server9P *server;
+	Server9P *server;
+	ServerRequest9P *hash_next;
 };
 
-typedef struct Server9P Server9P;
 struct Server9P
 {
 	Arena *arena;

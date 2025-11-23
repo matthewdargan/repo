@@ -420,6 +420,54 @@ test_readdir_many(Arena *arena, Client9P *client)
 }
 
 internal b32
+test_readdir_long_names(Arena *arena, Client9P *client)
+{
+	if(!test_create_directory(arena, client, str8_lit("long_names_dir")))
+	{
+		return 0;
+	}
+
+	u64 n = 50;
+	u64 created = 0;
+	for(u64 i = 0; i < n; i += 1)
+	{
+		Temp scratch = scratch_begin(&arena, 1);
+		u8 *buf = push_array(scratch.arena, u8, 220);
+		for(u64 j = 0; j < 200; j += 1)
+		{
+			buf[j] = 'a' + (u8)(j % 26);
+		}
+		buf[200] = '_';
+		String8 suffix = str8f(scratch.arena, "%llu", (unsigned long long)i);
+		MemoryCopy(buf + 201, suffix.str, suffix.size);
+		String8 name = str8(buf, 201 + suffix.size);
+
+		String8 path = str8f(scratch.arena, "long_names_dir/%S", name);
+		if(test_create_file(arena, client, path))
+		{
+			created += 1;
+		}
+		scratch_end(scratch);
+	}
+
+	if(created != n)
+	{
+		return 0;
+	}
+
+	ClientFid9P *fid = client9p_open(arena, client, str8_lit("long_names_dir"), P9_OpenFlag_Read);
+	if(fid == 0)
+	{
+		return 0;
+	}
+
+	DirList9P list = client9p_fid_read_dirs(arena, fid);
+	client9p_fid_close(arena, fid);
+
+	return list.count >= n;
+}
+
+internal b32
 test_multiple_fids(Arena *arena, Client9P *client)
 {
 	ClientFid9P *fid1 = client9p_open(arena, client, str8_lit("partial_write"), P9_OpenFlag_Read);
@@ -1102,6 +1150,17 @@ run_tests(Arena *arena, String8 address)
 	else
 	{
 		log_error(str8_lit("FAIL: readdir_many\n"));
+		failed += 1;
+	}
+
+	if(test_readdir_long_names(arena, client))
+	{
+		log_info(str8_lit("PASS: readdir_long_names\n"));
+		passed += 1;
+	}
+	else
+	{
+		log_error(str8_lit("FAIL: readdir_long_names\n"));
 		failed += 1;
 	}
 
