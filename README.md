@@ -66,6 +66,7 @@ cmd/      Command-line tools (depend on base/ and 9p/)
 ### Conceptual Documentation
 
 - **[docs/architecture.md](docs/architecture.md)** - Layered architecture, compression-oriented programming, unity builds
+- **[docs/9p-protocol.md](docs/9p-protocol.md)** - 9P protocol deep dive with wire format examples
 - **[docs/media-server.md](docs/media-server.md)** - Building a media server with simple tools (archived example)
 
 ## Project Structure
