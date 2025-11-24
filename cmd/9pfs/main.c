@@ -5,8 +5,6 @@
 #include "9p/inc.c"
 // clang-format on
 
-#include <signal.h>
-
 global FsContext9P *fs_context = 0;
 
 ////////////////////////////////

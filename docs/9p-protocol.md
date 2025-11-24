@@ -494,6 +494,7 @@ See [9p/README.md](../9p/README.md) for API documentation and [cmd/9pfs/main.c](
 
 **This codebase:**
 - [9p/README.md](../9p/README.md) - 9P layer API reference
+- [docs/9p-server.md](9p-server.md) - Server implementation architecture
 - [docs/architecture.md](architecture.md) - Layered architecture and design principles
 
 **Tools:**
