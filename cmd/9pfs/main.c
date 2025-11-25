@@ -120,7 +120,9 @@ get_fid_aux(Arena *arena, ServerFid9P *fid)
 	return (FidAuxiliary9P *)fid->auxiliary;
 }
 
-// 9P Operation Handlers
+////////////////////////////////
+//~ 9P Operation Handlers
+
 internal void
 srv_version(ServerRequest9P *request)
 {

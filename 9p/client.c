@@ -557,7 +557,7 @@ client9p_fid_read_dirs(Arena *arena, ClientFid9P *fid)
 		total_bytes_read += bytes_read;
 		buffer_space_left -= bytes_read;
 	}
-	String8 buffer = {buf, total_bytes_read};
+	String8 buffer = {buf, (u64)total_bytes_read};
 	result = client9p_dir_list_from_str8(arena, buffer);
 	return result;
 }

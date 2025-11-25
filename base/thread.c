@@ -126,7 +126,7 @@ semaphore_alloc(u32 initial_count, u32 max_count, String8 name)
 	}
 	else
 	{
-		sem_t *s = mmap(0, sizeof(*s), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		sem_t *s = (sem_t *)mmap(0, sizeof(*s), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 		AssertAlways(s != MAP_FAILED);
 		int err = sem_init(s, 0, initial_count);
 		if(err == 0)
