@@ -12,7 +12,7 @@ internal void
 usage(void)
 {
 	log_error(
-	    str8_lit("usage: 9p [-a=<address>] [-A=<aname>] <cmd> <args>\n"
+	    str8_lit("usage: 9p [-A=<aname>] <address> <cmd> <args>\n"
 	             "cmds: create <name>..., read <name>, write <name>, remove <name>..., stat <name>, ls <name>...\n"));
 }
 
@@ -44,6 +44,37 @@ client9p_connect(Arena *arena, String8 address, String8 aname)
 	return client;
 }
 
+internal void
+ls_print_name(Arena *arena, Client9P *client, String8 name)
+{
+	Dir9P d = client9p_stat(arena, client, name);
+	if(d.name.size == 0)
+	{
+		log_errorf("9p: failed to stat '%S'\n", name);
+	}
+	else if(d.mode & P9_ModeFlag_Directory)
+	{
+		ClientFid9P *fid = client9p_open(arena, client, name, P9_OpenFlag_Read);
+		if(fid == 0)
+		{
+			log_errorf("9p: failed to open directory '%S'\n", name);
+		}
+		else
+		{
+			DirList9P list = client9p_fid_read_dirs(arena, fid);
+			for(DirNode9P *node = list.first; node != 0; node = node->next)
+			{
+				log_infof("%S\n", node->dir.name);
+			}
+			client9p_fid_close(arena, fid);
+		}
+	}
+	else
+	{
+		log_infof("%S\n", d.name);
+	}
+}
+
 ////////////////////////////////
 //~ Entry Point
 
@@ -54,24 +85,22 @@ entry_point(CmdLine *cmd_line)
 	Log *log = log_alloc();
 	log_select(log);
 	log_scope_begin();
-	String8 address = str8_zero();
 	String8 aname = str8_zero();
 
-	if(cmd_line_has_argument(cmd_line, str8_lit("a")))
-	{
-		address = cmd_line_string(cmd_line, str8_lit("a"));
-	}
 	if(cmd_line_has_argument(cmd_line, str8_lit("A")))
 	{
 		aname = cmd_line_string(cmd_line, str8_lit("A"));
 	}
-	if(cmd_line->inputs.node_count < 1)
+	if(cmd_line->inputs.node_count < 2)
 	{
 		usage();
 	}
 	else
 	{
-		String8 command = cmd_line->inputs.first->string;
+		String8Node *inputs = cmd_line->inputs.first;
+		String8 address = inputs->string;
+		String8 command = inputs->next->string;
+		String8Node *args = inputs->next->next;
 
 		// create name...
 		if(str8_match(command, str8_lit("create"), 0))
@@ -79,7 +108,7 @@ entry_point(CmdLine *cmd_line)
 			Client9P *client = client9p_connect(scratch.arena, address, aname);
 			if(client != 0)
 			{
-				for(String8Node *node = cmd_line->inputs.first->next; node != 0; node = node->next)
+				for(String8Node *node = args; node != 0; node = node->next)
 				{
 					String8 name = node->string;
 					ClientFid9P *fid = client9p_create(scratch.arena, client, name, P9_OpenFlag_Read, 0666);
@@ -98,7 +127,7 @@ entry_point(CmdLine *cmd_line)
 		// read name
 		else if(str8_match(command, str8_lit("read"), 0))
 		{
-			String8 name = cmd_line->inputs.first->next->string;
+			String8 name = args->string;
 			Client9P *client = client9p_connect(scratch.arena, address, aname);
 			if(client != 0)
 			{
@@ -135,7 +164,7 @@ entry_point(CmdLine *cmd_line)
 		// write name
 		else if(str8_match(command, str8_lit("write"), 0))
 		{
-			String8 name = cmd_line->inputs.first->next->string;
+			String8 name = args->string;
 			Client9P *client = client9p_connect(scratch.arena, address, aname);
 			if(client != 0)
 			{
@@ -176,7 +205,7 @@ entry_point(CmdLine *cmd_line)
 			Client9P *client = client9p_connect(scratch.arena, address, aname);
 			if(client != 0)
 			{
-				for(String8Node *node = cmd_line->inputs.first->next; node != 0; node = node->next)
+				for(String8Node *node = args; node != 0; node = node->next)
 				{
 					String8 name = node->string;
 					if(client9p_remove(scratch.arena, client, name) < 0)
@@ -190,7 +219,7 @@ entry_point(CmdLine *cmd_line)
 		// stat name
 		else if(str8_match(command, str8_lit("stat"), 0))
 		{
-			String8 name = cmd_line->inputs.first->next->string;
+			String8 name = args->string;
 			Client9P *client = client9p_connect(scratch.arena, address, aname);
 			if(client != 0)
 			{
@@ -212,67 +241,16 @@ entry_point(CmdLine *cmd_line)
 			Client9P *client = client9p_connect(scratch.arena, address, aname);
 			if(client != 0)
 			{
-				String8Node *namenode = cmd_line->inputs.first->next;
-				if(namenode == 0)
+				String8Node *name_node = args;
+				if(name_node == 0)
 				{
-					String8 name = str8_lit(".");
-					Dir9P d = client9p_stat(scratch.arena, client, name);
-					if(d.name.size == 0)
-					{
-						log_errorf("9p: failed to stat '%S'\n", name);
-					}
-					else if(d.mode & P9_ModeFlag_Directory)
-					{
-						ClientFid9P *fid = client9p_open(scratch.arena, client, name, P9_OpenFlag_Read);
-						if(fid == 0)
-						{
-							log_errorf("9p: failed to open directory '%S'\n", name);
-						}
-						else
-						{
-							DirList9P list = client9p_fid_read_dirs(scratch.arena, fid);
-							for(DirNode9P *node = list.first; node != 0; node = node->next)
-							{
-								log_infof("%S\n", node->dir.name);
-							}
-							client9p_fid_close(scratch.arena, fid);
-						}
-					}
-					else
-					{
-						log_infof("%S\n", d.name);
-					}
+					ls_print_name(scratch.arena, client, str8_lit("."));
 				}
 				else
 				{
-					for(; namenode != 0; namenode = namenode->next)
+					for(; name_node != 0; name_node = name_node->next)
 					{
-						String8 name = namenode->string;
-						Dir9P d = client9p_stat(scratch.arena, client, name);
-						if(d.name.size == 0)
-						{
-							log_errorf("9p: failed to stat '%S'\n", name);
-							continue;
-						}
-						if(d.mode & P9_ModeFlag_Directory)
-						{
-							ClientFid9P *fid = client9p_open(scratch.arena, client, name, P9_OpenFlag_Read);
-							if(fid == 0)
-							{
-								log_errorf("9p: failed to open '%S'\n", name);
-								continue;
-							}
-							DirList9P list = client9p_fid_read_dirs(scratch.arena, fid);
-							client9p_fid_close(scratch.arena, fid);
-							for(DirNode9P *node = list.first; node != 0; node = node->next)
-							{
-								log_infof("%S\n", node->dir.name);
-							}
-						}
-						else
-						{
-							log_infof("%S\n", d.name);
-						}
+						ls_print_name(scratch.arena, client, name_node->string);
 					}
 				}
 				client9p_unmount(scratch.arena, client);

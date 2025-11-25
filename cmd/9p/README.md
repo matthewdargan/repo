@@ -5,12 +5,17 @@ A command-line tool for interacting with [9P](https://9fans.github.io/plan9port/
 ## Usage
 
 ```sh
-9p [-a=<address>] [-A=<aname>] <cmd> <args>
+9p [-A=<aname>] <address> <cmd> <args>
 ```
+
+**Arguments:**
+
+- `address` - 9P server address (e.g., `tcp!server!564`)
+- `cmd` - Command to execute (see Commands section)
+- `args` - Command-specific arguments
 
 **Options:**
 
-- `-a=address` - 9P server address (e.g., `tcp!server!564`)
 - `-A=aname` - Attach name for servers exporting multiple file trees
 
 **Commands:**
@@ -27,41 +32,41 @@ A command-line tool for interacting with [9P](https://9fans.github.io/plan9port/
 List files on a remote 9P server:
 
 ```sh
-9p -a='tcp!sources.cs.bell-labs.com' ls /
+9p 'tcp!sources.cs.bell-labs.com' ls '/'
 ```
 
 Read a file from a remote server:
 
 ```sh
-9p -a='tcp!server!564' read /path/to/file
+9p 'tcp!server!564' read '/path/to/file'
 ```
 
 Write to a file on a remote server:
 
 ```sh
-echo "hello world" | 9p -a='tcp!server!564' write /path/to/file
+echo 'hello world' | 9p 'tcp!server!564' write '/path/to/file'
 ```
 
 Get file metadata:
 
 ```sh
-9p -a='tcp!server!564' stat /path/to/file
+9p 'tcp!server!564' stat '/path/to/file'
 ```
 
 Create a file:
 
 ```sh
-9p -a='tcp!server!564' create /path/to/newfile
+9p 'tcp!server!564' create '/path/to/newfile'
 ```
 
 Remove files:
 
 ```sh
-9p -a='tcp!server!564' remove /path/to/file1 /path/to/file2
+9p 'tcp!server!564' remove '/path/to/file1' '/path/to/file2'
 ```
 
 Use with a specific attach name:
 
 ```sh
-9p -a='tcp!server!564' -A='/home/user' ls /
+9p -A='/home/user' 'tcp!server!564' ls '/'
 ```
