@@ -2,7 +2,7 @@
 //~ Context Management
 
 internal FsContext9P *
-fs9p_context_alloc(Arena *arena, String8 root_path, String8 tmp_path, b32 readonly)
+fs9p_context_alloc(Arena *arena, String8 root_path, String8 tmp_path, b32 readonly, StorageBackend9P backend)
 {
 	FsContext9P *ctx = push_array(arena, FsContext9P, 1);
 	ctx->root_path = str8_copy(arena, root_path);
@@ -10,7 +10,8 @@ fs9p_context_alloc(Arena *arena, String8 root_path, String8 tmp_path, b32 readon
 	ctx->tmp_arena = arena_alloc();
 	ctx->readonly = readonly;
 	ctx->tmp_qid_count = 1;
-	ctx->tmp_root = temp9p_node_create(ctx->tmp_arena, ctx, str8_lit("tmp"), str8_lit("tmp"), 1, 0755);
+	ctx->backend = backend;
+	ctx->tmp_root = temp9p_node_create(ctx->tmp_arena, ctx, str8_lit("."), str8_lit("."), 1, 0755);
 	return ctx;
 }
 
@@ -388,13 +389,12 @@ os_path_from_fs9p_path(Arena *arena, FsContext9P *ctx, String8 relative_path)
 internal FsHandle9P *
 fs9p_open(Arena *arena, FsContext9P *ctx, String8 path, u32 mode)
 {
-	StorageBackend9P backend = fs9p_get_backend(path);
 	FsHandle9P *handle = push_array(arena, FsHandle9P, 1);
 	handle->path = str8_copy(arena, path);
 	handle->fd = -1;
 	handle->ctx = ctx;
 
-	if(backend == StorageBackend9P_ArenaTemp)
+	if(ctx->backend == StorageBackend9P_ArenaTemp)
 	{
 		TempNode9P *node = temp9p_open(ctx, path);
 		if(node != 0)
@@ -522,8 +522,7 @@ fs9p_write(FsHandle9P *handle, u64 offset, String8 data)
 internal b32
 fs9p_create(FsContext9P *ctx, String8 path, u32 permissions, u32 mode)
 {
-	StorageBackend9P backend = fs9p_get_backend(path);
-	if(backend == StorageBackend9P_ArenaTemp)
+	if(ctx->backend == StorageBackend9P_ArenaTemp)
 	{
 		return temp9p_create(ctx->tmp_arena, ctx, path, permissions);
 	}
@@ -572,8 +571,7 @@ fs9p_create(FsContext9P *ctx, String8 path, u32 permissions, u32 mode)
 internal void
 fs9p_remove(FsContext9P *ctx, String8 path)
 {
-	StorageBackend9P backend = fs9p_get_backend(path);
-	if(backend == StorageBackend9P_ArenaTemp)
+	if(ctx->backend == StorageBackend9P_ArenaTemp)
 	{
 		temp9p_remove(ctx, path);
 		return;
@@ -597,8 +595,7 @@ fs9p_remove(FsContext9P *ctx, String8 path)
 internal Dir9P
 fs9p_stat(Arena *arena, FsContext9P *ctx, String8 path)
 {
-	StorageBackend9P backend = fs9p_get_backend(path);
-	if(backend == StorageBackend9P_ArenaTemp)
+	if(ctx->backend == StorageBackend9P_ArenaTemp)
 	{
 		TempNode9P *node = temp9p_node_lookup(ctx->tmp_root, path);
 		return temp9p_stat(arena, node);
@@ -635,8 +632,7 @@ fs9p_stat(Arena *arena, FsContext9P *ctx, String8 path)
 internal b32
 fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir)
 {
-	StorageBackend9P backend = fs9p_get_backend(path);
-	if(backend == StorageBackend9P_ArenaTemp)
+	if(ctx->backend == StorageBackend9P_ArenaTemp)
 	{
 		TempNode9P *node = temp9p_node_lookup(ctx->tmp_root, path);
 		temp9p_wstat(ctx->tmp_arena, node, dir);
@@ -797,11 +793,10 @@ fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir)
 internal DirIterator9P *
 fs9p_opendir(Arena *arena, FsContext9P *ctx, String8 path)
 {
-	StorageBackend9P backend = fs9p_get_backend(path);
 	DirIterator9P *iter = push_array(arena, DirIterator9P, 1);
 	iter->path = str8_copy(arena, path);
 
-	if(backend == StorageBackend9P_ArenaTemp)
+	if(ctx->backend == StorageBackend9P_ArenaTemp)
 	{
 		TempNode9P *node = temp9p_node_lookup(ctx->tmp_root, path);
 		if(node != 0 && node->is_directory)
@@ -946,26 +941,20 @@ fs9p_closedir(DirIterator9P *iter)
 internal TempNode9P *
 temp9p_node_lookup(TempNode9P *root, String8 path)
 {
-	if(path.size == 0 || str8_match(path, str8_lit("tmp"), 0))
+	if(path.size == 0 || str8_match(path, str8_lit("."), 0))
 	{
 		return root;
 	}
 
-	String8 lookup_path = path;
-	if(str8_match(str8_prefix(path, 4), str8_lit("tmp/"), 0))
-	{
-		lookup_path = str8_skip(path, 4);
-	}
-
 	TempNode9P *node = root;
-	for(u64 path_pos = 0; path_pos < lookup_path.size && node != 0;)
+	for(u64 path_pos = 0; path_pos < path.size && node != 0;)
 	{
 		u64 component_end = path_pos;
-		for(; component_end < lookup_path.size && lookup_path.str[component_end] != '/'; component_end += 1)
+		for(; component_end < path.size && path.str[component_end] != '/'; component_end += 1)
 		{
 		}
 
-		String8 component = str8(lookup_path.str + path_pos, component_end - path_pos);
+		String8 component = str8(path.str + path_pos, component_end - path_pos);
 		b32 found = 0;
 		for(TempNode9P *child = node->first_child; child != 0; child = child->next_sibling)
 		{
@@ -983,7 +972,7 @@ temp9p_node_lookup(TempNode9P *root, String8 path)
 		}
 
 		path_pos = component_end;
-		if(path_pos < lookup_path.size && lookup_path.str[path_pos] == '/')
+		if(path_pos < path.size && path.str[path_pos] == '/')
 		{
 			path_pos += 1;
 		}
@@ -1259,19 +1248,6 @@ temp9p_readdir(Arena *arena, TempNode9P *node, TempNode9P **iter, u64 offset, u6
 
 	scratch_end(scratch);
 	return str8(encode_buffer, encode_buffer_size);
-}
-
-////////////////////////////////
-//~ Backend Routing
-
-internal StorageBackend9P
-fs9p_get_backend(String8 path)
-{
-	if(str8_match(path, str8_lit("tmp"), 0) || (path.size >= 4 && str8_match(str8_prefix(path, 4), str8_lit("tmp/"), 0)))
-	{
-		return StorageBackend9P_ArenaTemp;
-	}
-	return StorageBackend9P_Disk;
 }
 
 ////////////////////////////////

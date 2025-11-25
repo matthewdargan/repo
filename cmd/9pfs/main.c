@@ -724,7 +724,7 @@ entry_point(CmdLine *cmd_line)
 	}
 	else
 	{
-		fs_context = fs9p_context_alloc(arena, root_path, str8_zero(), readonly);
+		fs_context = fs9p_context_alloc(arena, root_path, str8_zero(), readonly, StorageBackend9P_Disk);
 
 		OS_Handle listen_socket = dial9p_listen(address, str8_lit("tcp"), str8_lit("9pfs"));
 		if(os_handle_match(listen_socket, os_handle_zero()))

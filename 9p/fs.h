@@ -9,6 +9,13 @@
 ////////////////////////////////
 //~ Filesystem Types
 
+typedef u32 StorageBackend9P;
+enum
+{
+	StorageBackend9P_Disk,
+	StorageBackend9P_ArenaTemp,
+};
+
 typedef struct TempNode9P TempNode9P;
 struct TempNode9P
 {
@@ -38,6 +45,7 @@ struct FsContext9P
 	b32 readonly;
 	u32 uid_offset;
 	u32 gid_offset;
+	StorageBackend9P backend;
 };
 
 typedef struct FsHandle9P FsHandle9P;
@@ -82,17 +90,11 @@ struct FidAuxiliary9P
 	void *tmp_data;
 };
 
-typedef u32 StorageBackend9P;
-enum
-{
-	StorageBackend9P_Disk,
-	StorageBackend9P_ArenaTemp,
-};
-
 ////////////////////////////////
 //~ Context Management
 
-internal FsContext9P *fs9p_context_alloc(Arena *arena, String8 root_path, String8 tmp_path, b32 readonly);
+internal FsContext9P *fs9p_context_alloc(Arena *arena, String8 root_path, String8 tmp_path, b32 readonly,
+                                         StorageBackend9P backend);
 
 ////////////////////////////////
 //~ Path Operations
@@ -145,11 +147,6 @@ internal void temp9p_remove(FsContext9P *ctx, String8 path);
 internal Dir9P temp9p_stat(Arena *arena, TempNode9P *node);
 internal void temp9p_wstat(Arena *arena, TempNode9P *node, Dir9P *dir);
 internal String8 temp9p_readdir(Arena *arena, TempNode9P *node, TempNode9P **iter, u64 offset, u64 count);
-
-////////////////////////////////
-//~ Backend Routing
-
-internal StorageBackend9P fs9p_get_backend(String8 path);
 
 ////////////////////////////////
 //~ UID/GID Conversion
