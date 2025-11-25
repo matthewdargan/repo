@@ -34,6 +34,12 @@ struct ThreadState
 ////////////////////////////////
 //~ Synchronization Primitive Types
 
+typedef struct Mutex Mutex;
+struct Mutex
+{
+	u64 u64[1];
+};
+
 typedef struct Semaphore Semaphore;
 struct Semaphore
 {
@@ -47,7 +53,6 @@ internal void thread_init(void);
 internal ThreadState *thread_state_alloc(void);
 internal void thread_state_release(ThreadState *state);
 internal void *thread_entry_point(void *ptr);
-internal void thread_init(void);
 internal Thread thread_launch(ThreadEntryPointFunctionType *func, void *ptr);
 internal b32 thread_join(Thread thread);
 internal void thread_detach(Thread thread);
@@ -55,9 +60,19 @@ internal void thread_detach(Thread thread);
 ////////////////////////////////
 //~ Synchronization Primitive Functions
 
+//- mutexes
+internal Mutex mutex_alloc(void);
+internal void mutex_release(Mutex mutex);
+internal void mutex_take(Mutex mutex);
+internal void mutex_drop(Mutex mutex);
+
+//- cross-process semaphores
 internal Semaphore semaphore_alloc(u32 initial_count, u32 max_count, String8 name);
 internal void semaphore_release(Semaphore semaphore);
 internal b32 semaphore_take(Semaphore semaphore, u64 timeout_us);
 internal void semaphore_drop(Semaphore semaphore);
+
+//- scope macros
+#define MutexScope(m) DeferLoop(mutex_take(m), mutex_drop(m))
 
 #endif // THREAD_H

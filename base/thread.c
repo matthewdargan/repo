@@ -103,6 +103,57 @@ thread_detach(Thread thread)
 ////////////////////////////////
 //~ Synchronization Primitive Functions
 
+//- mutexes
+internal Mutex
+mutex_alloc(void)
+{
+	pthread_mutex_t *mutex =
+	    (pthread_mutex_t *)mmap(0, sizeof(*mutex), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	AssertAlways(mutex != MAP_FAILED);
+
+	int err = pthread_mutex_init(mutex, 0);
+	AssertAlways(err == 0);
+
+	Mutex result = {(u64)mutex};
+	return result;
+}
+
+internal void
+mutex_release(Mutex mutex)
+{
+	if(MemoryIsZeroStruct(&mutex))
+	{
+		return;
+	}
+	pthread_mutex_t *m = (pthread_mutex_t *)mutex.u64[0];
+	pthread_mutex_destroy(m);
+	int err = munmap(m, sizeof(*m));
+	AssertAlways(err == 0);
+}
+
+internal void
+mutex_take(Mutex mutex)
+{
+	if(MemoryIsZeroStruct(&mutex))
+	{
+		return;
+	}
+	pthread_mutex_t *m = (pthread_mutex_t *)mutex.u64[0];
+	pthread_mutex_lock(m);
+}
+
+internal void
+mutex_drop(Mutex mutex)
+{
+	if(MemoryIsZeroStruct(&mutex))
+	{
+		return;
+	}
+	pthread_mutex_t *m = (pthread_mutex_t *)mutex.u64[0];
+	pthread_mutex_unlock(m);
+}
+
+//- cross-process semaphores
 internal Semaphore
 semaphore_alloc(u32 initial_count, u32 max_count, String8 name)
 {
@@ -126,7 +177,7 @@ semaphore_alloc(u32 initial_count, u32 max_count, String8 name)
 	}
 	else
 	{
-		sem_t *s = mmap(0, sizeof(*s), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		sem_t *s = (sem_t *)mmap(0, sizeof(*s), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 		AssertAlways(s != MAP_FAILED);
 		int err = sem_init(s, 0, initial_count);
 		if(err == 0)

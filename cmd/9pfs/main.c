@@ -29,7 +29,7 @@ struct WorkerPool
 {
 	b32 is_live;
 	Semaphore semaphore;
-	pthread_mutex_t mutex;
+	Mutex mutex;
 	Arena *arena;
 	WorkQueueNode *queue_first;
 	WorkQueueNode *queue_last;
@@ -44,7 +44,7 @@ internal WorkQueueNode *
 work_queue_node_alloc(WorkerPool *pool)
 {
 	WorkQueueNode *node = 0;
-	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
+	MutexScope(pool->mutex)
 	{
 		node = pool->node_free_list;
 		if(node != 0)
@@ -63,10 +63,7 @@ work_queue_node_alloc(WorkerPool *pool)
 internal void
 work_queue_node_release(WorkerPool *pool, WorkQueueNode *node)
 {
-	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
-	{
-		SLLStackPush(pool->node_free_list, node);
-	}
+	MutexScope(pool->mutex) { SLLStackPush(pool->node_free_list, node); }
 }
 
 internal void
@@ -74,10 +71,7 @@ work_queue_push(WorkerPool *pool, OS_Handle connection)
 {
 	WorkQueueNode *node = work_queue_node_alloc(pool);
 	node->connection = connection;
-	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
-	{
-		SLLQueuePush(pool->queue_first, pool->queue_last, node);
-	}
+	MutexScope(pool->mutex) { SLLQueuePush(pool->queue_first, pool->queue_last, node); }
 	semaphore_drop(pool->semaphore);
 }
 
@@ -91,7 +85,7 @@ work_queue_pop(WorkerPool *pool)
 
 	OS_Handle result = os_handle_zero();
 	WorkQueueNode *node = 0;
-	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
+	MutexScope(pool->mutex)
 	{
 		if(pool->queue_first != 0)
 		{
@@ -120,7 +114,9 @@ get_fid_aux(Arena *arena, ServerFid9P *fid)
 	return (FidAuxiliary9P *)fid->auxiliary;
 }
 
-// 9P Operation Handlers
+////////////////////////////////
+//~ 9P Operation Handlers
+
 internal void
 srv_version(ServerRequest9P *request)
 {
@@ -619,8 +615,8 @@ worker_pool_alloc(Arena *arena, u64 worker_count)
 	WorkerPool *pool = push_array(arena, WorkerPool, 1);
 	pool->arena = arena_alloc();
 
-	int mutex_result = pthread_mutex_init(&pool->mutex, 0);
-	AssertAlways(mutex_result == 0);
+	pool->mutex = mutex_alloc();
+	AssertAlways(pool->mutex.u64[0] != 0);
 
 	pool->semaphore = semaphore_alloc(0, 1024, str8_zero());
 	AssertAlways(pool->semaphore.u64[0] != 0);
@@ -666,7 +662,7 @@ worker_pool_shutdown(WorkerPool *pool)
 	}
 
 	semaphore_release(pool->semaphore);
-	pthread_mutex_destroy(&pool->mutex);
+	mutex_release(pool->mutex);
 }
 
 ////////////////////////////////
@@ -678,32 +674,20 @@ entry_point(CmdLine *cmd_line)
 	Temp scratch = scratch_begin(0, 0);
 	Arena *arena = arena_alloc();
 
-	String8 root_path = str8_lit(".");
-	String8 address = str8_zero();
-	b32 readonly = 0;
-	u64 worker_count = 0;
-
-	for(CmdLineOpt *opt = cmd_line->options.first; opt != 0; opt = opt->next)
+	String8 root_path = cmd_line_string(cmd_line, str8_lit("root"));
+	if(root_path.size == 0)
 	{
-		String8 option = opt->string;
-		if(str8_match(option, str8_lit("readonly"), 0) || str8_match(option, str8_lit("r"), 0))
-		{
-			readonly = 1;
-		}
-		else if(str8_match(option, str8_lit("root"), 0))
-		{
-			if(opt->value_string.size > 0)
-			{
-				root_path = opt->value_string;
-			}
-		}
-		else if(str8_match(option, str8_lit("threads"), 0))
-		{
-			if(opt->value_string.size > 0)
-			{
-				worker_count = u64_from_str8(opt->value_string, 10);
-			}
-		}
+		root_path = str8_lit(".");
+	}
+
+	String8 address = str8_zero();
+	b32 readonly = cmd_line_has_flag(cmd_line, str8_lit("readonly"));
+
+	u64 worker_count = 0;
+	String8 threads_str = cmd_line_string(cmd_line, str8_lit("threads"));
+	if(threads_str.size > 0)
+	{
+		worker_count = u64_from_str8(threads_str, 10);
 	}
 
 	if(cmd_line->inputs.node_count > 0)
