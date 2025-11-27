@@ -36,6 +36,7 @@ in {
     ./hardware.nix
     self.nixosModules."9p-tools"
     self.nixosModules.fish
+    self.nixosModules.git-server
     self.nixosModules.locale
     self.nixosModules.nix-config
     self.nixosModules.settings
@@ -66,6 +67,13 @@ in {
   };
   services = {
     btrfs.autoScrub.enable = true;
+    git-server = {
+      enable = true;
+      baseDir = "/srv/git";
+      authorizedKeys = [
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILe/v2phdFJcaINc1bphWEM6vXDSlXY/e0B2zyb3ik1M matthewdargan57@gmail.com"
+      ];
+    };
     jellyfin = {
       enable = true;
       cacheDir = "/home/media/.cache/jellyfin";
