@@ -1,5 +1,3 @@
-// nix-cache - C++ Unity Build
-
 // clang-format off
 #include "base/inc.h"
 #include "9p/inc.h"
@@ -36,6 +34,7 @@
 #include <nix/util/archive.hh>
 #include <nix/util/serialise.hh>
 
+#include <gc/gc.h>
 #include <lzma.h>
 
 ////////////////////////////////
@@ -92,6 +91,41 @@ nix_store_close(NixStore *nix_store)
 	}
 }
 
+////////////////////////////////
+//~ Types
+
+typedef struct NixStorePath NixStorePath;
+struct NixStorePath
+{
+	String8 path;
+	String8 hash;
+	NixStorePath *next;
+};
+
+typedef struct NixCacheBuilder NixCacheBuilder;
+struct NixCacheBuilder
+{
+	Arena *arena;
+	FsContext9P *fs_ctx;
+	NixStorePath *store_paths_first;
+	NixStorePath *store_paths_last;
+	String8 flake_root;
+};
+
+////////////////////////////////
+//~ Global State
+
+static FsContext9P *fs_context = 0;
+static Arena *cache_arena = 0;
+static NixStore *nix_store = 0;
+static NixCacheBuilder *global_builder = 0;
+static String8 global_flake_root = {0};
+static Mutex rebuild_mutex = {0};
+static b32 rebuild_in_progress = 0;
+
+////////////////////////////////
+//~ Helper Functions
+
 static std::string
 std_from_str8(String8 s)
 {
@@ -112,7 +146,7 @@ nix_build_flake(Arena *arena, NixStore *nix_store, String8 flake_root, String8 o
 {
 	if(!arena || !nix_store || flake_root.size == 0 || output_name.size == 0)
 	{
-		return (String8){0, 0};
+		return str8_zero();
 	}
 
 	try
@@ -121,7 +155,7 @@ nix_build_flake(Arena *arena, NixStore *nix_store, String8 flake_root, String8 o
 		auto &state = *nix_store->eval_state;
 
 		std::string flake_path = std_from_str8(flake_root);
-		std::string output_name_str = std_from_str8(output_name);
+		std::string config_name = std_from_str8(output_name);
 
 		if(flake_path[0] != '/')
 		{
@@ -132,7 +166,10 @@ nix_build_flake(Arena *arena, NixStore *nix_store, String8 flake_root, String8 o
 			}
 		}
 
-		auto flake_ref = nix::parseFlakeRef(nix_store->fetch_settings, flake_path, std::nullopt);
+		// Use explicit path: scheme for local filesystem paths
+		std::string flake_ref_str = "path:" + flake_path;
+
+		auto flake_ref = nix::parseFlakeRef(nix_store->fetch_settings, flake_ref_str, std::nullopt);
 
 		auto locked_flake = nix::flake::lockFlake(nix_store->flake_settings, state, flake_ref,
 		                                          nix::flake::LockFlags{
@@ -151,29 +188,31 @@ nix_build_flake(Arena *arena, NixStore *nix_store, String8 flake_root, String8 o
 		auto vOutputs = vFlake.attrs()->get(state.symbols.create("outputs"));
 		if(!vOutputs)
 		{
-			return (String8){0, 0};
+			return str8_zero();
 		}
 
+		std::string attr_path = "nixosConfigurations." + config_name + ".config.system.build.toplevel";
+
 		auto emptyBindings = state.allocBindings(0);
-		auto [vRoot, pos] = nix::findAlongAttrPath(state, output_name_str, *emptyBindings, *vOutputs->value);
+		auto [vRoot, pos] = nix::findAlongAttrPath(state, attr_path, *emptyBindings, *vOutputs->value);
 
 		state.forceValue(*vRoot, pos);
 
 		if(vRoot->type() != nix::nAttrs)
 		{
-			return (String8){0, 0};
+			return str8_zero();
 		}
 
 		auto drvPathAttr = vRoot->attrs()->get(state.symbols.create("drvPath"));
 		if(!drvPathAttr)
 		{
-			return (String8){0, 0};
+			return str8_zero();
 		}
 
 		state.forceValue(*drvPathAttr->value, pos);
 		if(drvPathAttr->value->type() != nix::nString)
 		{
-			return (String8){0, 0};
+			return str8_zero();
 		}
 
 		auto drvPath = store->parseStorePath(drvPathAttr->value->c_str());
@@ -187,7 +226,7 @@ nix_build_flake(Arena *arena, NixStore *nix_store, String8 flake_root, String8 o
 		auto outputs = store->queryDerivationOutputMap(drvPath);
 		if(outputs.empty())
 		{
-			return (String8){0, 0};
+			return str8_zero();
 		}
 
 		std::string path = store->printStorePath(outputs.begin()->second);
@@ -196,12 +235,100 @@ nix_build_flake(Arena *arena, NixStore *nix_store, String8 flake_root, String8 o
 	catch(const std::exception &e)
 	{
 		fprintf(stderr, "nix_build_flake error: %s\n", e.what());
-		return (String8){0, 0};
+		return str8_zero();
 	}
 	catch(...)
 	{
 		fprintf(stderr, "nix_build_flake: unknown error\n");
-		return (String8){0, 0};
+		return str8_zero();
+	}
+}
+
+static String8List
+nix_enumerate_nixos_configurations(Arena *arena, NixStore *nix_store, String8 flake_root)
+{
+	String8List result = {0};
+
+	if(!arena || !nix_store || flake_root.size == 0)
+	{
+		return result;
+	}
+
+	try
+	{
+		auto &state = *nix_store->eval_state;
+
+		std::string flake_path = std_from_str8(flake_root);
+
+		if(flake_path[0] != '/')
+		{
+			char cwd[PATH_MAX];
+			if(getcwd(cwd, sizeof(cwd)) != nullptr)
+			{
+				flake_path = std::string(cwd) + "/" + flake_path;
+			}
+		}
+
+		// Use explicit path: scheme for local filesystem paths
+		std::string flake_ref_str = "path:" + flake_path;
+
+		auto flake_ref = nix::parseFlakeRef(nix_store->fetch_settings, flake_ref_str, std::nullopt);
+
+		auto locked_flake = nix::flake::lockFlake(nix_store->flake_settings, state, flake_ref,
+		                                          nix::flake::LockFlags{
+		                                              .updateLockFile = false,
+		                                              .useRegistries = true,
+		                                              .allowUnlocked = false,
+		                                              .referenceLockFilePath = std::nullopt,
+		                                              .outputLockFilePath = std::nullopt,
+		                                              .inputOverrides = {},
+		                                              .inputUpdates = {},
+		                                          });
+
+		nix::Value vFlake;
+		nix::flake::callFlake(state, locked_flake, vFlake);
+
+		auto vOutputs = vFlake.attrs()->get(state.symbols.create("outputs"));
+		if(!vOutputs)
+		{
+			return result;
+		}
+
+		state.forceValue(*vOutputs->value, nix::noPos);
+
+		auto vNixosConfigs = vOutputs->value->attrs()->get(state.symbols.create("nixosConfigurations"));
+		if(!vNixosConfigs)
+		{
+			fprintf(stderr, "nix_enumerate_nixos_configurations: no nixosConfigurations found in flake\n");
+			return result;
+		}
+
+		state.forceValue(*vNixosConfigs->value, nix::noPos);
+
+		if(vNixosConfigs->value->type() != nix::nAttrs)
+		{
+			fprintf(stderr, "nix_enumerate_nixos_configurations: nixosConfigurations is not an attribute set\n");
+			return result;
+		}
+
+		for(auto &attr : *vNixosConfigs->value->attrs())
+		{
+			std::string config_name(std::string_view(state.symbols[attr.name]));
+			String8 name = str8_from_std(arena, config_name);
+			str8_list_push(arena, &result, name);
+		}
+
+		return result;
+	}
+	catch(const std::exception &e)
+	{
+		fprintf(stderr, "nix_enumerate_nixos_configurations error: %s\n", e.what());
+		return result;
+	}
+	catch(...)
+	{
+		fprintf(stderr, "nix_enumerate_nixos_configurations: unknown error\n");
+		return result;
 	}
 }
 
@@ -210,7 +337,7 @@ nix_query_nar_hash(Arena *arena, NixStore *nix_store, String8 store_path_str)
 {
 	if(!arena || !nix_store || store_path_str.size == 0)
 	{
-		return (String8){0, 0};
+		return str8_zero();
 	}
 
 	try
@@ -226,7 +353,7 @@ nix_query_nar_hash(Arena *arena, NixStore *nix_store, String8 store_path_str)
 	}
 	catch(...)
 	{
-		return (String8){0, 0};
+		return str8_zero();
 	}
 }
 
@@ -235,7 +362,7 @@ nix_query_references(Arena *arena, NixStore *nix_store, String8 store_path_str)
 {
 	if(!arena || !nix_store || store_path_str.size == 0)
 	{
-		return (String8){0, 0};
+		return str8_zero();
 	}
 
 	try
@@ -263,7 +390,7 @@ nix_query_references(Arena *arena, NixStore *nix_store, String8 store_path_str)
 	}
 	catch(...)
 	{
-		return (String8){0, 0};
+		return str8_zero();
 	}
 }
 
@@ -272,7 +399,7 @@ nix_generate_nar_xz(Arena *arena, NixStore *nix_store, String8 store_path_str)
 {
 	if(!arena || !nix_store || store_path_str.size == 0)
 	{
-		return (String8){0, 0};
+		return str8_zero();
 	}
 
 	try
@@ -290,7 +417,7 @@ nix_generate_nar_xz(Arena *arena, NixStore *nix_store, String8 store_path_str)
 		lzma_ret ret = lzma_easy_encoder(&strm, 9, LZMA_CHECK_CRC64);
 		if(ret != LZMA_OK)
 		{
-			return (String8){0, 0};
+			return str8_zero();
 		}
 
 		size_t out_buf_size = nar_data.size() * 2;
@@ -312,7 +439,7 @@ nix_generate_nar_xz(Arena *arena, NixStore *nix_store, String8 store_path_str)
 			if(ret != LZMA_OK && ret != LZMA_STREAM_END)
 			{
 				lzma_end(&strm);
-				return (String8){0, 0};
+				return str8_zero();
 			}
 
 			size_t produced = sizeof(out_buf) - strm.avail_out;
@@ -328,16 +455,9 @@ nix_generate_nar_xz(Arena *arena, NixStore *nix_store, String8 store_path_str)
 	}
 	catch(...)
 	{
-		return (String8){0, 0};
+		return str8_zero();
 	}
 }
-
-////////////////////////////////
-//~ Global State
-
-static FsContext9P *fs_context = 0;
-static Arena *cache_arena = 0;
-static NixStore *nix_store = 0;
 
 ////////////////////////////////
 //~ Nix Cache
@@ -375,24 +495,6 @@ nix_hash_from_store_path(Arena *arena, String8 store_path)
 	return result;
 }
 
-typedef struct NixStorePath NixStorePath;
-struct NixStorePath
-{
-	String8 path;
-	String8 hash;
-	NixStorePath *next;
-};
-
-typedef struct NixCacheBuilder NixCacheBuilder;
-struct NixCacheBuilder
-{
-	Arena *arena;
-	FsContext9P *fs_ctx;
-	NixStorePath *store_paths_first;
-	NixStorePath *store_paths_last;
-	String8 flake_root;
-};
-
 static String8
 nix_generate_narinfo(Arena *arena, String8 store_path, String8 hash, String8 nar_hash, u64 nar_size, String8 references)
 {
@@ -403,7 +505,7 @@ nix_generate_narinfo(Arena *arena, String8 store_path, String8 hash, String8 nar
 	                        "URL: %S\n"
 	                        "Compression: xz\n"
 	                        "NarHash: %S\n"
-	                        "NarSize: %llu\n"
+	                        "NarSize: %lu\n"
 	                        "References: %S\n",
 	                        store_path, url, nar_hash, nar_size, references);
 
@@ -533,7 +635,7 @@ cache_add_store_path(NixCacheBuilder *builder, String8 store_path)
 	String8 narinfo_data = str8_copy(cache_arena, narinfo);
 	temp9p_write(cache_arena, narinfo_node, 0, narinfo_data);
 
-	fprintf(stdout, "nix-cache: cached %.*s (%llu bytes)\n", (int)hash.size, hash.str, nar_data.size);
+	fprintf(stdout, "nix-cache: cached %.*s (%lu bytes)\n", (int)hash.size, hash.str, nar_data.size);
 	fflush(stdout);
 
 	scratch_end(scratch);
@@ -557,6 +659,68 @@ cache_build_config(NixCacheBuilder *builder, String8 config_name)
 
 	cache_add_store_path(builder, store_path);
 
+	// Update config metadata
+	String8 config_dir = str8f(scratch.arena, "configs/%S", config_name);
+	if(!temp9p_create(builder->arena, builder->fs_ctx, config_dir, P9_ModeFlag_Directory | 0755))
+	{
+		// Directory might already exist, try to continue
+	}
+
+	// Read current generation number
+	u64 generation = 1;
+	String8 gen_path = str8f(scratch.arena, "%S/generation", config_dir);
+	TempNode9P *gen_node = temp9p_open(builder->fs_ctx, gen_path);
+	if(gen_node != 0)
+	{
+		String8 gen_str = temp9p_read(scratch.arena, gen_node, 0, 64);
+		if(gen_str.size > 0)
+		{
+			generation = u64_from_str8(gen_str, 10) + 1;
+		}
+	}
+
+	// Write generation
+	if(!temp9p_create(builder->arena, builder->fs_ctx, gen_path, 0644))
+	{
+		// File might exist, that's ok
+	}
+	gen_node = temp9p_open(builder->fs_ctx, gen_path);
+	if(gen_node != 0)
+	{
+		String8 gen_data = str8f(cache_arena, "%lu", generation);
+		temp9p_write(cache_arena, gen_node, 0, gen_data);
+	}
+
+	// Write path
+	String8 path_file = str8f(scratch.arena, "%S/path", config_dir);
+	if(!temp9p_create(builder->arena, builder->fs_ctx, path_file, 0644))
+	{
+		// File might exist, that's ok
+	}
+	TempNode9P *path_node = temp9p_open(builder->fs_ctx, path_file);
+	if(path_node != 0)
+	{
+		String8 path_data = str8_copy(cache_arena, store_path);
+		temp9p_write(cache_arena, path_node, 0, path_data);
+	}
+
+	// Write timestamp
+	String8 ts_file = str8f(scratch.arena, "%S/timestamp", config_dir);
+	if(!temp9p_create(builder->arena, builder->fs_ctx, ts_file, 0644))
+	{
+		// File might exist, that's ok
+	}
+	TempNode9P *ts_node = temp9p_open(builder->fs_ctx, ts_file);
+	if(ts_node != 0)
+	{
+		DateTime now = os_now_universal_time();
+		String8 timestamp = str8_from_datetime(cache_arena, now);
+		temp9p_write(cache_arena, ts_node, 0, timestamp);
+	}
+
+	fprintf(stdout, "nix-cache: updated %.*s to generation %lu\n", (int)config_name.size, config_name.str, generation);
+	fflush(stdout);
+
 	scratch_end(scratch);
 }
 
@@ -568,6 +732,13 @@ cache_init(NixCacheBuilder *builder)
 	if(!temp9p_create(builder->arena, builder->fs_ctx, str8_lit("nar"), P9_ModeFlag_Directory | 0755))
 	{
 		fprintf(stderr, "nix-cache: failed to create nar directory\n");
+		scratch_end(scratch);
+		return;
+	}
+
+	if(!temp9p_create(builder->arena, builder->fs_ctx, str8_lit("configs"), P9_ModeFlag_Directory | 0755))
+	{
+		fprintf(stderr, "nix-cache: failed to create configs directory\n");
 		scratch_end(scratch);
 		return;
 	}
@@ -594,6 +765,25 @@ cache_init(NixCacheBuilder *builder)
 	String8 info_data = str8_copy(cache_arena, cache_info_content);
 	temp9p_write(cache_arena, info_node, 0, info_data);
 
+	// Create trigger file for hot-reload
+	if(!temp9p_create(builder->arena, builder->fs_ctx, str8_lit("trigger"), 0644))
+	{
+		fprintf(stderr, "nix-cache: failed to create trigger file\n");
+		scratch_end(scratch);
+		return;
+	}
+
+	TempNode9P *trigger_node = temp9p_open(builder->fs_ctx, str8_lit("trigger"));
+	if(trigger_node == 0)
+	{
+		fprintf(stderr, "nix-cache: failed to open trigger file\n");
+		scratch_end(scratch);
+		return;
+	}
+
+	String8 trigger_data = str8_lit("Write to this file to trigger a rebuild\n");
+	temp9p_write(cache_arena, trigger_node, 0, trigger_data);
+
 	scratch_end(scratch);
 }
 
@@ -619,7 +809,7 @@ struct WorkerPool
 {
 	b32 is_live;
 	Semaphore semaphore;
-	pthread_mutex_t mutex;
+	Mutex mutex;
 	Arena *arena;
 	WorkQueueNode *queue_first;
 	WorkQueueNode *queue_last;
@@ -634,7 +824,7 @@ static WorkQueueNode *
 work_queue_node_alloc(WorkerPool *pool)
 {
 	WorkQueueNode *node = 0;
-	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
+	MutexScope(pool->mutex)
 	{
 		node = pool->node_free_list;
 		if(node != 0)
@@ -653,10 +843,7 @@ work_queue_node_alloc(WorkerPool *pool)
 static void
 work_queue_node_release(WorkerPool *pool, WorkQueueNode *node)
 {
-	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
-	{
-		SLLStackPush(pool->node_free_list, node);
-	}
+	MutexScope(pool->mutex) { SLLStackPush(pool->node_free_list, node); }
 }
 
 static void
@@ -664,10 +851,7 @@ work_queue_push(WorkerPool *pool, OS_Handle connection)
 {
 	WorkQueueNode *node = work_queue_node_alloc(pool);
 	node->connection = connection;
-	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
-	{
-		SLLQueuePush(pool->queue_first, pool->queue_last, node);
-	}
+	MutexScope(pool->mutex) { SLLQueuePush(pool->queue_first, pool->queue_last, node); }
 	semaphore_drop(pool->semaphore);
 }
 
@@ -681,7 +865,7 @@ work_queue_pop(WorkerPool *pool)
 
 	OS_Handle result = os_handle_zero();
 	WorkQueueNode *node = 0;
-	DeferLoop(pthread_mutex_lock(&pool->mutex), pthread_mutex_unlock(&pool->mutex))
+	MutexScope(pool->mutex)
 	{
 		if(pool->queue_first != 0)
 		{
@@ -708,6 +892,70 @@ get_fid_aux(Arena *arena, ServerFid9P *fid)
 		fid->auxiliary = aux;
 	}
 	return (FidAuxiliary9P *)fid->auxiliary;
+}
+
+////////////////////////////////
+//~ Rebuild Logic
+
+static void
+rebuild_all_configs(NixCacheBuilder *builder, String8 flake_path)
+{
+	Temp scratch = scratch_begin(0, 0);
+
+	fprintf(stdout, "nix-cache: discovering nixosConfigurations in flake...\n");
+	fflush(stdout);
+
+	String8List configs = nix_enumerate_nixos_configurations(scratch.arena, nix_store, flake_path);
+
+	if(configs.node_count == 0)
+	{
+		fprintf(stdout, "nix-cache: no nixosConfigurations found in flake, serving empty cache\n");
+		fflush(stdout);
+	}
+	else
+	{
+		fprintf(stdout, "nix-cache: found %llu configuration(s)\n", (unsigned long long)configs.node_count);
+		fflush(stdout);
+
+		for(String8Node *node = configs.first; node != 0; node = node->next)
+		{
+			cache_build_config(builder, node->string);
+		}
+	}
+
+	scratch_end(scratch);
+}
+
+static void
+rebuild_thread_entry_point(void *)
+{
+	struct GC_stack_base sb;
+	GC_get_stack_base(&sb);
+	GC_register_my_thread(&sb);
+
+	MutexScope(rebuild_mutex)
+	{
+		if(rebuild_in_progress)
+		{
+			fprintf(stdout, "nix-cache: rebuild already in progress, skipping\n");
+			fflush(stdout);
+			GC_unregister_my_thread();
+			return;
+		}
+		rebuild_in_progress = 1;
+	}
+
+	fprintf(stdout, "nix-cache: hot-reload triggered, rebuilding all configs...\n");
+	fflush(stdout);
+
+	rebuild_all_configs(global_builder, global_flake_root);
+
+	fprintf(stdout, "nix-cache: hot-reload complete\n");
+	fflush(stdout);
+
+	MutexScope(rebuild_mutex) { rebuild_in_progress = 0; }
+
+	GC_unregister_my_thread();
 }
 
 ////////////////////////////////
@@ -861,6 +1109,27 @@ static void
 srv_read(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
+
+	if(str8_match(aux->path, str8_lit("trigger"), 0))
+	{
+		if(aux->tmp_data == 0)
+		{
+			aux->tmp_data = (void *)1;
+			Thread rebuild_thread = thread_launch(rebuild_thread_entry_point, 0);
+			thread_detach(rebuild_thread);
+
+			String8 response = str8_lit("Rebuild triggered\n");
+			request->out_msg.payload_data = response;
+			request->out_msg.byte_count = response.size;
+		}
+		else
+		{
+			request->out_msg.payload_data = str8_zero();
+			request->out_msg.byte_count = 0;
+		}
+		server9p_respond(request, str8_zero());
+		return;
+	}
 
 	if(request->fid->qid.type & QidTypeFlag_Directory)
 	{
@@ -1051,8 +1320,8 @@ worker_pool_alloc(Arena *arena, u64 worker_count)
 	WorkerPool *pool = push_array(arena, WorkerPool, 1);
 	pool->arena = arena_alloc();
 
-	int mutex_result = pthread_mutex_init(&pool->mutex, 0);
-	AssertAlways(mutex_result == 0);
+	pool->mutex = mutex_alloc();
+	AssertAlways(pool->mutex.u64[0] != 0);
 
 	pool->semaphore = semaphore_alloc(0, 1024, str8_zero());
 	AssertAlways(pool->semaphore.u64[0] != 0);
@@ -1096,7 +1365,7 @@ worker_pool_shutdown(WorkerPool *pool)
 	}
 
 	semaphore_release(pool->semaphore);
-	pthread_mutex_destroy(&pool->mutex);
+	mutex_release(pool->mutex);
 }
 
 ////////////////////////////////
@@ -1109,34 +1378,17 @@ entry_point(CmdLine *cmd_line)
 	Arena *arena = arena_alloc();
 
 	String8 address = str8_zero();
-	String8 flake_root = str8_lit(".");
-	u64 worker_count = 0;
-	String8List configs = {0};
-
-	for(CmdLineOpt *opt = cmd_line->options.first; opt != 0; opt = opt->next)
+	String8 flake_root = cmd_line_string(cmd_line, str8_lit("flake"));
+	if(flake_root.size == 0)
 	{
-		String8 option = opt->string;
-		if(str8_match(option, str8_lit("flake"), 0))
-		{
-			if(opt->value_string.size > 0)
-			{
-				flake_root = opt->value_string;
-			}
-		}
-		else if(str8_match(option, str8_lit("threads"), 0))
-		{
-			if(opt->value_string.size > 0)
-			{
-				worker_count = u64_from_str8(opt->value_string, 10);
-			}
-		}
-		else if(str8_match(option, str8_lit("config"), 0) || str8_match(option, str8_lit("c"), 0))
-		{
-			if(opt->value_string.size > 0)
-			{
-				str8_list_push(arena, &configs, opt->value_string);
-			}
-		}
+		flake_root = str8_lit(".");
+	}
+
+	u64 worker_count = 0;
+	String8 threads_str = cmd_line_string(cmd_line, str8_lit("threads"));
+	if(threads_str.size > 0)
+	{
+		worker_count = u64_from_str8(threads_str, 10);
 	}
 
 	if(cmd_line->inputs.node_count > 0)
@@ -1149,10 +1401,11 @@ entry_point(CmdLine *cmd_line)
 		fprintf(stderr, "usage: nix-cache [options] <address>\n"
 		                "options:\n"
 		                "  --flake=<path>     Flake root directory (default: current directory)\n"
-		                "  --config=<name>    Configuration to build (can be specified multiple times)\n"
 		                "  --threads=<n>      Number of worker threads (default: max(4, cores/4))\n"
 		                "arguments:\n"
-		                "  <address>          Dial string (e.g., tcp!host!port)\n");
+		                "  <address>          Dial string (e.g., tcp!host!port)\n"
+		                "\n"
+		                "nix-cache automatically builds all nixosConfigurations from the flake.\n");
 		fflush(stderr);
 		arena_release(arena);
 		scratch_end(scratch);
@@ -1178,20 +1431,12 @@ entry_point(CmdLine *cmd_line)
 	builder.fs_ctx = fs_context;
 	builder.flake_root = flake_root;
 
-	cache_init(&builder);
+	global_builder = &builder;
+	global_flake_root = flake_root;
+	rebuild_mutex = mutex_alloc();
 
-	if(configs.node_count == 0)
-	{
-		fprintf(stdout, "nix-cache: no configurations specified, serving empty cache\n");
-		fflush(stdout);
-	}
-	else
-	{
-		for(String8Node *node = configs.first; node != 0; node = node->next)
-		{
-			cache_build_config(&builder, node->string);
-		}
-	}
+	cache_init(&builder);
+	rebuild_all_configs(&builder, flake_root);
 
 	OS_Handle listen_socket = dial9p_listen(address, str8_lit("tcp"), str8_lit("nix-cache"));
 	if(os_handle_match(listen_socket, os_handle_zero()))

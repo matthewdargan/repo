@@ -23,7 +23,7 @@
 
     commonFlags = "-I. -D_GNU_SOURCE -g -Wall -Wextra -Wno-unknown-warning-option -Wno-unused-function -Wno-unused-variable -Wno-unused-value -Wno-writable-strings -Wno-missing-field-initializers -Wno-missing-braces -Wno-address-of-temporary";
     releaseFlags = "-O3 ${commonFlags} -DBUILD_DEBUG=0";
-    debugFlags = "-O0 ${commonFlags} -fsanitize=address -fno-omit-frame-pointer -DBUILD_DEBUG=1";
+    debugFlags = "-O0 ${commonFlags} -fno-omit-frame-pointer -DBUILD_DEBUG=1";
 
     mkVariant = flags: extraAttrs: let
       buildMode =

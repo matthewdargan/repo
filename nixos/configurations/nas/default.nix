@@ -129,6 +129,19 @@ in {
           fi
         '';
       };
+      nix-cache = {
+        description = "Nix binary cache server over 9P";
+        after = ["network.target"];
+        wantedBy = ["multi-user.target"];
+        serviceConfig = {
+          Type = "simple";
+          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.nix-cache}/bin/nix-cache --flake=/srv/git/repo tcp!*!9564";
+          Restart = "always";
+          RestartSec = "10s";
+          StandardError = "journal";
+          StandardOutput = "journal";
+        };
+      };
     };
     timers."9p-health-check" = {
       wantedBy = ["timers.target"];

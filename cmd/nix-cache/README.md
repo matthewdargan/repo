@@ -18,21 +18,22 @@ nix-cache [options] <address>
 ### Options
 
 - `--flake=<path>` - Flake root directory (default: current directory)
-- `--config=<name>` - Configuration to build (can be specified multiple times)
 - `--threads=<n>` - Number of worker threads (default: max(4, cores/4))
 
 ### Arguments
 
 - `<address>` - Dial string (e.g., `tcp!*!9999` to listen on port 9999)
 
+**Note:** nix-cache automatically discovers and builds **all** `nixosConfigurations` defined in the flake. No need to specify individual configs!
+
 ## Examples
 
 ### Basic Usage
 
-Start a cache server on port 9999 and build the `router` and `nas` configurations:
+Start a cache server on port 9999 (auto-discovers all configurations):
 
 ```bash
-nix run .#nix-cache -- --config=router --config=nas 'tcp!*!9999'
+nix run .#nix-cache -- 'tcp!*!9999'
 ```
 
 ### Mounting the Cache
@@ -72,6 +73,12 @@ The server implements the Nix binary cache protocol with the following component
 ```
 /
   nix-cache-info          # Cache metadata
+  trigger                 # Hot-reload trigger file
+  configs/                # Per-config metadata
+    <name>/
+      generation          # Generation number
+      path                # Store path
+      timestamp           # Build timestamp
   <hash1>.narinfo         # Store path metadata
   <hash2>.narinfo
   nar/                    # NAR archives directory
@@ -83,14 +90,26 @@ All files are stored in-memory using the temp9p filesystem.
 
 ## Build Process
 
-When configurations are specified with `--config`, the server:
+On startup, the server automatically:
 
-1. Builds each configuration using `nix build`
-2. Extracts the store path from the build output
-3. Generates a compressed NAR archive using `nix-store --dump | xz -9`
-4. Queries NAR hash and references using `nix-store --query`
-5. Generates narinfo metadata
-6. Stores everything in the temp9p filesystem
+1. Discovers all `nixosConfigurations` in the flake
+2. Builds each configuration using the Nix C++ API
+3. Generates compressed NAR archives (xz compression level 9)
+4. Queries NAR hash and references for each store path
+5. Generates narinfo metadata files
+6. Stores everything in the temp9p in-memory filesystem
+
+No manual configuration needed - just point it at a flake and it handles the rest!
+
+## Hot-Reload
+
+Trigger a background rebuild without restarting the server:
+
+```bash
+9p read tcp!localhost!9999 trigger
+```
+
+The server spawns a detached thread to rebuild all configurations while continuing to serve requests.
 
 ## Deployment
 
@@ -102,7 +121,6 @@ This is designed to be deployed on a NAS or build server where:
 
 ## Future Enhancements
 
-- Periodic rebuilds to keep cache up-to-date
 - Persistent storage option (disk-backed instead of temp9p)
 - Signature verification for narinfo files
 - Garbage collection for old store paths
