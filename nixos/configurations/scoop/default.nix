@@ -28,6 +28,14 @@
       requires = ["home-mpd-n-nas.mount"];
       after = ["home-mpd-n-nas.mount"];
     }
+    {
+      what = "nas";
+      where = "/mnt/nix-cache";
+      type = "9p";
+      options = "port=9564";
+      after = ["network-online.target"];
+      wants = ["network-online.target"];
+    }
   ];
 in {
   imports = [
@@ -35,6 +43,7 @@ in {
     self.nixosModules."9p-tools"
     self.nixosModules.fish
     self.nixosModules.locale
+    self.nixosModules.nix-cache-client
     self.nixosModules.nix-config
     self.nixosModules.settings
   ];
@@ -55,6 +64,7 @@ in {
       enable = true;
       wayland.enable = true;
     };
+    nix-cache-client.enable = true;
     pipewire = {
       enable = true;
       alsa = {

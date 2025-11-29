@@ -2,7 +2,18 @@
   pkgs,
   self,
   ...
-}: {
+}: let
+  mounts = [
+    {
+      what = "nas";
+      where = "/mnt/nix-cache";
+      type = "9p";
+      options = "port=9564";
+      after = ["network-online.target"];
+      wants = ["network-online.target"];
+    }
+  ];
+in {
   imports = [
     ./boot.nix
     ./network.nix
@@ -10,12 +21,24 @@
     self.nixosModules."9p-tools"
     self.nixosModules.fish
     self.nixosModules.locale
+    self.nixosModules.nix-cache-client
     self.nixosModules.settings
   ];
   environment.systemPackages = [
     pkgs.iproute2
     self.packages.${pkgs.stdenv.hostPlatform.system}.neovim
   ];
+  services.nix-cache-client.enable = true;
+  systemd = {
+    mounts = map (m: m // {wantedBy = [];}) mounts;
+    automounts =
+      map (m: {
+        inherit (m) where;
+        wantedBy = ["multi-user.target"];
+        automountConfig.TimeoutIdleSec = "600";
+      })
+      mounts;
+  };
   system.stateVersion = "25.11";
   users.users.mpd = {
     description = "Matthew Dargan";

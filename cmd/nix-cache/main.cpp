@@ -395,7 +395,7 @@ nix_query_references(Arena *arena, NixStore *nix_store, String8 store_path_str)
 }
 
 static String8
-nix_generate_nar_xz(Arena *arena, NixStore *nix_store, String8 store_path_str)
+nix_generate_nar_xz(Arena *arena, NixStore *nix_store, String8 store_path_str, u64 *out_uncompressed_size)
 {
 	if(!arena || !nix_store || store_path_str.size == 0)
 	{
@@ -413,8 +413,22 @@ nix_generate_nar_xz(Arena *arena, NixStore *nix_store, String8 store_path_str)
 
 		std::string nar_data = std::move(nar_sink.s);
 
+		if(out_uncompressed_size)
+		{
+			*out_uncompressed_size = nar_data.size();
+		}
+
 		lzma_stream strm = LZMA_STREAM_INIT;
-		lzma_ret ret = lzma_easy_encoder(&strm, 9, LZMA_CHECK_CRC64);
+		lzma_mt mt = {0};
+		mt.flags = 0;
+		mt.threads = 4;    // Use 4 threads for compression
+		mt.block_size = 0; // Auto
+		mt.timeout = 0;    // No timeout
+		mt.preset = 6;     // Lower preset for speed (was 9)
+		mt.filters = nullptr;
+		mt.check = LZMA_CHECK_CRC64;
+
+		lzma_ret ret = lzma_stream_encoder_mt(&strm, &mt);
 		if(ret != LZMA_OK)
 		{
 			return str8_zero();
@@ -463,7 +477,7 @@ nix_generate_nar_xz(Arena *arena, NixStore *nix_store, String8 store_path_str)
 //~ Nix Cache
 
 static String8
-nix_hash_from_store_path(Arena *arena, String8 store_path)
+nix_basename_from_store_path(Arena *arena, String8 store_path)
 {
 	Temp scratch = scratch_begin(&arena, 1);
 
@@ -476,19 +490,31 @@ nix_hash_from_store_path(Arena *arena, String8 store_path)
 		}
 	}
 
-	String8 component = str8_skip(store_path, last_slash + 1);
+	String8 basename = str8_skip(store_path, last_slash + 1);
+	String8 result = str8_copy(arena, basename);
+
+	scratch_end(scratch);
+	return result;
+}
+
+static String8
+nix_hash_from_store_path(Arena *arena, String8 store_path)
+{
+	Temp scratch = scratch_begin(&arena, 1);
+
+	String8 basename = nix_basename_from_store_path(scratch.arena, store_path);
 
 	u64 first_dash = 0;
-	for(u64 i = 0; i < component.size; i++)
+	for(u64 i = 0; i < basename.size; i++)
 	{
-		if(component.str[i] == '-')
+		if(basename.str[i] == '-')
 		{
 			first_dash = i;
 			break;
 		}
 	}
 
-	String8 hash = str8_prefix(component, first_dash);
+	String8 hash = str8_prefix(basename, first_dash);
 	String8 result = str8_copy(arena, hash);
 
 	scratch_end(scratch);
@@ -528,7 +554,18 @@ cache_add_store_path(NixCacheBuilder *builder, String8 store_path)
 		return;
 	}
 
-	String8 nar_data = nix_generate_nar_xz(cache_arena, nix_store, store_path);
+	// Check if already cached
+	String8 narinfo_filename = str8f(scratch.arena, "%S.narinfo", hash);
+	TempNode9P *existing = temp9p_open(builder->fs_ctx, narinfo_filename);
+	if(existing != 0)
+	{
+		// Already cached, skip
+		scratch_end(scratch);
+		return;
+	}
+
+	u64 uncompressed_nar_size = 0;
+	String8 nar_data = nix_generate_nar_xz(cache_arena, nix_store, store_path, &uncompressed_nar_size);
 	if(nar_data.size == 0)
 	{
 		fprintf(stderr, "nix-cache: failed to generate NAR for %.*s\n", (int)store_path.size, store_path.str);
@@ -552,7 +589,8 @@ cache_add_store_path(NixCacheBuilder *builder, String8 store_path)
 		return;
 	}
 
-	String8List ref_hashes = {0};
+	String8List ref_basenames = {0};
+	String8List ref_paths = {0};
 	String8 remaining = output;
 
 	for(;;)
@@ -577,8 +615,9 @@ cache_add_store_path(NixCacheBuilder *builder, String8 store_path)
 		String8 ref_path = str8_prefix(remaining, newline_pos);
 		if(ref_path.size > 0)
 		{
-			String8 ref_hash = nix_hash_from_store_path(scratch.arena, ref_path);
-			str8_list_push(scratch.arena, &ref_hashes, ref_hash);
+			String8 ref_basename = nix_basename_from_store_path(scratch.arena, ref_path);
+			str8_list_push(scratch.arena, &ref_basenames, ref_basename);
+			str8_list_push(scratch.arena, &ref_paths, str8_copy(scratch.arena, ref_path));
 		}
 
 		if(!found)
@@ -590,9 +629,9 @@ cache_add_store_path(NixCacheBuilder *builder, String8 store_path)
 	}
 
 	StringJoin join = {.sep = str8_lit(" ")};
-	String8 references = str8_list_join(scratch.arena, &ref_hashes, &join);
+	String8 references = str8_list_join(scratch.arena, &ref_basenames, &join);
 
-	String8 narinfo = nix_generate_narinfo(scratch.arena, store_path, hash, nar_hash, nar_data.size, references);
+	String8 narinfo = nix_generate_narinfo(scratch.arena, store_path, hash, nar_hash, uncompressed_nar_size, references);
 
 	String8 nar_filename = str8f(scratch.arena, "%S.nar.xz", hash);
 	String8 nar_path = str8f(scratch.arena, "nar/%S", nar_filename);
@@ -613,8 +652,6 @@ cache_add_store_path(NixCacheBuilder *builder, String8 store_path)
 	}
 
 	temp9p_write(cache_arena, nar_node, 0, nar_data);
-
-	String8 narinfo_filename = str8f(scratch.arena, "%S.narinfo", hash);
 
 	if(!temp9p_create(builder->arena, builder->fs_ctx, narinfo_filename, 0644))
 	{
@@ -637,6 +674,12 @@ cache_add_store_path(NixCacheBuilder *builder, String8 store_path)
 
 	fprintf(stdout, "nix-cache: cached %.*s (%lu bytes)\n", (int)hash.size, hash.str, nar_data.size);
 	fflush(stdout);
+
+	// Recursively cache all references
+	for(String8Node *node = ref_paths.first; node != 0; node = node->next)
+	{
+		cache_add_store_path(builder, node->string);
+	}
 
 	scratch_end(scratch);
 }
@@ -739,6 +782,13 @@ cache_init(NixCacheBuilder *builder)
 	if(!temp9p_create(builder->arena, builder->fs_ctx, str8_lit("configs"), P9_ModeFlag_Directory | 0755))
 	{
 		fprintf(stderr, "nix-cache: failed to create configs directory\n");
+		scratch_end(scratch);
+		return;
+	}
+
+	if(!temp9p_create(builder->arena, builder->fs_ctx, str8_lit("realisations"), P9_ModeFlag_Directory | 0755))
+	{
+		fprintf(stderr, "nix-cache: failed to create realisations directory\n");
 		scratch_end(scratch);
 		return;
 	}
@@ -1184,6 +1234,93 @@ srv_stat(ServerRequest9P *request)
 }
 
 static void
+srv_write(ServerRequest9P *request)
+{
+	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
+
+	if(fs_context->readonly)
+	{
+		server9p_respond(request, str8_lit("read-only filesystem"));
+		return;
+	}
+
+	if(aux->handle == 0 || (aux->handle->fd < 0 && aux->handle->tmp_node == 0))
+	{
+		server9p_respond(request, str8_lit("file not open"));
+		return;
+	}
+
+	if(request->fid->qid.type & QidTypeFlag_Directory)
+	{
+		server9p_respond(request, str8_lit("cannot write to directory"));
+		return;
+	}
+
+	u64 bytes_written = fs9p_write(aux->handle, request->in_msg.file_offset, request->in_msg.payload_data);
+
+	request->out_msg.byte_count = bytes_written;
+	server9p_respond(request, str8_zero());
+}
+
+static void
+srv_create(ServerRequest9P *request)
+{
+	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
+
+	if(fs_context->readonly)
+	{
+		server9p_respond(request, str8_lit("read-only filesystem"));
+		return;
+	}
+
+	if(!(request->fid->qid.type & QidTypeFlag_Directory))
+	{
+		server9p_respond(request, str8_lit("not a directory"));
+		return;
+	}
+
+	String8 new_path = fs9p_path_join(request->scratch.arena, aux->path, request->in_msg.name);
+
+	if(!fs9p_path_is_safe(request->in_msg.name))
+	{
+		server9p_respond(request, str8_lit("unsafe filename"));
+		return;
+	}
+
+	if(!fs9p_create(fs_context, new_path, request->in_msg.permissions, request->in_msg.open_mode))
+	{
+		server9p_respond(request, str8_lit("file already exists"));
+		return;
+	}
+
+	Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, new_path);
+	if(stat.name.size == 0)
+	{
+		server9p_respond(request, str8_lit("failed to create"));
+		return;
+	}
+
+	aux->path = str8_copy(request->server->arena, new_path);
+	request->fid->qid = stat.qid;
+
+	FsHandle9P *handle = fs9p_open(request->server->arena, fs_context, new_path, request->in_msg.open_mode);
+	if(handle)
+	{
+		aux->handle = handle;
+		aux->open_mode = request->in_msg.open_mode;
+
+		if(handle->is_directory)
+		{
+			aux->dir_iter = fs9p_opendir(request->server->arena, fs_context, new_path);
+		}
+	}
+
+	request->out_msg.qid = stat.qid;
+	request->out_msg.io_unit_size = P9_IOUNIT_DEFAULT;
+	server9p_respond(request, str8_zero());
+}
+
+static void
 srv_clunk(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
@@ -1257,8 +1394,14 @@ handle_connection(OS_Handle connection_socket)
 			case Msg9P_Topen:
 				srv_open(request);
 				break;
+			case Msg9P_Tcreate:
+				srv_create(request);
+				break;
 			case Msg9P_Tread:
 				srv_read(request);
+				break;
+			case Msg9P_Twrite:
+				srv_write(request);
 				break;
 			case Msg9P_Tstat:
 				srv_stat(request);

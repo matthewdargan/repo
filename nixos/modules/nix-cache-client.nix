@@ -26,69 +26,47 @@ in {
       default = "15min";
       description = "How often to check for updates (systemd time format)";
     };
-
-    substituters = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = ["file://${cfg.cacheMount}"];
-      description = "List of substituters to use when building";
-    };
   };
 
   config = lib.mkIf cfg.enable {
     systemd = {
       services.nix-cache-update = {
         description = "Check and apply nix-cache updates";
-        path = [pkgs.nix pkgs.coreutils pkgs.gawk];
+        path = [pkgs.nix pkgs.coreutils];
 
         script = ''
           set -euo pipefail
-
+          STATE_DIR=/var/lib/nix-cache-client
+          STATE_FILE=$STATE_DIR/generation
           CACHE="${cfg.cacheMount}/configs/${cfg.hostname}"
-          STATE_DIR="/var/lib/nix-cache-client"
-          STATE_FILE="$STATE_DIR/generation"
-
           mkdir -p "$STATE_DIR"
 
-          if [ ! -d "${cfg.cacheMount}/configs/${cfg.hostname}" ]; then
-            echo "nix-cache-update: config directory not found at $CACHE"
-            exit 0
-          fi
-
-          if [ ! -f "$CACHE/generation" ]; then
-            echo "nix-cache-update: no generation file found at $CACHE/generation"
+          # Check if cache is accessible
+          if [ ! -d "$CACHE" ]; then
+            echo "nix-cache-update: cache not accessible at $CACHE"
             exit 0
           fi
 
           NEW_GEN=$(cat "$CACHE/generation" 2>/dev/null || echo "")
-          if [ -z "$NEW_GEN" ]; then
-            echo "nix-cache-update: empty generation file"
-            exit 0
-          fi
+          [ -z "$NEW_GEN" ] && exit 0
 
           CURRENT_GEN=$(cat "$STATE_FILE" 2>/dev/null || echo "0")
-
-          if [ "$NEW_GEN" = "$CURRENT_GEN" ]; then
-            echo "nix-cache-update: already on generation $CURRENT_GEN"
-            exit 0
-          fi
+          [ "$NEW_GEN" = "$CURRENT_GEN" ] && exit 0
 
           STORE_PATH=$(cat "$CACHE/path" 2>/dev/null || echo "")
-          if [ -z "$STORE_PATH" ]; then
-            echo "nix-cache-update: empty path file"
-            exit 1
-          fi
+          [ -z "$STORE_PATH" ] && exit 1
 
-          echo "nix-cache-update: updating from generation $CURRENT_GEN to $NEW_GEN"
-          echo "nix-cache-update: store path: $STORE_PATH"
+          echo "nix-cache-update: $CURRENT_GEN -> $NEW_GEN: $STORE_PATH"
 
-          nixos-rebuild switch --option substituters "${lib.concatStringsSep " " cfg.substituters}" \
-            --option trusted-public-keys "" || {
-            echo "nix-cache-update: failed to switch to new generation"
-            exit 1
-          }
+          # Fetch from cache and activate
+          nix-env --profile /nix/var/nix/profiles/system \
+            --set "$STORE_PATH" \
+            --option substituters "file://${cfg.cacheMount}" \
+            --option require-sigs false
+
+          "$STORE_PATH/bin/switch-to-configuration" switch
 
           echo "$NEW_GEN" > "$STATE_FILE"
-          echo "nix-cache-update: successfully switched to generation $NEW_GEN"
         '';
 
         serviceConfig = {
@@ -108,10 +86,7 @@ in {
         };
       };
 
-      tmpfiles.rules = [
-        "d ${cfg.cacheMount} 0755 root root -"
-        "d /var/lib/nix-cache-client 0755 root root -"
-      ];
+      tmpfiles.rules = ["d /var/lib/nix-cache-client 0755 root root -"];
     };
   };
 }
