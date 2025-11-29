@@ -30,6 +30,15 @@
       requires = ["home-media-n-nas.mount"];
       after = ["home-media-n-nas.mount"];
     }
+    {
+      what = "127.0.0.1";
+      where = "/mnt/nix-cache";
+      type = "9p";
+      options = "port=9564";
+      requires = ["nix-cache-serve.service"];
+      after = ["nix-cache-serve.service" "network-online.target"];
+      wants = ["network-online.target"];
+    }
   ];
 in {
   imports = [
@@ -38,6 +47,8 @@ in {
     self.nixosModules.fish
     self.nixosModules.git-server
     self.nixosModules.locale
+    self.nixosModules.nix-cache-builder
+    self.nixosModules.nix-cache-client
     self.nixosModules.nix-config
     self.nixosModules.settings
   ];
@@ -75,16 +86,35 @@ in {
       ];
       repositories.repo.postReceiveHook = pkgs.writeShellScript "post-receive" ''
         set -euo pipefail
-        WORK_TREE=/srv/git/repo
-        GIT_DIR=/srv/git/repo.git
-        MIRROR_REMOTE=github
+
         while read -r _ _ ref; do
           [[ "$ref" == "refs/heads/main" ]] && branch=main
         done
+
         if [[ -n "''${branch:-}" ]]; then
-          git --git-dir="$GIT_DIR" --work-tree="$WORK_TREE" checkout -f "$branch" || echo "warn: work tree update failed"
-          9p tcp!localhost!9564 read trigger >/dev/null 2>&1 || echo "warn: nix-cache trigger failed"
-          git --git-dir="$GIT_DIR" push --mirror "$MIRROR_REMOTE" 2>&1 || echo "warn: github mirror failed"
+          git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo reset --hard "$branch"
+          git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo clean -fd
+
+          FLAKE=/srv/git/repo
+          CONFIGS=$(${pkgs.nix}/bin/nix eval --json "$FLAKE#nixosConfigurations" --apply builtins.attrNames | ${pkgs.jq}/bin/jq -r '.[]')
+
+          for config in $CONFIGS; do
+            STORE_PATH=$(${pkgs.nix}/bin/nix build "$FLAKE#nixosConfigurations.$config.config.system.build.toplevel" --no-link --print-out-paths 2>&1 | tail -1)
+            [[ -z "$STORE_PATH" ]] && continue
+
+            ${pkgs.nix}/bin/nix copy --to file:///srv/nix-cache --no-check-sigs "$STORE_PATH"
+
+            CONFIG_DIR=/srv/nix-cache/configs/$config
+            mkdir -p "$CONFIG_DIR"
+            CURRENT_GEN=$(cat "$CONFIG_DIR/generation" 2>/dev/null || echo 0)
+            NEW_GEN=$((CURRENT_GEN + 1))
+
+            echo "$NEW_GEN" > "$CONFIG_DIR/generation"
+            echo "$STORE_PATH" > "$CONFIG_DIR/path"
+            date -Iseconds > "$CONFIG_DIR/timestamp"
+          done
+
+          git --git-dir=/srv/git/repo.git push --mirror github 2>&1 || true
         fi
       '';
     };
@@ -95,6 +125,8 @@ in {
       openFirewall = true;
       user = "media";
     };
+    nix-cache-builder.enable = true;
+    nix-cache-client.enable = true;
     openssh = {
       enable = true;
       settings.PermitRootLogin = "no";
@@ -142,20 +174,6 @@ in {
             fi
           fi
         '';
-      };
-      nix-cache = {
-        description = "Nix binary cache server over 9P";
-        after = ["network.target"];
-        wantedBy = ["multi-user.target"];
-        path = [pkgs.git pkgs.nix];
-        serviceConfig = {
-          Type = "simple";
-          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.nix-cache}/bin/nix-cache --flake=/srv/git/repo tcp!*!9564";
-          Restart = "always";
-          RestartSec = "10s";
-          StandardError = "journal";
-          StandardOutput = "journal";
-        };
       };
     };
     timers."9p-health-check" = {
