@@ -56,7 +56,7 @@ in {
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "nas";
     firewall = {
-      allowedTCPPorts = [4500];
+      allowedTCPPorts = [4500 9564];
       interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
         22
         7246
@@ -73,6 +73,20 @@ in {
       authorizedKeys = [
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILe/v2phdFJcaINc1bphWEM6vXDSlXY/e0B2zyb3ik1M matthewdargan57@gmail.com"
       ];
+      repositories.repo.postReceiveHook = pkgs.writeShellScript "post-receive" ''
+        set -euo pipefail
+        WORK_TREE=/srv/git/repo
+        GIT_DIR=/srv/git/repo.git
+        MIRROR_REMOTE=github
+        while read -r _ _ ref; do
+          [[ "$ref" == "refs/heads/main" ]] && branch=main
+        done
+        if [[ -n "''${branch:-}" ]]; then
+          git --git-dir="$GIT_DIR" --work-tree="$WORK_TREE" checkout -f "$branch" || echo "warn: work tree update failed"
+          9p tcp!localhost!9564 read trigger >/dev/null 2>&1 || echo "warn: nix-cache trigger failed"
+          git --git-dir="$GIT_DIR" push --mirror "$MIRROR_REMOTE" 2>&1 || echo "warn: github mirror failed"
+        fi
+      '';
     };
     jellyfin = {
       enable = true;
@@ -133,6 +147,7 @@ in {
         description = "Nix binary cache server over 9P";
         after = ["network.target"];
         wantedBy = ["multi-user.target"];
+        path = [pkgs.git pkgs.nix];
         serviceConfig = {
           Type = "simple";
           ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.nix-cache}/bin/nix-cache --flake=/srv/git/repo tcp!*!9564";

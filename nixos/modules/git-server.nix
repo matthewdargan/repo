@@ -32,6 +32,20 @@ in {
       default = [];
       description = "SSH authorized keys for git user";
     };
+
+    repositories = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          postReceiveHook = lib.mkOption {
+            type = lib.types.nullOr lib.types.path;
+            default = null;
+            description = "Path to post-receive hook script";
+          };
+        };
+      });
+      default = {};
+      description = "Git repositories to manage";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -46,8 +60,12 @@ in {
 
     users.groups.${cfg.group} = {};
 
-    systemd.tmpfiles.rules = [
-      "d ${cfg.baseDir} 0755 ${cfg.user} ${cfg.group} -"
-    ];
+    systemd.tmpfiles.rules =
+      ["d ${cfg.baseDir} 0755 ${cfg.user} ${cfg.group} -"]
+      ++ lib.flatten (lib.mapAttrsToList (name: repo:
+        lib.optionals (repo.postReceiveHook != null) [
+          "L+ ${cfg.baseDir}/${name}.git/hooks/post-receive - - - - ${repo.postReceiveHook}"
+        ])
+      cfg.repositories);
   };
 }
