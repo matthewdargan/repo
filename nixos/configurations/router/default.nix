@@ -6,9 +6,9 @@
   mounts = [
     {
       what = "nas";
-      where = "/mnt/nix-cache";
+      where = "/n/nix";
       type = "9p";
-      options = "port=9564";
+      options = "port=5641";
       after = ["network-online.target"];
       wants = ["network-online.target"];
     }
@@ -18,17 +18,24 @@ in {
     ./boot.nix
     ./network.nix
     ./services.nix
+    self.nixosModules."9p-health-check"
     self.nixosModules."9p-tools"
     self.nixosModules.fish
     self.nixosModules.locale
-    self.nixosModules.nix-cache-client
-    self.nixosModules.settings
+    self.nixosModules.nix-client
+    self.nixosModules.nix-config
   ];
   environment.systemPackages = [
     pkgs.iproute2
     self.packages.${pkgs.stdenv.hostPlatform.system}.neovim
   ];
-  services.nix-cache-client.enable = true;
+  services = {
+    "9p-health-check" = {
+      enable = true;
+      mounts = ["n-nix"];
+    };
+    nix-client.enable = true;
+  };
   systemd = {
     mounts = map (m: m // {wantedBy = [];}) mounts;
     automounts =
