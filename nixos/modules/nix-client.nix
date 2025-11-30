@@ -41,10 +41,7 @@ in {
           CACHE_FILE="${cfg.cacheMount}/configs/${cfg.hostname}"
           mkdir -p "$STATE_DIR"
 
-          if [ ! -f "$CACHE_FILE" ]; then
-            echo "nix-update: cache not accessible at $CACHE_FILE"
-            exit 0
-          fi
+          [ ! -f "$CACHE_FILE" ] && exit 0
 
           NEW_GEN=$(grep '^generation: ' "$CACHE_FILE" | cut -d' ' -f2)
           [ -z "$NEW_GEN" ] && exit 0
@@ -55,15 +52,8 @@ in {
           STORE_PATH=$(grep '^path: ' "$CACHE_FILE" | cut -d' ' -f2)
           [ -z "$STORE_PATH" ] && exit 1
 
-          echo "nix-update: $CURRENT_GEN -> $NEW_GEN: $STORE_PATH"
-
-          nix-env --profile /nix/var/nix/profiles/system \
-            --set "$STORE_PATH" \
-            --option substituters "file://${cfg.cacheMount}" \
-            --option require-sigs false
-
+          nix-env --profile /nix/var/nix/profiles/system --set "$STORE_PATH"
           "$STORE_PATH/bin/switch-to-configuration" switch
-
           echo "$NEW_GEN" > "$STATE_FILE"
         '';
 

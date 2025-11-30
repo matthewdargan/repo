@@ -18,18 +18,16 @@
         "nix-command"
         "flakes"
       ];
-      require-sigs = false;
       substituters = lib.mkForce [
         "file:///n/nix"
         "https://cache.nixos.org"
-        "https://nix-community.cachix.org"
       ];
       trusted-public-keys = [
+        "nas-cache:zS6WxIVuVrTFhM0lF0jZ7z6QIz48y07LlFLV7clLsIg="
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
-        "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
       ];
       trusted-substituters = ["file:///n/nix"];
-      trusted-users = ["@wheel"];
+      trusted-users = ["@wheel" "git"];
     };
   };
   nixpkgs.config.allowUnfree = true;

@@ -154,36 +154,38 @@ in {
         };
         path = [pkgs.nix pkgs.git pkgs.jq pkgs.coreutils pkgs.openssh];
         script = ''
-                    set -euo pipefail
+          set -euo pipefail
 
-                    FLAKE=/srv/git/repo
-                    CONFIGS=$(nix eval --json "$FLAKE#nixosConfigurations" --apply builtins.attrNames | jq -r '.[]')
+          FLAKE=/srv/git/repo
+          CONFIGS=$(nix eval --json "$FLAKE#nixosConfigurations" --apply builtins.attrNames | jq -r '.[]')
 
-                    for config in $CONFIGS; do
-                      echo "Building $config..."
-                      STORE_PATH=$(nix build "$FLAKE#nixosConfigurations.$config.config.system.build.toplevel" --no-link --print-out-paths 2>&1 | tail -1)
-                      [[ -z "$STORE_PATH" ]] && continue
+          BUILD_TARGETS=()
+          for config in $CONFIGS; do
+            BUILD_TARGETS+=("$FLAKE#nixosConfigurations.$config.config.system.build.toplevel")
+          done
 
-                      echo "Copying $config to cache: $STORE_PATH"
-                      nix copy --to file:///srv/nix --no-check-sigs "$STORE_PATH"
+          STORE_PATHS=$(nix build "''${BUILD_TARGETS[@]}" --no-link --print-out-paths 2>&1 | grep '^/nix/store/')
+          nix copy --to file:///srv/nix --secret-key-files /var/lib/git-server/cache-signing-key.sec $STORE_PATHS
 
-                      CONFIG_FILE=/srv/nix/configs/$config
-                      mkdir -p "$(dirname "$CONFIG_FILE")"
+          echo "$STORE_PATHS" | while read -r STORE_PATH; do
+            CONFIG_NAME=$(echo "$STORE_PATH" | grep -oP 'nixos-system-\K[^-]+' || echo "")
+            [[ -z "$CONFIG_NAME" ]] && continue
 
-                      CURRENT_GEN=0
-                      if [[ -f "$CONFIG_FILE" ]]; then
-                        CURRENT_GEN=$(grep '^generation: ' "$CONFIG_FILE" | cut -d' ' -f2)
-                      fi
-                      NEW_GEN=$((CURRENT_GEN + 1))
+            CONFIG_FILE=/srv/nix/configs/$CONFIG_NAME
+            mkdir -p "$(dirname "$CONFIG_FILE")"
 
-                      cat > "$CONFIG_FILE" <<EOF
+            CURRENT_GEN=0
+            [[ -f "$CONFIG_FILE" ]] && CURRENT_GEN=$(grep '^generation: ' "$CONFIG_FILE" | cut -d' ' -f2 || echo "0")
+            NEW_GEN=$((CURRENT_GEN + 1))
+
+            cat > "$CONFIG_FILE" <<EOF
           generation: $NEW_GEN
           timestamp: $(date +%s)
           path: $STORE_PATH
           EOF
-                    done
+          done
 
-                    git --git-dir=/srv/git/repo.git push --mirror github 2>&1 || true
+          git --git-dir=/srv/git/repo.git push --mirror github 2>&1 || true
         '';
       };
     };
