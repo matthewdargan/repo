@@ -5,7 +5,7 @@
 }: let
   mounts = [
     {
-      what = "nas";
+      what = "10.0.0.155"; # TODO: fix mDNS
       where = "/n/nix";
       type = "9p";
       options = "port=5641";

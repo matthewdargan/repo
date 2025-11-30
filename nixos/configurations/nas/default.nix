@@ -165,7 +165,8 @@ in {
           done
 
           STORE_PATHS=$(nix build "''${BUILD_TARGETS[@]}" --no-link --print-out-paths 2>&1 | grep '^/nix/store/')
-          nix copy --to file:///srv/nix --secret-key-files /var/lib/git-server/cache-signing-key.sec $STORE_PATHS
+          nix copy --to file:///srv/nix $STORE_PATHS
+          nix store sign --store file:///srv/nix --key-file /var/lib/git-server/cache-signing-key.sec --recursive $STORE_PATHS
 
           echo "$STORE_PATHS" | while read -r STORE_PATH; do
             CONFIG_NAME=$(echo "$STORE_PATH" | grep -oP 'nixos-system-\K[^-]+' || echo "")
