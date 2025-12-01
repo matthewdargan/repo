@@ -28,8 +28,20 @@
                 name = "domain-name-servers";
               }
             ];
-            pools = [{pool = "10.0.0.100 - 10.0.0.240";}];
-            subnet = "10.0.0.0/8";
+            pools = [{pool = "10.0.0.100 - 10.0.0.254";}];
+            reservations = [
+              {
+                hw-address = "34:5a:60:57:24:e3";
+                ip-address = "10.0.0.2";
+                hostname = "nas";
+              }
+              {
+                hw-address = "e8:9c:25:6d:01:77";
+                ip-address = "10.0.0.3";
+                hostname = "scoop";
+              }
+            ];
+            subnet = "10.0.0.0/24";
           }
         ];
         valid-lifetime = 3600 * 4;

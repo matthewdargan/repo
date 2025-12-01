@@ -5,7 +5,7 @@
     ...
   }: {
     packages.neovim = inputs'.nixvim.legacyPackages.makeNixvimWithModule {
-      module = {helpers, ...}: {
+      module = {lib, ...}: {
         clipboard = {
           providers.wl-copy.enable = true;
           register = "unnamedplus";
@@ -31,7 +31,7 @@
             mode = ["n"];
           }
           {
-            action = helpers.mkRaw ''
+            action = lib.nixvim.mkRaw ''
               function()
                 vim.fn.system("ctags -R --fields=+iaS --extra=+q --exclude=.direnv --exclude=.git --exclude=result .")
                 print("ctags: done")

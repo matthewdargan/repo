@@ -62,7 +62,7 @@ _: {
     in {
       "10-br-lan" = {
         address = [
-          "10.0.0.1/8"
+          "10.0.0.1/24"
         ];
         bridgeConfig = {};
         linkConfig.RequiredForOnline = "no";
