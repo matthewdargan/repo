@@ -26,6 +26,12 @@ in {
       default = "15min";
       description = "How often to check for updates (systemd time format)";
     };
+
+    maxHistoryEntries = lib.mkOption {
+      type = lib.types.int;
+      default = 10;
+      description = "Maximum number of historical configurations to track for rollback";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -35,26 +41,50 @@ in {
         path = [pkgs.nix pkgs.coreutils];
 
         script = ''
-          set -euo pipefail
-          STATE_DIR=/var/lib/nix-client
-          STATE_FILE=$STATE_DIR/generation
-          CACHE_FILE="${cfg.cacheMount}/configs/${cfg.hostname}"
-          mkdir -p "$STATE_DIR"
+                    set -euo pipefail
 
-          [ ! -f "$CACHE_FILE" ] && exit 0
+                    STATE_DIR=/var/lib/nix-client
+                    HISTORY_DIR=$STATE_DIR/history
+                    CURRENT_STATE=$STATE_DIR/current
+                    HOST_DIR="${cfg.cacheMount}/hosts/${cfg.hostname}"
+                    CURRENT_LINK="$HOST_DIR/current"
+                    PUBLIC_KEY="${cfg.cacheMount}/keys/cache-public-key"
 
-          NEW_GEN=$(grep '^generation: ' "$CACHE_FILE" | cut -d' ' -f2)
-          [ -z "$NEW_GEN" ] && exit 0
+                    mkdir -p "$STATE_DIR" "$HISTORY_DIR"
 
-          CURRENT_GEN=$(cat "$STATE_FILE" 2>/dev/null || echo "0")
-          [ "$NEW_GEN" = "$CURRENT_GEN" ] && exit 0
+                    [ ! -e "$CURRENT_LINK" ] && exit 0
+                    [ ! -f "$PUBLIC_KEY" ] && exit 1
 
-          STORE_PATH=$(grep '^path: ' "$CACHE_FILE" | cut -d' ' -f2)
-          [ -z "$STORE_PATH" ] && exit 1
+                    NEW_SYSTEM=$(cat "$CURRENT_LINK/system")
+                    [ -z "$NEW_SYSTEM" ] && exit 1
 
-          nix-env --profile /nix/var/nix/profiles/system --set "$STORE_PATH"
-          "$STORE_PATH/bin/switch-to-configuration" switch
-          echo "$NEW_GEN" > "$STATE_FILE"
+                    CURRENT_SYSTEM=$(readlink -f /nix/var/nix/profiles/system || echo "")
+                    [ "$NEW_SYSTEM" = "$CURRENT_SYSTEM" ] && exit 0
+
+                    METADATA_FILE="$CURRENT_LINK/metadata"
+                    [ ! -f "$METADATA_FILE" ] && exit 1
+
+                    GIT_COMMIT=$(grep '^git_commit: ' "$METADATA_FILE" | cut -d' ' -f2)
+                    BUILD_TIME=$(grep '^build_timestamp: ' "$METADATA_FILE" | cut -d' ' -f2)
+                    NIXOS_VER=$(grep '^nixos_version: ' "$METADATA_FILE" | cut -d' ' -f2)
+
+                    echo "$NEW_SYSTEM"
+
+                    nix copy --from "file://${cfg.cacheMount}" "$NEW_SYSTEM"
+                    nix store verify --trusted-public-keys "$(cat "$PUBLIC_KEY")" "$NEW_SYSTEM"
+
+                    [ -f "$CURRENT_STATE" ] && cp "$CURRENT_STATE" "$HISTORY_DIR/$(date +%s)"
+                    ls -t "$HISTORY_DIR"/* 2>/dev/null | tail -n +$((${toString cfg.maxHistoryEntries} + 1)) | xargs rm -f || true
+
+                    cat > "$CURRENT_STATE" <<EOF
+          store_path: $NEW_SYSTEM
+          git_commit: $GIT_COMMIT
+          build_timestamp: $BUILD_TIME
+          nixos_version: $NIXOS_VER
+          activation_timestamp: $(date +%s)
+          EOF
+
+                    systemd-run --no-ask-password --unit=nixos-activation "$NEW_SYSTEM/bin/switch-to-configuration" switch
         '';
 
         serviceConfig = {
@@ -74,7 +104,10 @@ in {
         };
       };
 
-      tmpfiles.rules = ["d /var/lib/nix-client 0755 root root -"];
+      tmpfiles.rules = [
+        "d /var/lib/nix-client 0755 root root -"
+        "d /var/lib/nix-client/history 0755 root root -"
+      ];
     };
   };
 }

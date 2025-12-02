@@ -154,39 +154,62 @@ in {
         };
         path = [pkgs.nix pkgs.git pkgs.jq pkgs.coreutils pkgs.openssh];
         script = ''
-          set -euo pipefail
+                    set -euo pipefail
 
-          FLAKE=/srv/git/repo
-          CONFIGS=$(nix eval --json "$FLAKE#nixosConfigurations" --apply builtins.attrNames | jq -r '.[]')
+                    export GIT_DIR=/srv/git/repo.git
+                    export GIT_WORK_TREE=/srv/git/repo
 
-          BUILD_TARGETS=()
-          for config in $CONFIGS; do
-            BUILD_TARGETS+=("$FLAKE#nixosConfigurations.$config.config.system.build.toplevel")
-          done
+                    FLAKE=/srv/git/repo
+                    CONFIGS=$(nix eval --json "$FLAKE#nixosConfigurations" --apply builtins.attrNames | jq -r '.[]')
 
-          STORE_PATHS=$(nix build "''${BUILD_TARGETS[@]}" --no-link --print-out-paths 2>&1 | grep '^/nix/store/')
-          nix copy --to file:///srv/nix $STORE_PATHS
-          nix store sign --store file:///srv/nix --key-file /var/lib/git-server/cache-signing-key.sec --recursive $STORE_PATHS
+                    BUILD_TARGETS=()
+                    for config in $CONFIGS; do
+                      BUILD_TARGETS+=("$FLAKE#nixosConfigurations.$config.config.system.build.toplevel")
+                    done
 
-          echo "$STORE_PATHS" | while read -r STORE_PATH; do
-            CONFIG_NAME=$(echo "$STORE_PATH" | grep -oP 'nixos-system-\K[^-]+' || echo "")
-            [[ -z "$CONFIG_NAME" ]] && continue
+                    STORE_PATHS=$(nix build "''${BUILD_TARGETS[@]}" --no-link --print-out-paths 2>&1 | grep '^/nix/store/')
+                    nix copy --to file:///srv/nix $STORE_PATHS
+                    nix store sign --store file:///srv/nix --key-file /var/lib/git-server/cache-signing-key.sec --recursive $STORE_PATHS
 
-            CONFIG_FILE=/srv/nix/configs/$CONFIG_NAME
-            mkdir -p "$(dirname "$CONFIG_FILE")"
+                    GIT_COMMIT=$(git rev-parse HEAD)
+                    GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+                    BUILD_TIMESTAMP=$(date +%s)
 
-            CURRENT_GEN=0
-            [[ -f "$CONFIG_FILE" ]] && CURRENT_GEN=$(grep '^generation: ' "$CONFIG_FILE" | cut -d' ' -f2 || echo "0")
-            NEW_GEN=$((CURRENT_GEN + 1))
+                    echo "$STORE_PATHS" | while read -r STORE_PATH; do
+                      CONFIG_NAME=$(echo "$STORE_PATH" | grep -oP 'nixos-system-\K[^-]+' || echo "")
+                      [[ -z "$CONFIG_NAME" ]] && continue
 
-            cat > "$CONFIG_FILE" <<EOF
-          generation: $NEW_GEN
-          timestamp: $(date +%s)
-          path: $STORE_PATH
+                      echo "$CONFIG_NAME"
+
+                      GEN_ID=$(echo -n "$STORE_PATH" | sha256sum | cut -c1-16)
+                      HOST_DIR=/srv/nix/hosts/$CONFIG_NAME
+                      GEN_DIR=$HOST_DIR/generations/$GEN_ID
+                      mkdir -p "$GEN_DIR"
+
+                      NIXOS_VERSION=$(echo "$STORE_PATH" | grep -oP 'nixos-system-[^-]+-\K[0-9.]+' || echo "unknown")
+                      SYSTEM=$(nix eval --raw "$FLAKE#nixosConfigurations.$CONFIG_NAME.pkgs.stdenv.hostPlatform.system")
+
+                      echo "$STORE_PATH" > "$GEN_DIR/system"
+
+                      cat > "$GEN_DIR/metadata" <<EOF
+          store_path: $STORE_PATH
+          git_commit: $GIT_COMMIT
+          git_branch: $GIT_BRANCH
+          build_timestamp: $BUILD_TIMESTAMP
+          nixos_version: $NIXOS_VERSION
+          system: $SYSTEM
           EOF
-          done
 
-          git --git-dir=/srv/git/repo.git push --mirror github 2>&1 || true
+                      ln -sfn "generations/$GEN_ID" "$HOST_DIR/current.tmp"
+                      mv -Tf "$HOST_DIR/current.tmp" "$HOST_DIR/current"
+
+                      ls -dt "$HOST_DIR/generations"/*/ 2>/dev/null | tail -n +11 | xargs rm -rf || true
+                    done
+
+                    mkdir -p /srv/nix/keys
+                    nix key convert-secret-to-public < /var/lib/git-server/cache-signing-key.sec > /srv/nix/keys/cache-public-key
+
+                    git push --mirror github 2>&1 || true
         '';
       };
     };
@@ -199,7 +222,8 @@ in {
     };
     tmpfiles.rules = [
       "d /srv/nix 0755 git git -"
-      "d /srv/nix/configs 0755 git git -"
+      "d /srv/nix/hosts 0755 git git -"
+      "d /srv/nix/keys 0755 git git -"
       "d /var/lib/git-server 0755 git git -"
     ];
   };
