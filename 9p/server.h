@@ -6,6 +6,7 @@
 
 typedef struct Server9P Server9P;
 typedef struct ServerFid9P ServerFid9P;
+typedef struct FidAuxiliary9P FidAuxiliary9P;
 struct ServerFid9P
 {
 	u32 fid;
@@ -51,10 +52,13 @@ struct Server9P
 	ServerFid9P **fid_table;
 	u32 fid_count;
 	u32 max_fid_count;
+	ServerFid9P *fid_free_list;
 	ServerRequest9P **request_table;
 	u32 request_count;
 	u32 max_request_count;
 	u32 next_tag;
+	ServerRequest9P *request_free_list;
+	FidAuxiliary9P *fid_aux_free_list;
 	void *auxiliary;
 };
 

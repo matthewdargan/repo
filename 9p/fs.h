@@ -53,7 +53,7 @@ struct FsHandle9P
 {
 	String8 path;
 	int fd;
-	void *dir_handle;
+	DIR *dir_handle;
 	u64 dir_position;
 	b32 is_directory;
 	TempNode9P *tmp_node;
@@ -71,23 +71,25 @@ struct PathResolution9P
 typedef struct DirIterator9P DirIterator9P;
 struct DirIterator9P
 {
-	void *dir_handle;
+	DIR *dir_handle;
 	u64 position;
-	String8 path;
-	String8 cached_entries;
+	u64 path_len;
 	TempNode9P *tmp_node;
 	TempNode9P *tmp_current;
+	u8 path_buffer[PATH_MAX];
 };
 
 typedef struct FidAuxiliary9P FidAuxiliary9P;
 struct FidAuxiliary9P
 {
-	String8 path;
+	FidAuxiliary9P *next;
+	u64 path_len;
 	FsHandle9P *handle;
-	DirIterator9P *dir_iter;
+	b32 has_dir_iter;
 	u32 open_mode;
-	b32 is_tmp;
-	void *tmp_data;
+	String8 cached_dir_entries;
+	DirIterator9P dir_iter;
+	u8 path_buffer[PATH_MAX];
 };
 
 ////////////////////////////////
@@ -125,8 +127,9 @@ internal b32 fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir);
 ////////////////////////////////
 //~ Directory Operations
 
-internal DirIterator9P *fs9p_opendir(Arena *arena, FsContext9P *ctx, String8 path);
-internal String8 fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u64 count);
+internal b32 fs9p_opendir(FsContext9P *ctx, String8 path, DirIterator9P *iter);
+internal String8 fs9p_readdir(Arena *result_arena, Arena *cache_arena, FsContext9P *ctx, DirIterator9P *iter,
+                              String8 *cache, u64 offset, u64 count);
 internal void fs9p_closedir(DirIterator9P *iter);
 
 ////////////////////////////////

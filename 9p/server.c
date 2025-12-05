@@ -12,7 +12,18 @@ server9p_request_alloc(Server9P *server, u32 tag)
 			return 0;
 		}
 	}
-	ServerRequest9P *request = push_array(server->arena, ServerRequest9P, 1);
+
+	ServerRequest9P *request = server->request_free_list;
+	if(request != 0)
+	{
+		server->request_free_list = request->hash_next;
+	}
+	else
+	{
+		request = push_array(server->arena, ServerRequest9P, 1);
+	}
+
+	MemoryZeroStruct(request);
 	request->tag = tag;
 	request->server = server;
 	request->hash_next = server->request_table[hash];
@@ -49,13 +60,13 @@ server9p_alloc(Arena *arena, u64 input_fd, u64 output_fd)
 	server->input_fd = input_fd;
 	server->output_fd = output_fd;
 	server->max_message_size = P9_IOUNIT_DEFAULT + P9_MESSAGE_HEADER_SIZE;
-	server->max_fid_count = 4096;
-	server->max_request_count = 4096;
-	server->fid_table = push_array(arena, ServerFid9P *, server->max_fid_count);
-	server->request_table = push_array(arena, ServerRequest9P *, server->max_request_count);
-	server->next_tag = 1;
 	server->read_buffer = push_array(arena, u8, server->max_message_size);
 	server->write_buffer = push_array(arena, u8, server->max_message_size);
+	server->max_fid_count = 4096;
+	server->fid_table = push_array(arena, ServerFid9P *, server->max_fid_count);
+	server->max_request_count = 4096;
+	server->request_table = push_array(arena, ServerRequest9P *, server->max_request_count);
+	server->next_tag = 1;
 	return server;
 }
 
@@ -65,18 +76,19 @@ server9p_alloc(Arena *arena, u64 input_fd, u64 output_fd)
 internal ServerRequest9P *
 server9p_get_request(Server9P *server)
 {
-	String8 msg = read_9p_msg(server->arena, server->input_fd);
+	Temp scratch = scratch_begin(&server->arena, 1);
+	String8 msg = read_9p_msg(scratch.arena, server->input_fd);
 	if(msg.size == 0)
 	{
+		scratch_end(scratch);
 		return 0;
 	}
 	Message9P f = msg9p_from_str8(msg);
 	if(f.type == 0)
 	{
+		scratch_end(scratch);
 		return 0;
 	}
-
-	Temp scratch = scratch_begin(&server->arena, 1);
 
 	ServerRequest9P *request = server9p_request_alloc(server, f.tag);
 	if(request == 0)
@@ -182,6 +194,8 @@ server9p_respond(ServerRequest9P *request, String8 err)
 	if(buf.size == 0)
 	{
 		scratch_end(request->scratch);
+		request->hash_next = server->request_free_list;
+		server->request_free_list = request;
 		return 0;
 	}
 	server9p_request_remove(server, request->in_msg.tag);
@@ -200,10 +214,14 @@ server9p_respond(ServerRequest9P *request, String8 err)
 		else if(errno != EINTR)
 		{
 			scratch_end(request->scratch);
+			request->hash_next = server->request_free_list;
+			server->request_free_list = request;
 			return 0;
 		}
 	}
 	scratch_end(request->scratch);
+	request->hash_next = server->request_free_list;
+	server->request_free_list = request;
 	return total_num_bytes_written == total_num_bytes_to_write;
 }
 
@@ -221,7 +239,18 @@ server9p_fid_alloc(Server9P *server, u32 fid)
 			return 0;
 		}
 	}
-	ServerFid9P *f = push_array(server->arena, ServerFid9P, 1);
+
+	ServerFid9P *f = server->fid_free_list;
+	if(f != 0)
+	{
+		server->fid_free_list = f->hash_next;
+	}
+	else
+	{
+		f = push_array(server->arena, ServerFid9P, 1);
+	}
+
+	MemoryZeroStruct(f);
 	f->fid = fid;
 	f->open_mode = P9_OPEN_MODE_NONE;
 	f->server = server;

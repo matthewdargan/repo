@@ -103,15 +103,77 @@ work_queue_pop(WorkerPool *pool)
 	return result;
 }
 
+internal void
+fid_release(Server9P *server, ServerFid9P *fid)
+{
+	if(fid != 0)
+	{
+		fid->hash_next = server->fid_free_list;
+		server->fid_free_list = fid;
+	}
+}
+
 internal FidAuxiliary9P *
-get_fid_aux(Arena *arena, ServerFid9P *fid)
+fid_aux_alloc(Server9P *server)
+{
+	FidAuxiliary9P *aux = server->fid_aux_free_list;
+	if(aux != 0)
+	{
+		server->fid_aux_free_list = aux->next;
+	}
+	else
+	{
+		aux = push_array_no_zero(server->arena, FidAuxiliary9P, 1);
+	}
+	MemoryZeroStruct(aux);
+	return aux;
+}
+
+internal void
+fid_aux_release(Server9P *server, FidAuxiliary9P *aux)
+{
+	if(aux == 0)
+	{
+		return;
+	}
+
+	if(aux->handle)
+	{
+		fs9p_close(aux->handle);
+		aux->handle = 0;
+	}
+	if(aux->has_dir_iter)
+	{
+		fs9p_closedir(&aux->dir_iter);
+		aux->has_dir_iter = 0;
+	}
+
+	aux->next = server->fid_aux_free_list;
+	server->fid_aux_free_list = aux;
+}
+
+internal FidAuxiliary9P *
+get_fid_aux(Server9P *server, ServerFid9P *fid)
 {
 	if(fid->auxiliary == 0)
 	{
-		FidAuxiliary9P *aux = push_array(arena, FidAuxiliary9P, 1);
-		fid->auxiliary = aux;
+		fid->auxiliary = fid_aux_alloc(server);
 	}
 	return (FidAuxiliary9P *)fid->auxiliary;
+}
+
+internal String8
+fid_aux_get_path(FidAuxiliary9P *aux)
+{
+	return str8(aux->path_buffer, aux->path_len);
+}
+
+internal void
+fid_aux_set_path(FidAuxiliary9P *aux, String8 path)
+{
+	Assert(path.size <= sizeof(aux->path_buffer));
+	MemoryCopy(aux->path_buffer, path.str, path.size);
+	aux->path_len = path.size;
 }
 
 ////////////////////////////////
@@ -153,19 +215,19 @@ srv_attach(ServerRequest9P *request)
 internal void
 srv_walk(ServerRequest9P *request)
 {
-	FidAuxiliary9P *from_aux = get_fid_aux(request->server->arena, request->fid);
+	FidAuxiliary9P *from_aux = get_fid_aux(request->server, request->fid);
 
 	if(request->in_msg.walk_name_count == 0)
 	{
-		FidAuxiliary9P *new_aux = get_fid_aux(request->server->arena, request->new_fid);
-		new_aux->path = str8_copy(request->server->arena, from_aux->path);
+		FidAuxiliary9P *new_aux = get_fid_aux(request->server, request->new_fid);
+		fid_aux_set_path(new_aux, fid_aux_get_path(from_aux));
 		request->new_fid->qid = request->fid->qid;
 		request->out_msg.walk_qid_count = 0;
 		server9p_respond(request, str8_zero());
 		return;
 	}
 
-	String8 current_path = from_aux->path;
+	String8 current_path = fid_aux_get_path(from_aux);
 
 	for(u64 i = 0; i < request->in_msg.walk_name_count; i += 1)
 	{
@@ -192,7 +254,8 @@ srv_walk(ServerRequest9P *request)
 			{
 				if(request->new_fid != request->fid)
 				{
-					server9p_fid_remove(request->server, request->in_msg.new_fid);
+					ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.new_fid);
+					fid_release(request->server, fid);
 				}
 				server9p_respond(request, res.error);
 				return;
@@ -212,7 +275,8 @@ srv_walk(ServerRequest9P *request)
 			{
 				if(request->new_fid != request->fid)
 				{
-					server9p_fid_remove(request->server, request->in_msg.new_fid);
+					ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.new_fid);
+					fid_release(request->server, fid);
 				}
 				server9p_respond(request, str8_lit("file not found"));
 				return;
@@ -229,8 +293,8 @@ srv_walk(ServerRequest9P *request)
 		current_path = res.absolute_path;
 	}
 
-	FidAuxiliary9P *new_aux = get_fid_aux(request->server->arena, request->new_fid);
-	new_aux->path = str8_copy(request->server->arena, current_path);
+	FidAuxiliary9P *new_aux = get_fid_aux(request->server, request->new_fid);
+	fid_aux_set_path(new_aux, current_path);
 	request->new_fid->qid = request->out_msg.walk_qids[request->in_msg.walk_name_count - 1];
 	request->out_msg.walk_qid_count = request->in_msg.walk_name_count;
 	server9p_respond(request, str8_zero());
@@ -239,7 +303,7 @@ srv_walk(ServerRequest9P *request)
 internal void
 srv_open(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
+	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
 	u32 access_mode = request->in_msg.open_mode & 3;
 	if(fs_context->readonly && access_mode != P9_OpenFlag_Read)
@@ -248,7 +312,7 @@ srv_open(ServerRequest9P *request)
 		return;
 	}
 
-	FsHandle9P *handle = fs9p_open(request->server->arena, fs_context, aux->path, request->in_msg.open_mode);
+	FsHandle9P *handle = fs9p_open(request->server->arena, fs_context, fid_aux_get_path(aux), request->in_msg.open_mode);
 	if(handle == 0 || (handle->fd < 0 && !handle->is_directory && handle->tmp_node == 0))
 	{
 		server9p_respond(request, str8_lit("cannot open file"));
@@ -260,7 +324,7 @@ srv_open(ServerRequest9P *request)
 
 	if(handle->is_directory)
 	{
-		aux->dir_iter = fs9p_opendir(request->server->arena, fs_context, aux->path);
+		aux->has_dir_iter = fs9p_opendir(fs_context, fid_aux_get_path(aux), &aux->dir_iter);
 	}
 
 	request->out_msg.qid = request->fid->qid;
@@ -271,7 +335,7 @@ srv_open(ServerRequest9P *request)
 internal void
 srv_create(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
+	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
 	if(fs_context->readonly)
 	{
@@ -279,7 +343,7 @@ srv_create(ServerRequest9P *request)
 		return;
 	}
 
-	String8 new_path = fs9p_path_join(request->scratch.arena, aux->path, request->in_msg.name);
+	String8 new_path = fs9p_path_join(request->scratch.arena, fid_aux_get_path(aux), request->in_msg.name);
 
 	if(!fs9p_path_is_safe(request->in_msg.name))
 	{
@@ -300,7 +364,7 @@ srv_create(ServerRequest9P *request)
 		return;
 	}
 
-	aux->path = str8_copy(request->server->arena, new_path);
+	fid_aux_set_path(aux, new_path);
 	request->fid->qid = stat.qid;
 
 	FsHandle9P *handle = fs9p_open(request->server->arena, fs_context, new_path, request->in_msg.open_mode);
@@ -311,7 +375,7 @@ srv_create(ServerRequest9P *request)
 
 		if(handle->is_directory)
 		{
-			aux->dir_iter = fs9p_opendir(request->server->arena, fs_context, new_path);
+			aux->has_dir_iter = fs9p_opendir(fs_context, new_path, &aux->dir_iter);
 		}
 	}
 
@@ -323,23 +387,23 @@ srv_create(ServerRequest9P *request)
 internal void
 srv_read(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
+	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
 	if(request->fid->qid.type & QidTypeFlag_Directory)
 	{
-		if(aux->dir_iter == 0)
+		if(!aux->has_dir_iter)
 		{
-			aux->dir_iter = fs9p_opendir(request->server->arena, fs_context, aux->path);
+			aux->has_dir_iter = fs9p_opendir(fs_context, fid_aux_get_path(aux), &aux->dir_iter);
 		}
 
-		if(aux->dir_iter == 0)
+		if(!aux->has_dir_iter)
 		{
 			server9p_respond(request, str8_lit("cannot read directory"));
 			return;
 		}
 
-		String8 dir_data = fs9p_readdir(request->server->arena, fs_context, aux->dir_iter, request->in_msg.file_offset,
-		                                request->in_msg.byte_count);
+		String8 dir_data = fs9p_readdir(request->scratch.arena, request->server->arena, fs_context, &aux->dir_iter,
+		                                &aux->cached_dir_entries, request->in_msg.file_offset, request->in_msg.byte_count);
 
 		request->out_msg.payload_data = dir_data;
 		request->out_msg.byte_count = dir_data.size;
@@ -364,7 +428,7 @@ srv_read(ServerRequest9P *request)
 internal void
 srv_write(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
+	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
 	if(fs_context->readonly)
 	{
@@ -387,9 +451,9 @@ srv_write(ServerRequest9P *request)
 internal void
 srv_stat(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
+	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
-	Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, aux->path);
+	Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, fid_aux_get_path(aux));
 	if(stat.name.size == 0)
 	{
 		server9p_respond(request, str8_lit("cannot stat file"));
@@ -409,7 +473,7 @@ srv_wstat(ServerRequest9P *request)
 		return;
 	}
 
-	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
+	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
 	if(request->in_msg.stat_data.size == 0)
 	{
@@ -419,7 +483,7 @@ srv_wstat(ServerRequest9P *request)
 
 	Dir9P stat = dir9p_from_str8(request->in_msg.stat_data);
 
-	if(!fs9p_wstat(fs_context, aux->path, &stat))
+	if(!fs9p_wstat(fs_context, fid_aux_get_path(aux), &stat))
 	{
 		server9p_respond(request, str8_lit("wstat failed"));
 		return;
@@ -427,12 +491,12 @@ srv_wstat(ServerRequest9P *request)
 
 	if(stat.name.size > 0)
 	{
-		String8 current_basename = fs9p_basename(request->scratch.arena, aux->path);
+		String8 current_basename = fs9p_basename(request->scratch.arena, fid_aux_get_path(aux));
 		if(!str8_match(stat.name, current_basename, 0))
 		{
-			String8 parent_path = fs9p_dirname(request->scratch.arena, aux->path);
+			String8 parent_path = fs9p_dirname(request->scratch.arena, fid_aux_get_path(aux));
 			String8 new_path = fs9p_path_join(request->scratch.arena, parent_path, stat.name);
-			aux->path = str8_copy(request->server->arena, new_path);
+			fid_aux_set_path(aux, new_path);
 		}
 	}
 
@@ -442,7 +506,7 @@ srv_wstat(ServerRequest9P *request)
 internal void
 srv_remove(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
+	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
 	if(fs_context->readonly)
 	{
@@ -450,39 +514,20 @@ srv_remove(ServerRequest9P *request)
 		return;
 	}
 
-	if(aux->handle)
-	{
-		fs9p_close(aux->handle);
-		aux->handle = 0;
-	}
-	if(aux->dir_iter)
-	{
-		fs9p_closedir(aux->dir_iter);
-		aux->dir_iter = 0;
-	}
-
-	fs9p_remove(fs_context, aux->path);
-	server9p_fid_remove(request->server, request->in_msg.fid);
+	fs9p_remove(fs_context, fid_aux_get_path(aux));
+	fid_aux_release(request->server, aux);
+	ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
+	fid_release(request->server, fid);
 	server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_clunk(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
-
-	if(aux->handle)
-	{
-		fs9p_close(aux->handle);
-		aux->handle = 0;
-	}
-	if(aux->dir_iter)
-	{
-		fs9p_closedir(aux->dir_iter);
-		aux->dir_iter = 0;
-	}
-
-	server9p_fid_remove(request->server, request->in_msg.fid);
+	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+	fid_aux_release(request->server, aux);
+	ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
+	fid_release(request->server, fid);
 	server9p_respond(request, str8_zero());
 }
 
@@ -493,6 +538,7 @@ internal void
 handle_connection(OS_Handle connection_socket)
 {
 	Temp scratch = scratch_begin(0, 0);
+	Arena *connection_arena = arena_alloc();
 	Log *log = log_alloc();
 	log_select(log);
 	log_scope_begin();
@@ -502,11 +548,12 @@ handle_connection(OS_Handle connection_socket)
 	u64 connection_fd = connection_socket.u64[0];
 	log_infof("[%S] 9pfs: connection established\n", timestamp);
 
-	Server9P *server = server9p_alloc(scratch.arena, connection_fd, connection_fd);
+	Server9P *server = server9p_alloc(connection_arena, connection_fd, connection_fd);
 	if(server == 0)
 	{
 		log_error(str8_lit("9pfs: failed to allocate server\n"));
 		os_file_close(connection_socket);
+		arena_release(connection_arena);
 		return;
 	}
 
@@ -586,6 +633,7 @@ handle_connection(OS_Handle connection_socket)
 	}
 
 	log_release(log);
+	arena_release(connection_arena);
 	scratch_end(scratch);
 }
 
