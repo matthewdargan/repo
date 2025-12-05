@@ -213,12 +213,18 @@ fs9p_close(handle);
 **Directory operations:**
 ```c
 // Open directory
-DirIterator9P *iter = fs9p_opendir(arena, ctx, str8_lit("/"));
+DirIterator9P iter;
+b32 opened = fs9p_opendir(ctx, str8_lit("/"), &iter);
 
-// Read entries
-String8 dirdata = fs9p_readdir(arena, ctx, iter, /*offset=*/0, /*count=*/8192);
+if(opened)
+{
+    // Read entries
+    String8 cache = str8_zero();
+    String8 dirdata = fs9p_readdir(result_arena, cache_arena, ctx, &iter,
+                                    &cache, /*offset=*/0, /*count=*/8192);
 
-fs9p_closedir(iter);
+    fs9p_closedir(&iter);
+}
 ```
 
 **Dual storage (disk + arena):**

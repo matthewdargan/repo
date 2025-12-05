@@ -63,12 +63,14 @@ server9p_alloc(Arena *arena, u64 input_fd, u64 output_fd)
     server->input_fd = input_fd;
     server->output_fd = output_fd;
     server->max_message_size = P9_IOUNIT_DEFAULT + P9_MESSAGE_HEADER_SIZE;
-    server->max_fid_count = 4096;
-    server->max_request_count = 4096;
-    server->fid_table = push_array(arena, ServerFid9P *, server->max_fid_count);
-    server->request_table = push_array(arena, ServerRequest9P *, server->max_request_count);
     server->read_buffer = push_array(arena, u8, server->max_message_size);
     server->write_buffer = push_array(arena, u8, server->max_message_size);
+    server->max_fid_count = 4096;
+    server->fid_table = push_array(arena, ServerFid9P *, server->max_fid_count);
+    server->max_request_count = 4096;
+    server->request_table = push_array(arena, ServerRequest9P *, server->max_request_count);
+    server->next_tag = 1;
+    // Freelists initialized to 0 (no free nodes yet)
     return server;
 }
 ```
@@ -78,6 +80,8 @@ server9p_alloc(Arena *arena, u64 input_fd, u64 output_fd)
 - **Arena allocation** - Server lifetime matches connection lifetime. Allocate everything from one arena, release when connection closes. No per-request malloc/free overhead.
 
 - **Fixed-size hash tables** - 4096 buckets each for fids and requests. Supports thousands of open files and concurrent requests with minimal collision. Simple modulo hash (`fid % 4096`).
+
+- **Freelists for reuse** - Requests, fids, and fid auxiliary structures are recycled via freelists instead of being continuously allocated. This prevents arena growth over long-running connections while maintaining fast allocation.
 
 - **Separate I/O buffers** - Read and write buffers sized to `max_message_size`. Prevents buffer allocation on every message.
 
@@ -123,27 +127,30 @@ for(;;)
 internal ServerRequest9P *
 server9p_get_request(Server9P *server)
 {
+	Temp scratch = scratch_begin(&server->arena, 1);
+
 	// Read size-prefixed message from input_fd
-	String8 msg = read_9p_msg(server->arena, server->input_fd);
-	if(msg.size == 0) return 0;  // Connection closed
+	String8 msg = read_9p_msg(scratch.arena, server->input_fd);
+	if(msg.size == 0)
+	{
+		scratch_end(scratch);
+		return 0;  // Connection closed
+	}
 
 	// Decode wire format to Message9P
 	Message9P f = msg9p_from_str8(msg);
-	if(f.type == 0) return 0;    // Parse error
+	if(f.type == 0)
+	{
+		scratch_end(scratch);
+		return 0;  // Parse error
+	}
 
-	// Per-request scratch arena
-	Temp scratch = scratch_begin(&server->arena, 1);
-
-	// Allocate request (checks for duplicate tag)
+	// Allocate request from freelist or arena (checks for duplicate tag)
 	ServerRequest9P *request = server9p_request_alloc(server, f.tag);
 	if(request == 0)
 	{
-		// Duplicate tag - protocol error
-		request = push_array(server->arena, ServerRequest9P, 1);
-		request->tag = f.tag;
-		request->error = str8_lit("duplicate tag");
-		request->scratch = scratch;
-		return request;
+		scratch_end(scratch);
+		return 0;  // Duplicate tag - protocol error
 	}
 
 	request->in_msg = f;
@@ -232,14 +239,19 @@ server9p_respond(ServerRequest9P *request, String8 err)
 	// Encode to wire format
 	String8 buf = str8_from_msg9p(request->scratch.arena, request->out_msg);
 
-	// Remove from request tracking table
-	server9p_request_remove(server, request->in_msg.tag);
-
 	// Write complete message to output_fd
 	// ... write loop with EINTR handling ...
 
+	// Remove from request tracking table and return to freelist
+	server9p_request_remove(server, request->in_msg.tag);
+
 	// Free per-request scratch arena
 	scratch_end(request->scratch);
+
+	// Return request to freelist for reuse
+	request->hash_next = server->request_free_list;
+	server->request_free_list = request;
+
 	return total_num_bytes_written == total_num_bytes_to_write;
 }
 ```
@@ -334,8 +346,18 @@ server9p_fid_alloc(Server9P *server, u32 fid)
         }
     }
 
-    // Allocate from server arena
-    ServerFid9P *f = push_array(server->arena, ServerFid9P, 1);
+    // Try to reuse from freelist, otherwise allocate from arena
+    ServerFid9P *f = server->fid_free_list;
+    if(f != 0)
+    {
+        server->fid_free_list = f->hash_next;
+    }
+    else
+    {
+        f = push_array(server->arena, ServerFid9P, 1);
+    }
+
+    MemoryZeroStruct(f);
     f->fid = fid;
     f->open_mode = P9_OPEN_MODE_NONE;
     f->server = server;
@@ -378,25 +400,21 @@ Called by Tclunk and Tremove handlers. Returns the fid structure so handler can 
 internal void
 srv_clunk(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server->arena, request->fid);
+	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
-	// Clean up file handles
-	if(aux->handle)
-	{
-		fs9p_close(aux->handle);
-	}
-	if(aux->dir_iter)
-	{
-		fs9p_closedir(aux->dir_iter);
-	}
+	// Clean up and return auxiliary to freelist
+	fid_aux_release(request->server, aux);
 
-	// Remove from hash table
-	server9p_fid_remove(request->server, request->in_msg.fid);
+	// Remove from hash table and return fid to freelist
+	ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
+	fid->hash_next = request->server->fid_free_list;
+	request->server->fid_free_list = fid;
+
 	server9p_respond(request, str8_zero());
 }
 ```
 
-**Note:** Fid memory is not freed (arena-allocated from `server->arena`). Hash table entry removed, making fid number available for reuse. Memory reclaimed when connection closes and entire server arena is released.
+**Note:** Fids and auxiliary structures are returned to freelists for reuse instead of being freed. This prevents arena growth over long connections while maintaining fast O(1) allocation. Memory is reclaimed when connection closes and entire server arena is released.
 
 ## Auxiliary Data Pattern
 
@@ -406,22 +424,39 @@ Each `ServerFid9P` has `void *auxiliary` for application-specific state. The `cm
 typedef struct FidAuxiliary9P FidAuxiliary9P;
 struct FidAuxiliary9P
 {
-    String8 path;            // Absolute path from filesystem root
-    FsHandle9P *handle;      // Open file handle (after Topen)
-    DirIterator9P *dir_iter; // Directory iterator (for reading dirs)
-    u32 open_mode;           // P9_OpenFlag_Read, etc.
+    FidAuxiliary9P *next;       // Freelist linkage
+    u64 path_len;               // Length of path in path_buffer
+    FsHandle9P *handle;         // Open file handle (after Topen)
+    b32 has_dir_iter;           // Whether dir_iter is active
+    u32 open_mode;              // P9_OpenFlag_Read, etc.
+    String8 cached_dir_entries; // Cached directory listing
+    DirIterator9P dir_iter;     // Embedded directory iterator
+    u8 path_buffer[PATH_MAX];   // Fixed-size path storage
 };
 
 internal FidAuxiliary9P *
-get_fid_aux(Arena *arena, ServerFid9P *fid)
+get_fid_aux(Server9P *server, ServerFid9P *fid)
 {
     if(fid->auxiliary == 0)
     {
-        fid->auxiliary = push_array(arena, FidAuxiliary9P, 1);
+        // Try freelist first, then allocate from arena
+        FidAuxiliary9P *aux = server->fid_aux_free_list;
+        if(aux != 0)
+        {
+            server->fid_aux_free_list = aux->next;
+        }
+        else
+        {
+            aux = push_array_no_zero(server->arena, FidAuxiliary9P, 1);
+        }
+        MemoryZeroStruct(aux);
+        fid->auxiliary = aux;
     }
     return (FidAuxiliary9P *)fid->auxiliary;
 }
 ```
+
+The auxiliary structure uses fixed-size buffers for path storage instead of arena-allocated strings, preventing unbounded arena growth. Directory iterators are embedded directly instead of being heap-allocated.
 
 **Usage example:**
 
@@ -429,16 +464,19 @@ get_fid_aux(Arena *arena, ServerFid9P *fid)
 internal void
 srv_walk(ServerRequest9P *request)
 {
-	FidAuxiliary9P *from_aux = get_fid_aux(request->server->arena, request->fid);
+	FidAuxiliary9P *from_aux = get_fid_aux(request->server, request->fid);
 
 	// Walk from current path
+	String8 current_path = str8(from_aux->path_buffer, from_aux->path_len);
 	PathResolution9P res = fs9p_resolve_path(request->scratch.arena,
 	                                          fs_context,
-	                                          from_aux->path, name);
+	                                          current_path, name);
 
-	// Store new path in new fid
-	FidAuxiliary9P *new_aux = get_fid_aux(request->server->arena, request->new_fid);
-	new_aux->path = str8_copy(request->server->arena, res.absolute_path);
+	// Store new path in new fid using fixed-size buffer
+	FidAuxiliary9P *new_aux = get_fid_aux(request->server, request->new_fid);
+	Assert(res.absolute_path.size <= sizeof(new_aux->path_buffer));
+	MemoryCopy(new_aux->path_buffer, res.absolute_path.str, res.absolute_path.size);
+	new_aux->path_len = res.absolute_path.size;
 
 	request->new_fid->qid = stat.qid;
 	server9p_respond(request, str8_zero());
@@ -506,10 +544,11 @@ internal void
 handle_connection(OS_Handle connection_socket)
 {
     Temp scratch = scratch_begin(0, 0);
+    Arena *connection_arena = arena_alloc();
     u64 connection_fd = connection_socket.u64[0];
 
     // Per-connection server instance
-    Server9P *server = server9p_alloc(scratch.arena, connection_fd, connection_fd);
+    Server9P *server = server9p_alloc(connection_arena, connection_fd, connection_fd);
 
     // Process requests until connection closes
     for(;;)
@@ -532,13 +571,14 @@ handle_connection(OS_Handle connection_socket)
     }
 
     os_file_close(connection_socket);
-    scratch_end(scratch);  // Free entire connection arena
+    arena_release(connection_arena);  // Free entire connection arena
+    scratch_end(scratch);
 }
 ```
 
-**One server per connection** - Each `Server9P` instance has its own fid/request hash tables, I/O buffers, and arena. No shared state between connections. Workers can process different connections simultaneously without locking.
+**One server per connection** - Each `Server9P` instance has its own fid/request hash tables, I/O buffers, freelists, and arena. No shared state between connections. Workers can process different connections simultaneously without locking.
 
-**Arena cleanup** - When connection closes, `scratch_end()` releases the entire arena (server structure, hash tables, all fids, all buffers). One deallocation for hundreds of allocations.
+**Arena cleanup** - When connection closes, `arena_release(connection_arena)` releases the entire arena (server structure, hash tables, all fids, all buffers, freelists). One deallocation for hundreds of allocations.
 
 ### Main Loop
 

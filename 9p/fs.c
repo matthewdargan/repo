@@ -459,7 +459,7 @@ fs9p_close(FsHandle9P *handle)
 	}
 	if(handle->dir_handle != 0)
 	{
-		closedir((DIR *)handle->dir_handle);
+		closedir(handle->dir_handle);
 		handle->dir_handle = 0;
 	}
 }
@@ -790,11 +790,12 @@ fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir)
 ////////////////////////////////
 //~ Directory Operations
 
-internal DirIterator9P *
-fs9p_opendir(Arena *arena, FsContext9P *ctx, String8 path)
+internal b32
+fs9p_opendir(FsContext9P *ctx, String8 path, DirIterator9P *iter)
 {
-	DirIterator9P *iter = push_array(arena, DirIterator9P, 1);
-	iter->path = str8_copy(arena, path);
+	Assert(path.size <= sizeof(iter->path_buffer));
+	MemoryCopy(iter->path_buffer, path.str, path.size);
+	iter->path_len = path.size;
 
 	if(ctx->backend == StorageBackend9P_ArenaTemp)
 	{
@@ -804,24 +805,27 @@ fs9p_opendir(Arena *arena, FsContext9P *ctx, String8 path)
 			iter->tmp_node = node;
 			iter->tmp_current = node->first_child;
 		}
-		return iter;
+		return 1;
 	}
 
-	String8 os_path = os_path_from_fs9p_path(arena, ctx, path);
-	String8 cpath = str8_copy(arena, os_path);
+	Temp scratch = scratch_begin(0, 0);
+	String8 os_path = os_path_from_fs9p_path(scratch.arena, ctx, path);
+	String8 cpath = str8_copy(scratch.arena, os_path);
 
 	DIR *dir = opendir((char *)cpath.str);
 	iter->dir_handle = dir;
 
-	return iter;
+	scratch_end(scratch);
+	return dir != 0;
 }
 
 internal String8
-fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u64 count)
+fs9p_readdir(Arena *result_arena, Arena *cache_arena, FsContext9P *ctx, DirIterator9P *iter, String8 *cache, u64 offset,
+             u64 count)
 {
 	if(iter->tmp_node != 0)
 	{
-		return temp9p_readdir(arena, iter->tmp_node, &iter->tmp_current, offset, count);
+		return temp9p_readdir(result_arena, iter->tmp_node, &iter->tmp_current, offset, count);
 	}
 
 	if(iter->dir_handle == 0)
@@ -829,10 +833,10 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 		return str8_zero();
 	}
 
-	if(iter->cached_entries.size == 0)
+	if(cache->size == 0)
 	{
-		Temp scratch = scratch_begin(&arena, 1);
-		DIR *dir = (DIR *)iter->dir_handle;
+		Temp scratch = scratch_begin(&cache_arena, 1);
+		DIR *dir = iter->dir_handle;
 		int dir_fd = dirfd(dir);
 		rewinddir(dir);
 
@@ -848,7 +852,7 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 				continue;
 			}
 
-			String8 entry_path = fs9p_path_join(scratch.arena, iter->path, entry_name);
+			String8 entry_path = fs9p_path_join(scratch.arena, str8(iter->path_buffer, iter->path_len), entry_name);
 			struct stat entry_stat = {0};
 			b32 stat_success = 0;
 
@@ -910,19 +914,19 @@ fs9p_readdir(Arena *arena, FsContext9P *ctx, DirIterator9P *iter, u64 offset, u6
 			encode_buffer_size += encoded_entry.size;
 		}
 
-		iter->cached_entries = str8_copy(arena, str8(encode_buffer, encode_buffer_size));
+		*cache = str8_copy(cache_arena, str8(encode_buffer, encode_buffer_size));
 		scratch_end(scratch);
 	}
 
-	if(offset >= iter->cached_entries.size)
+	if(offset >= cache->size)
 	{
 		return str8_zero();
 	}
 
-	u64 bytes_available = iter->cached_entries.size - offset;
+	u64 bytes_available = cache->size - offset;
 	u64 bytes_to_read = Min(bytes_available, count);
 
-	return str8_copy(arena, str8(iter->cached_entries.str + offset, bytes_to_read));
+	return str8_copy(result_arena, str8(cache->str + offset, bytes_to_read));
 }
 
 internal void
@@ -930,7 +934,7 @@ fs9p_closedir(DirIterator9P *iter)
 {
 	if(iter->dir_handle != 0)
 	{
-		closedir((DIR *)iter->dir_handle);
+		closedir(iter->dir_handle);
 		iter->dir_handle = 0;
 	}
 }
