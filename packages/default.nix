@@ -7,6 +7,8 @@
     ./9umount.nix
     ./mount-9p.nix
     ./9p.nix
+    ./httpproxy.nix
+    ./httpproxy-test.nix
     ./installer-image.nix
     ./neovim.nix
   ];

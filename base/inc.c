@@ -1,4 +1,6 @@
-// Base Includes
+////////////////////////////////
+//~ Base Includes
+
 // clang-format off
 #include "core.c"
 #include "arena.c"

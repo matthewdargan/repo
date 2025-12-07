@@ -7,6 +7,8 @@
     description,
     version,
     binaryName ? pname,
+    buildInputs ? [],
+    extraLinkFlags ? "",
   }: let
     commonMeta = {
       inherit description;
@@ -33,10 +35,15 @@
     in
       pkgs.clangStdenv.mkDerivation (commonAttrs
         // {
+          inherit buildInputs;
           buildPhase = ''
             runHook preBuild
             echo "[${buildMode}]"
-            clang ${flags} cmd/${pname}/main.c -o ${binaryName}
+            clang ${flags} \
+              ${lib.strings.concatMapStringsSep " " (p: "-I${p}/include") buildInputs} \
+              cmd/${pname}/main.c -o ${binaryName} \
+              ${lib.strings.concatMapStringsSep " " (p: "-L${p}/lib") buildInputs} \
+              ${extraLinkFlags}
             runHook postBuild
           '';
           installPhase = ''

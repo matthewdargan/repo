@@ -7,9 +7,11 @@
     cmdPackage = import ../flake-parts/cmd-package.nix {inherit lib pkgs;};
   in {
     packages = cmdPackage.mkCmdPackage {
-      pname = "9pfs-test";
-      description = "9pfs test suite";
+      pname = "httpproxy";
+      description = "HTTP reverse proxy with TLS termination";
       version = "0.1.0";
+      buildInputs = [pkgs.openssl];
+      extraLinkFlags = "-lssl -lcrypto";
     };
   };
 }
