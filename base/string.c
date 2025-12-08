@@ -1,4 +1,6 @@
-// Character Classification/Conversion Functions
+////////////////////////////////
+//~ Character Classification/Conversion Functions
+
 internal b32
 char_is_space(u8 c)
 {
@@ -72,7 +74,9 @@ cstring8_length(u8 *c)
 	return length;
 }
 
-// String Constructors
+////////////////////////////////
+//~ String Constructors
+
 internal String8
 str8(u8 *str, u64 size)
 {
@@ -101,7 +105,9 @@ str8_cstring(char *c)
 	return result;
 }
 
-// String Stylization
+////////////////////////////////
+//~ String Stylization
+
 internal String8
 upper_from_str8(Arena *arena, String8 string)
 {
@@ -124,7 +130,9 @@ lower_from_str8(Arena *arena, String8 string)
 	return string;
 }
 
-// String Matching
+////////////////////////////////
+//~ String Matching
+
 internal b32
 str8_match(String8 a, String8 b, StringMatchFlags flags)
 {
@@ -213,7 +221,9 @@ str8_find_needle_reverse(String8 string, u64 start_pos, String8 needle, StringMa
 	return result;
 }
 
-// String Slicing
+////////////////////////////////
+//~ String Slicing
+
 internal String8
 str8_substr(String8 str, Rng1U64 range)
 {
@@ -282,7 +292,9 @@ str8_skip_chop_whitespace(String8 string)
 	return result;
 }
 
-// String Formatting/Copying
+////////////////////////////////
+//~ String Formatting/Copying
+
 internal String8
 str8_cat(Arena *arena, String8 s1, String8 s2)
 {
@@ -330,7 +342,9 @@ str8f(Arena *arena, char *fmt, ...)
 	return s;
 }
 
-// String <-> Integer Conversions
+////////////////////////////////
+//~ String <-> Integer Conversions
+
 internal b32
 str8_is_integer(String8 string, u32 radix)
 {
@@ -525,7 +539,77 @@ str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_
 	return result;
 }
 
-// String <-> DateTime Conversions
+////////////////////////////////
+//~ String <-> Float Conversions
+
+internal f64
+f64_from_str8(String8 string)
+{
+	f64 result = 0.0;
+	u64 i = 0;
+
+	f64 sign = 1.0;
+	if(i < string.size && (string.str[i] == '-' || string.str[i] == '+'))
+	{
+		if(string.str[i] == '-')
+		{
+			sign = -1.0;
+		}
+		i += 1;
+	}
+
+	f64 integer_part = 0.0;
+	for(; i < string.size && char_is_digit(string.str[i], 10); i += 1)
+	{
+		integer_part = integer_part * 10.0 + (f64)(string.str[i] - '0');
+	}
+
+	f64 fractional_part = 0.0;
+	u64 fractional_digits = 0;
+	if(i < string.size && string.str[i] == '.')
+	{
+		i += 1;
+		for(; i < string.size && char_is_digit(string.str[i], 10); i += 1)
+		{
+			fractional_part = fractional_part * 10.0 + (f64)(string.str[i] - '0');
+			fractional_digits += 1;
+		}
+	}
+
+	s64 exponent_value = 0;
+	if(i < string.size && (string.str[i] == 'e' || string.str[i] == 'E'))
+	{
+		i += 1;
+		s64 exponent_sign = 1;
+		if(i < string.size && (string.str[i] == '-' || string.str[i] == '+'))
+		{
+			if(string.str[i] == '-')
+			{
+				exponent_sign = -1;
+			}
+			i += 1;
+		}
+		for(; i < string.size && char_is_digit(string.str[i], 10); i += 1)
+		{
+			exponent_value = exponent_value * 10 + (string.str[i] - '0');
+		}
+		exponent_value *= exponent_sign;
+	}
+
+	result = integer_part + fractional_part * pow_f64(10.0, -(f64)fractional_digits);
+	result *= sign;
+
+	if(exponent_value != 0)
+	{
+		result *= pow_f64(10.0, (f64)exponent_value);
+	}
+
+	return result;
+}
+
+////////////////////////////////
+//~ String <-> DateTime Conversions
+
 internal String8
 str8_from_datetime(Arena *arena, DateTime dt)
 {
@@ -533,7 +617,9 @@ str8_from_datetime(Arena *arena, DateTime dt)
 	return result;
 }
 
-// String List Construction Functions
+////////////////////////////////
+//~ String List Construction Functions
+
 internal String8Node *
 str8_list_push_node(String8List *list, String8Node *node, String8 string)
 {
@@ -563,7 +649,9 @@ str8_list_pushf(Arena *arena, String8List *list, char *fmt, ...)
 	return result;
 }
 
-// String Splitting/Joining
+////////////////////////////////
+//~ String Splitting/Joining
+
 internal String8List
 str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count, StringSplitFlags flags)
 {
@@ -633,7 +721,9 @@ str8_list_join(Arena *arena, String8List *list, StringJoin *optional_params)
 	return result;
 }
 
-// String Arrays
+////////////////////////////////
+//~ String Arrays
+
 internal String8Array
 str8_array_from_list(Arena *arena, String8List *list)
 {
@@ -658,7 +748,9 @@ str8_array_reserve(Arena *arena, u64 count)
 	return array;
 }
 
-// String Path Helpers
+////////////////////////////////
+//~ String Path Helpers
+
 internal String8
 str8_chop_last_slash(String8 string)
 {
@@ -741,7 +833,9 @@ str8_skip_last_dot(String8 string)
 	return result;
 }
 
-// Basic Text Indentation
+////////////////////////////////
+//~ Basic Text Indentation
+
 internal String8
 indented_from_string(Arena *arena, String8 string)
 {
@@ -800,7 +894,9 @@ indented_from_string(Arena *arena, String8 string)
 	return result;
 }
 
-// Basic String Hashes
+////////////////////////////////
+//~ Basic String Hashes
+
 internal u64
 u64_hash_from_str8(String8 string)
 {

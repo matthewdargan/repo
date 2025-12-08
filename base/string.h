@@ -148,6 +148,11 @@ internal b32 try_u64_from_str8(String8 string, u64 *x);
 internal String8 str8_from_u64(Arena *arena, u64 value, u32 radix, u8 min_digits, u8 digit_group_separator);
 
 ////////////////////////////////
+//~ String <-> Float Conversions
+
+internal f64 f64_from_str8(String8 string);
+
+////////////////////////////////
 //~ String <-> DateTime Conversions
 
 internal String8 str8_from_datetime(Arena *arena, DateTime dt);

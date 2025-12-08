@@ -1,7 +1,9 @@
 // clang-format off
 #include "base/inc.h"
+#include "json/inc.h"
 #include "http/inc.h"
 #include "base/inc.c"
+#include "json/inc.c"
 #include "http/inc.c"
 // clang-format on
 
@@ -279,7 +281,6 @@ run_tests(Arena *arena)
 internal void
 entry_point(CmdLine *cmd_line)
 {
-	(void)cmd_line;
 	Temp scratch = scratch_begin(0, 0);
 	Log *log = log_alloc();
 	log_select(log);

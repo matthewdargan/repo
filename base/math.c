@@ -1,5 +1,5 @@
 ////////////////////////////////
-//~ Range Ops
+//~ Range Operations
 
 internal Rng1U64
 rng_1u64(u64 min, u64 max)
