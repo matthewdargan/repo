@@ -98,7 +98,6 @@ server9p_get_request(Server9P *server)
 		request->in_msg = f;
 		request->error = str8_lit("duplicate tag");
 		request->buffer = msg.str;
-		request->responded = 0;
 		request->server = server;
 		request->scratch = scratch;
 		return request;

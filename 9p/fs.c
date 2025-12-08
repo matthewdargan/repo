@@ -996,7 +996,6 @@ temp9p_node_create(Arena *arena, FsContext9P *ctx, String8 path, String8 name, b
 	node->group_id = str8_lit("nobody");
 	node->qid.path = ctx->tmp_qid_count;
 	ctx->tmp_qid_count += 1;
-	node->qid.version = 0;
 	node->qid.type = is_dir ? QidTypeFlag_Directory : QidTypeFlag_File;
 	node->mode = mode;
 	node->access_time = os_now_unix();

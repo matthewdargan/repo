@@ -693,13 +693,11 @@ worker_pool_shutdown(WorkerPool *pool)
 {
 	pool->is_live = 0;
 
-	// Wake all workers so they can exit
 	for(u64 i = 0; i < pool->worker_count; i += 1)
 	{
 		semaphore_drop(pool->semaphore);
 	}
 
-	// Wait for all workers to finish
 	for(u64 i = 0; i < pool->worker_count; i += 1)
 	{
 		Worker *worker = &pool->workers[i];
