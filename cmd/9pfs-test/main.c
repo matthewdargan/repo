@@ -438,7 +438,7 @@ test_readdir_long_names(Arena *arena, Client9P *client)
 			buf[j] = 'a' + (u8)(j % 26);
 		}
 		buf[200] = '_';
-		String8 suffix = str8f(scratch.arena, "%llu", (unsigned long long)i);
+		String8 suffix = str8_from_u64(scratch.arena, i, 10, 0, 0);
 		MemoryCopy(buf + 201, suffix.str, suffix.size);
 		String8 name = str8(buf, 201 + suffix.size);
 
@@ -604,8 +604,8 @@ run_tests(Arena *arena, String8 address)
 		return;
 	}
 
-	u32 passed = 0;
-	u32 failed = 0;
+	u64 passed = 0;
+	u64 failed = 0;
 
 	if(test_version(client))
 	{
@@ -1018,7 +1018,7 @@ run_tests(Arena *arena, String8 address)
 	client9p_unmount(arena, client);
 	os_file_close(socket);
 
-	log_infof("test: %u passed, %u failed\n", passed, failed);
+	log_infof("test: %llu passed, %llu failed\n", passed, failed);
 }
 
 ////////////////////////////////

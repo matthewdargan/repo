@@ -123,3 +123,180 @@ acme_jws_sign(Arena *arena, EVP_PKEY *pkey, JSON_Value *protected_header, String
 	scratch_end(scratch);
 	return result;
 }
+
+////////////////////////////////
+//~ ACME Key Authorization
+
+internal String8
+acme_key_authorization(Arena *arena, EVP_PKEY *pkey, String8 token)
+{
+	Temp scratch = scratch_begin(&arena, 1);
+
+	JSON_Value *jwk = acme_jwk_from_key(scratch.arena, pkey);
+	String8 jwk_json = json_serialize(scratch.arena, jwk);
+
+	EVP_MD_CTX *md_ctx = EVP_MD_CTX_new();
+	if(md_ctx == 0)
+	{
+		scratch_end(scratch);
+		return str8_zero();
+	}
+
+	if(EVP_DigestInit_ex(md_ctx, EVP_sha256(), 0) <= 0)
+	{
+		EVP_MD_CTX_free(md_ctx);
+		scratch_end(scratch);
+		return str8_zero();
+	}
+
+	if(EVP_DigestUpdate(md_ctx, jwk_json.str, jwk_json.size) <= 0)
+	{
+		EVP_MD_CTX_free(md_ctx);
+		scratch_end(scratch);
+		return str8_zero();
+	}
+
+	u8 hash[32];
+	unsigned int hash_len = 0;
+	if(EVP_DigestFinal_ex(md_ctx, hash, &hash_len) <= 0)
+	{
+		EVP_MD_CTX_free(md_ctx);
+		scratch_end(scratch);
+		return str8_zero();
+	}
+
+	EVP_MD_CTX_free(md_ctx);
+
+	String8 thumbprint = base64url_encode(scratch.arena, str8(hash, hash_len));
+	String8 result = str8f(arena, "%S.%S", token, thumbprint);
+
+	scratch_end(scratch);
+	return result;
+}
+
+////////////////////////////////
+//~ ACME Certificate Operations
+
+internal EVP_PKEY *
+acme_generate_cert_key(void)
+{
+	EVP_PKEY *key = EVP_PKEY_new();
+	if(key == 0)
+	{
+		return 0;
+	}
+
+	EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, 0);
+	if(ctx == 0)
+	{
+		EVP_PKEY_free(key);
+		return 0;
+	}
+
+	if(EVP_PKEY_keygen_init(ctx) <= 0)
+	{
+		EVP_PKEY_CTX_free(ctx);
+		EVP_PKEY_free(key);
+		return 0;
+	}
+
+	EVP_PKEY *result = 0;
+	if(EVP_PKEY_keygen(ctx, &result) <= 0)
+	{
+		EVP_PKEY_CTX_free(ctx);
+		EVP_PKEY_free(key);
+		return 0;
+	}
+
+	EVP_PKEY_CTX_free(ctx);
+	EVP_PKEY_free(key);
+	return result;
+}
+
+internal String8
+acme_generate_csr(Arena *arena, EVP_PKEY *key, String8 domain)
+{
+	X509_REQ *req = X509_REQ_new();
+	X509_REQ_set_version(req, 0);
+
+	X509_NAME *name = X509_REQ_get_subject_name(req);
+	X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char *)domain.str, (int)domain.size, -1, 0);
+
+	X509_REQ_set_pubkey(req, key);
+	X509_REQ_sign(req, key, 0);
+
+	BIO *bio = BIO_new(BIO_s_mem());
+	i2d_X509_REQ_bio(bio, req);
+
+	BUF_MEM *mem = 0;
+	BIO_get_mem_ptr(bio, &mem);
+
+	String8 csr_der = str8((u8 *)mem->data, mem->length);
+	String8 csr_b64 = base64url_encode(arena, csr_der);
+
+	BIO_free(bio);
+	X509_REQ_free(req);
+
+	return csr_b64;
+}
+
+internal u64
+acme_cert_days_until_expiry(Arena *arena, String8 cert_pem_path)
+{
+	Temp scratch = scratch_begin(&arena, 1);
+
+	OS_Handle file = os_file_open(OS_AccessFlag_Read, cert_pem_path);
+	if(os_handle_match(file, os_handle_zero()))
+	{
+		scratch_end(scratch);
+		return 0;
+	}
+
+	OS_FileProperties props = os_properties_from_file(file);
+	u8 *cert_pem_data = push_array(scratch.arena, u8, props.size);
+	String8 cert_pem = str8(cert_pem_data, props.size);
+	os_file_read(file, rng_1u64(0, props.size), cert_pem.str);
+	os_file_close(file);
+
+	BIO *bio = BIO_new_mem_buf(cert_pem.str, (int)cert_pem.size);
+	if(bio == 0)
+	{
+		scratch_end(scratch);
+		return 0;
+	}
+
+	X509 *cert = PEM_read_bio_X509(bio, 0, 0, 0);
+	BIO_free(bio);
+
+	if(cert == 0)
+	{
+		scratch_end(scratch);
+		return 0;
+	}
+
+	const ASN1_TIME *not_after = X509_get0_notAfter(cert);
+	if(not_after == 0)
+	{
+		X509_free(cert);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	ASN1_TIME *now = ASN1_TIME_new();
+	X509_gmtime_adj(now, 0);
+
+	int day_diff = 0;
+	int sec_diff = 0;
+	ASN1_TIME_diff(&day_diff, &sec_diff, now, not_after);
+
+	ASN1_TIME_free(now);
+	X509_free(cert);
+	scratch_end(scratch);
+
+	if(day_diff < 0)
+	{
+		return 0;
+	}
+
+	return (u64)day_diff;
+}

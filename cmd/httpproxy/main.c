@@ -16,8 +16,6 @@
 //~ Configuration Constants
 
 read_only global u64 max_request_size = MB(1);
-read_only global u64 max_header_size = KB(64);
-read_only global u64 request_timeout_ms = 30000;
 
 ////////////////////////////////
 //~ Backend Configuration
@@ -335,387 +333,613 @@ acme_account_key_alloc(Arena *arena, String8 key_path)
 }
 
 ////////////////////////////////
-//~ URL Parsing
-
-typedef struct URL_Parts URL_Parts;
-struct URL_Parts
-{
-	String8 host;
-	String8 path;
-	u16 port;
-};
-
-internal URL_Parts
-url_parse_https(String8 url)
-{
-	URL_Parts result = {0};
-	result.port = 443;
-
-	if(!str8_match(str8_prefix(url, 8), str8_lit("https://"), 0))
-	{
-		return result;
-	}
-
-	String8 remainder = str8_skip(url, 8);
-	u64 slash_pos = 0;
-	for(u64 i = 0; i < remainder.size; i += 1)
-	{
-		if(remainder.str[i] == '/')
-		{
-			slash_pos = i;
-			break;
-		}
-	}
-
-	if(slash_pos > 0)
-	{
-		result.host = str8_prefix(remainder, slash_pos);
-		result.path = str8_skip(remainder, slash_pos);
-	}
-	else
-	{
-		result.host = remainder;
-		result.path = str8_lit("/");
-	}
-
-	return result;
-}
-
-////////////////////////////////
-//~ ACME Client
-
-typedef struct ACME_Directory ACME_Directory;
-struct ACME_Directory
-{
-	String8 new_nonce_url;
-	String8 new_account_url;
-	String8 new_order_url;
-	String8 revoke_cert_url;
-	String8 key_change_url;
-};
-
-typedef struct ACME_Client ACME_Client;
-struct ACME_Client
-{
-	Arena *arena;
-	String8 directory_url;
-	ACME_Directory directory;
-	String8 account_url;
-	String8 nonce;
-	ACME_AccountKey *account_key;
-};
+//~ ACME Integration (uses acme/ layer)
 
 global ACME_Client *acme_client = 0;
 
-internal String8
-acme_https_request(Arena *arena, String8 host, u16 port, String8 method, String8 path, String8 body,
-                   String8 *out_location)
+////////////////////////////////
+//~ ACME Orchestration
+
+internal b32
+acme_provision_certificate(ACME_Client *client, String8 domain, EVP_PKEY *cert_key, String8 cert_output_path,
+                           String8 key_output_path)
 {
-	Temp scratch = scratch_begin(&arena, 1);
+	Temp scratch = scratch_begin(&client->arena, 1);
 
-	OS_Handle socket = os_socket_connect_tcp(host, port);
-	if(socket.u64[0] == 0)
+	log_infof("acme: starting certificate provisioning for %S\n", domain);
+
+	String8 order_url = acme_create_order(client, domain);
+	if(order_url.size == 0)
 	{
-		log_errorf("acme: failed to connect to %S:%u\n", host, port);
+		log_errorf("acme: failed to create order for %S\n", domain);
 		scratch_end(scratch);
-		return str8_zero();
+		return 0;
 	}
 
-	char host_buf[256];
-	if(host.size >= sizeof(host_buf))
+	String8 authz_url = acme_get_authorization_url(client, order_url);
+	if(authz_url.size == 0)
 	{
-		os_file_close(socket);
+		log_error(str8_lit("acme: failed to get authorization URL\n"));
 		scratch_end(scratch);
-		return str8_zero();
-	}
-	MemoryCopy(host_buf, host.str, host.size);
-	host_buf[host.size] = 0;
-
-	SSL *ssl = SSL_new(acme_client_ssl_ctx);
-	SSL_set_tlsext_host_name(ssl, host_buf);
-
-	int socket_fd = (int)socket.u64[0];
-	SSL_set_fd(ssl, socket_fd);
-
-	if(SSL_connect(ssl) <= 0)
-	{
-		log_errorf("acme: TLS handshake failed for %S\n", host);
-		ERR_print_errors_fp(stderr);
-		SSL_free(ssl);
-		os_file_close(socket);
-		scratch_end(scratch);
-		return str8_zero();
+		return 0;
 	}
 
-	String8 request_str;
-	if(body.size > 0)
+	ACME_ChallengeInfo challenge = acme_get_http01_challenge(client, authz_url);
+	if(challenge.token.size == 0 || challenge.url.size == 0)
 	{
-		request_str = str8f(scratch.arena,
-		                    "%S %S HTTP/1.1\r\n"
-		                    "Host: %S\r\n"
-		                    "Content-Type: application/jose+json\r\n"
-		                    "Content-Length: %llu\r\n"
-		                    "Connection: close\r\n"
-		                    "\r\n"
-		                    "%S",
-		                    method, path, host, body.size, body);
+		log_error(str8_lit("acme: failed to get http-01 challenge\n"));
+		scratch_end(scratch);
+		return 0;
+	}
+
+	String8 key_auth = acme_key_authorization(scratch.arena, client->account_key, challenge.token);
+	if(key_auth.size == 0)
+	{
+		log_error(str8_lit("acme: failed to compute key authorization\n"));
+		scratch_end(scratch);
+		return 0;
+	}
+
+	if(acme_challenges != 0)
+	{
+		acme_challenge_add(acme_challenges, challenge.token, key_auth);
+		log_infof("acme: stored challenge response for token %S\n", challenge.token);
 	}
 	else
 	{
-		request_str = str8f(scratch.arena,
-		                    "%S %S HTTP/1.1\r\n"
-		                    "Host: %S\r\n"
-		                    "Connection: close\r\n"
-		                    "\r\n",
-		                    method, path, host);
-	}
-
-	SSL_write(ssl, request_str.str, (int)request_str.size);
-
-	u8 buffer[KB(64)];
-	String8List response_parts = {0};
-	for(;;)
-	{
-		int bytes_read = SSL_read(ssl, buffer, sizeof(buffer));
-		if(bytes_read <= 0)
-		{
-			break;
-		}
-		str8_list_push(scratch.arena, &response_parts, str8(buffer, bytes_read));
-	}
-
-	String8 response = str8_list_join(scratch.arena, &response_parts, 0);
-
-	SSL_shutdown(ssl);
-	SSL_free(ssl);
-	os_file_close(socket);
-
-	String8 header_end = str8_lit("\r\n\r\n");
-	u64 header_end_pos = 0;
-	for(u64 i = 0; i + header_end.size <= response.size; i += 1)
-	{
-		if(MemoryMatch(response.str + i, header_end.str, header_end.size))
-		{
-			header_end_pos = i + header_end.size;
-			break;
-		}
-	}
-
-	if(header_end_pos == 0)
-	{
+		log_error(str8_lit("acme: challenge table not initialized\n"));
 		scratch_end(scratch);
-		return str8_zero();
+		return 0;
 	}
 
-	String8 headers = str8(response.str, header_end_pos - 4);
-	String8 body_response = str8(response.str + header_end_pos, response.size - header_end_pos);
-
-	if(out_location != 0)
+	if(!acme_notify_challenge_ready(client, challenge.url))
 	{
-		String8 location_prefix = str8_lit("Location: ");
-		for(u64 i = 0; i + location_prefix.size < headers.size; i += 1)
+		log_error(str8_lit("acme: failed to notify challenge ready\n"));
+		if(acme_challenges != 0)
 		{
-			if(MemoryMatch(headers.str + i, location_prefix.str, location_prefix.size))
+			acme_challenge_remove(acme_challenges, challenge.token);
+		}
+		scratch_end(scratch);
+		return 0;
+	}
+
+	log_info(str8_lit("acme: polling challenge status...\n"));
+	b32 challenge_valid = acme_poll_challenge_status(client, challenge.url, 30, 2000);
+
+	if(acme_challenges != 0)
+	{
+		acme_challenge_remove(acme_challenges, challenge.token);
+	}
+
+	if(!challenge_valid)
+	{
+		log_error(str8_lit("acme: challenge validation failed\n"));
+		scratch_end(scratch);
+		return 0;
+	}
+
+	log_info(str8_lit("acme: challenge validated successfully\n"));
+
+	String8 finalize_result = acme_finalize_order(client, order_url, cert_key, domain);
+	if(finalize_result.size == 0)
+	{
+		log_error(str8_lit("acme: failed to finalize order\n"));
+		scratch_end(scratch);
+		return 0;
+	}
+
+	log_info(str8_lit("acme: polling order status...\n"));
+	if(!acme_poll_order_status(client, order_url, 30, 2000))
+	{
+		log_error(str8_lit("acme: order validation failed\n"));
+		scratch_end(scratch);
+		return 0;
+	}
+
+	String8 cert_pem = acme_download_certificate(client, order_url);
+	if(cert_pem.size == 0)
+	{
+		log_error(str8_lit("acme: failed to download certificate\n"));
+		scratch_end(scratch);
+		return 0;
+	}
+
+	log_infof("acme: saving certificate to %S\n", cert_output_path);
+	OS_Handle cert_file = os_file_open(OS_AccessFlag_Write, cert_output_path);
+	if(os_handle_match(cert_file, os_handle_zero()))
+	{
+		log_errorf("acme: failed to open certificate file %S\n", cert_output_path);
+		scratch_end(scratch);
+		return 0;
+	}
+	os_file_write(cert_file, rng_1u64(0, cert_pem.size), cert_pem.str);
+	os_file_close(cert_file);
+
+	log_infof("acme: saving private key to %S\n", key_output_path);
+	BIO *key_bio = BIO_new(BIO_s_mem());
+	PEM_write_bio_PrivateKey(key_bio, cert_key, 0, 0, 0, 0, 0);
+	BUF_MEM *key_mem = 0;
+	BIO_get_mem_ptr(key_bio, &key_mem);
+
+	OS_Handle key_file = os_file_open(OS_AccessFlag_Write, key_output_path);
+	if(os_handle_match(key_file, os_handle_zero()))
+	{
+		log_errorf("acme: failed to open key file %S\n", key_output_path);
+		BIO_free(key_bio);
+		scratch_end(scratch);
+		return 0;
+	}
+	os_file_write(key_file, rng_1u64(0, key_mem->length), key_mem->data);
+	os_file_close(key_file);
+	BIO_free(key_bio);
+
+	log_infof("acme: certificate provisioning complete for %S\n", domain);
+
+	if(tls_context != 0 && tls_context->ssl_ctx != 0)
+	{
+		log_info(str8_lit("acme: reloading TLS context with new certificate\n"));
+
+		char cert_buf[4096];
+		char key_buf[4096];
+
+		if(cert_output_path.size >= sizeof(cert_buf) || key_output_path.size >= sizeof(key_buf))
+		{
+			log_error(str8_lit("acme: certificate or key path too long for reload\n"));
+			scratch_end(scratch);
+			return 1;
+		}
+
+		MemoryCopy(cert_buf, cert_output_path.str, cert_output_path.size);
+		cert_buf[cert_output_path.size] = 0;
+		MemoryCopy(key_buf, key_output_path.str, key_output_path.size);
+		key_buf[key_output_path.size] = 0;
+
+		SSL_CTX *new_ctx = SSL_CTX_new(TLS_server_method());
+		if(new_ctx == 0)
+		{
+			log_error(str8_lit("acme: failed to create new SSL context\n"));
+			scratch_end(scratch);
+			return 1;
+		}
+
+		SSL_CTX_set_min_proto_version(new_ctx, TLS1_3_VERSION);
+
+		if(SSL_CTX_use_certificate_chain_file(new_ctx, cert_buf) <= 0)
+		{
+			log_errorf("acme: failed to load new certificate from %S\n", cert_output_path);
+			ERR_print_errors_fp(stderr);
+			SSL_CTX_free(new_ctx);
+			scratch_end(scratch);
+			return 1;
+		}
+
+		if(SSL_CTX_use_PrivateKey_file(new_ctx, key_buf, SSL_FILETYPE_PEM) <= 0)
+		{
+			log_errorf("acme: failed to load new private key from %S\n", key_output_path);
+			ERR_print_errors_fp(stderr);
+			SSL_CTX_free(new_ctx);
+			scratch_end(scratch);
+			return 1;
+		}
+
+		if(!SSL_CTX_check_private_key(new_ctx))
+		{
+			log_error(str8_lit("acme: new private key does not match certificate\n"));
+			SSL_CTX_free(new_ctx);
+			scratch_end(scratch);
+			return 1;
+		}
+
+		SSL_CTX *old_ctx = tls_context->ssl_ctx;
+		tls_context->ssl_ctx = new_ctx;
+		tls_context->cert_path = str8_copy(tls_context->arena, cert_output_path);
+		tls_context->key_path = str8_copy(tls_context->arena, key_output_path);
+
+		if(old_ctx != 0)
+		{
+			SSL_CTX_free(old_ctx);
+		}
+
+		log_info(str8_lit("acme: TLS context reloaded successfully\n"));
+	}
+
+	scratch_end(scratch);
+	return 1;
+}
+
+////////////////////////////////
+//~ ACME Certificate Renewal
+
+typedef struct ACME_RenewalConfig ACME_RenewalConfig;
+struct ACME_RenewalConfig
+{
+	Arena *arena;
+	String8 domain;
+	String8 cert_path;
+	String8 key_path;
+	u64 renew_days_before_expiry;
+	b32 is_live;
+};
+
+global ACME_RenewalConfig *renewal_config = 0;
+
+internal void
+acme_renewal_thread(void *ptr)
+{
+	ACME_RenewalConfig *config = (ACME_RenewalConfig *)ptr;
+	Temp scratch = scratch_begin(0, 0);
+	Log *log = log_alloc();
+	log_select(log);
+	log_scope_begin();
+
+	log_info(str8_lit("acme: renewal thread started\n"));
+
+	if(acme_client != 0 && config->cert_path.size > 0)
+	{
+		OS_Handle cert_file = os_file_open(OS_AccessFlag_Read, config->cert_path);
+		if(!os_handle_match(cert_file, os_handle_zero()))
+		{
+			os_file_close(cert_file);
+			log_infof("acme: found existing certificate at %S\n", config->cert_path);
+		}
+		else
+		{
+			log_infof("acme: no certificate found at %S, provisioning new certificate\n", config->cert_path);
+			EVP_PKEY *cert_key = acme_generate_cert_key();
+			if(cert_key != 0)
 			{
-				u64 start = i + location_prefix.size;
-				u64 end = start;
-				for(; end < headers.size && headers.str[end] != '\r' && headers.str[end] != '\n'; end += 1)
-					;
-				*out_location = str8_copy(arena, str8(headers.str + start, end - start));
-				break;
+				b32 success =
+				    acme_provision_certificate(acme_client, config->domain, cert_key, config->cert_path, config->key_path);
+
+				if(success)
+				{
+					log_info(str8_lit("acme: initial certificate provisioning complete\n"));
+				}
+				else
+				{
+					log_error(str8_lit("acme: initial certificate provisioning failed\n"));
+					EVP_PKEY_free(cert_key);
+				}
+			}
+			else
+			{
+				log_error(str8_lit("acme: failed to generate certificate key for initial provisioning\n"));
 			}
 		}
 	}
 
-	String8 result = str8_copy(arena, body_response);
+	LogScopeResult result = log_scope_end(scratch.arena);
+	if(result.strings[LogMsgKind_Info].size > 0)
+	{
+		fwrite(result.strings[LogMsgKind_Info].str, 1, result.strings[LogMsgKind_Info].size, stdout);
+		fflush(stdout);
+	}
+	if(result.strings[LogMsgKind_Error].size > 0)
+	{
+		fwrite(result.strings[LogMsgKind_Error].str, 1, result.strings[LogMsgKind_Error].size, stderr);
+		fflush(stderr);
+	}
+
+	log_release(log);
 	scratch_end(scratch);
-	return result;
+
+	for(;;)
+	{
+		os_sleep_milliseconds(24 * 60 * 60 * 1000);
+
+		if(!config->is_live)
+		{
+			break;
+		}
+
+		if(acme_client == 0 || config->cert_path.size == 0)
+		{
+			continue;
+		}
+
+		Temp renewal_scratch = scratch_begin(0, 0);
+		Log *renewal_log = log_alloc();
+		log_select(renewal_log);
+		log_scope_begin();
+
+		u64 days_left = acme_cert_days_until_expiry(config->arena, config->cert_path);
+		log_infof("acme: certificate expires in %u days\n", days_left);
+
+		b32 should_renew = 0;
+		if(days_left == 0)
+		{
+			log_error(str8_lit("acme: certificate has expired, attempting renewal\n"));
+			should_renew = 1;
+		}
+		else if(days_left <= config->renew_days_before_expiry)
+		{
+			log_infof("acme: renewing certificate (%u days until expiry)\n", days_left);
+			should_renew = 1;
+		}
+
+		if(should_renew)
+		{
+			EVP_PKEY *cert_key = acme_generate_cert_key();
+			if(cert_key == 0)
+			{
+				log_error(str8_lit("acme: failed to generate certificate key for renewal\n"));
+
+				LogScopeResult renewal_result = log_scope_end(renewal_scratch.arena);
+				if(renewal_result.strings[LogMsgKind_Info].size > 0)
+				{
+					fwrite(renewal_result.strings[LogMsgKind_Info].str, 1, renewal_result.strings[LogMsgKind_Info].size, stdout);
+					fflush(stdout);
+				}
+				if(renewal_result.strings[LogMsgKind_Error].size > 0)
+				{
+					fwrite(renewal_result.strings[LogMsgKind_Error].str, 1, renewal_result.strings[LogMsgKind_Error].size,
+					       stderr);
+					fflush(stderr);
+				}
+
+				log_release(renewal_log);
+				scratch_end(renewal_scratch);
+				continue;
+			}
+
+			b32 success =
+			    acme_provision_certificate(acme_client, config->domain, cert_key, config->cert_path, config->key_path);
+
+			if(success)
+			{
+				log_info(str8_lit("acme: certificate renewed successfully\n"));
+			}
+			else
+			{
+				log_error(str8_lit("acme: certificate renewal failed\n"));
+				EVP_PKEY_free(cert_key);
+			}
+		}
+
+		LogScopeResult renewal_result = log_scope_end(renewal_scratch.arena);
+		if(renewal_result.strings[LogMsgKind_Info].size > 0)
+		{
+			fwrite(renewal_result.strings[LogMsgKind_Info].str, 1, renewal_result.strings[LogMsgKind_Info].size, stdout);
+			fflush(stdout);
+		}
+		if(renewal_result.strings[LogMsgKind_Error].size > 0)
+		{
+			fwrite(renewal_result.strings[LogMsgKind_Error].str, 1, renewal_result.strings[LogMsgKind_Error].size, stderr);
+			fflush(stderr);
+		}
+
+		log_release(renewal_log);
+		scratch_end(renewal_scratch);
+	}
+
+	fprintf(stdout, "acme: renewal thread stopped\n");
+	fflush(stdout);
 }
 
-internal String8
-acme_get_nonce(ACME_Client *client)
-{
-	Temp scratch = scratch_begin(&client->arena, 1);
-	URL_Parts url = url_parse_https(client->directory.new_nonce_url);
-	String8 response = acme_https_request(scratch.arena, url.host, url.port, str8_lit("HEAD"), url.path, str8_zero(), 0);
-	String8 nonce = str8_copy(client->arena, str8_lit("dummy_nonce_for_testing"));
-	scratch_end(scratch);
-	return nonce;
-}
-
-internal ACME_Client *
-acme_client_alloc(Arena *arena, String8 directory_url, ACME_AccountKey *account_key)
-{
-	Temp scratch = scratch_begin(&arena, 1);
-
-	ACME_Client *client = push_array(arena, ACME_Client, 1);
-	client->arena = arena;
-	client->directory_url = str8_copy(arena, directory_url);
-	client->account_key = account_key;
-
-	URL_Parts url = url_parse_https(directory_url);
-
-	String8 directory_json =
-	    acme_https_request(scratch.arena, url.host, url.port, str8_lit("GET"), url.path, str8_zero(), 0);
-	if(directory_json.size == 0)
-	{
-		log_error(str8_lit("acme: failed to fetch directory\n"));
-		scratch_end(scratch);
-		return 0;
-	}
-
-	JSON_Value *directory = json_parse(scratch.arena, directory_json);
-	if(directory == 0 || directory->kind != JSON_ValueKind_Object)
-	{
-		log_error(str8_lit("acme: failed to parse directory JSON\n"));
-		scratch_end(scratch);
-		return 0;
-	}
-
-	JSON_Value *new_nonce = json_object_get(directory, str8_lit("newNonce"));
-	JSON_Value *new_account = json_object_get(directory, str8_lit("newAccount"));
-	JSON_Value *new_order = json_object_get(directory, str8_lit("newOrder"));
-
-	if(new_nonce == 0 || new_account == 0 || new_order == 0)
-	{
-		log_error(str8_lit("acme: directory missing required URLs\n"));
-		scratch_end(scratch);
-		return 0;
-	}
-
-	client->directory.new_nonce_url = str8_copy(arena, new_nonce->string);
-	client->directory.new_account_url = str8_copy(arena, new_account->string);
-	client->directory.new_order_url = str8_copy(arena, new_order->string);
-
-	JSON_Value *revoke_cert = json_object_get(directory, str8_lit("revokeCert"));
-	JSON_Value *key_change = json_object_get(directory, str8_lit("keyChange"));
-	if(revoke_cert != 0)
-	{
-		client->directory.revoke_cert_url = str8_copy(arena, revoke_cert->string);
-	}
-	if(key_change != 0)
-	{
-		client->directory.key_change_url = str8_copy(arena, key_change->string);
-	}
-
-	client->nonce = acme_get_nonce(client);
-
-	scratch_end(scratch);
-	return client;
-}
-
-internal String8
-acme_generate_csr(Arena *arena, String8 domain)
-{
-	Temp scratch = scratch_begin(&arena, 1);
-
-	EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, 0);
-	if(ctx == 0)
-	{
-		log_error(str8_lit("acme: failed to create EVP_PKEY_CTX for CSR\n"));
-		scratch_end(scratch);
-		return str8_zero();
-	}
-
-	if(EVP_PKEY_keygen_init(ctx) <= 0)
-	{
-		log_error(str8_lit("acme: failed to initialize key generation for CSR\n"));
-		EVP_PKEY_CTX_free(ctx);
-		scratch_end(scratch);
-		return str8_zero();
-	}
-
-	EVP_PKEY *cert_key = 0;
-	if(EVP_PKEY_keygen(ctx, &cert_key) <= 0)
-	{
-		log_error(str8_lit("acme: failed to generate certificate key\n"));
-		EVP_PKEY_CTX_free(ctx);
-		scratch_end(scratch);
-		return str8_zero();
-	}
-
-	EVP_PKEY_CTX_free(ctx);
-
-	X509_REQ *req = X509_REQ_new();
-	if(req == 0)
-	{
-		log_error(str8_lit("acme: failed to create X509_REQ\n"));
-		EVP_PKEY_free(cert_key);
-		scratch_end(scratch);
-		return str8_zero();
-	}
-
-	X509_REQ_set_version(req, 0);
-
-	X509_NAME *name = X509_REQ_get_subject_name(req);
-	char domain_buf[256];
-	if(domain.size >= sizeof(domain_buf))
-	{
-		log_error(str8_lit("acme: domain name too long for CSR\n"));
-		X509_REQ_free(req);
-		EVP_PKEY_free(cert_key);
-		scratch_end(scratch);
-		return str8_zero();
-	}
-	MemoryCopy(domain_buf, domain.str, domain.size);
-	domain_buf[domain.size] = 0;
-	X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char *)domain_buf, -1, -1, 0);
-	X509_REQ_set_pubkey(req, cert_key);
-	X509_REQ_sign(req, cert_key, 0);
-
-	BIO *bio = BIO_new(BIO_s_mem());
-	i2d_X509_REQ_bio(bio, req);
-	BUF_MEM *mem = 0;
-	BIO_get_mem_ptr(bio, &mem);
-	String8 csr_der = str8_copy(arena, str8((u8 *)mem->data, mem->length));
-
-	BIO_free(bio);
-	X509_REQ_free(req);
-	EVP_PKEY_free(cert_key);
-
-	scratch_end(scratch);
-	return csr_der;
-}
+////////////////////////////////
+//~ ACME Challenge Handler
 
 internal b32
-acme_create_account(ACME_Client *client, String8 email)
+handle_acme_challenge(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket)
 {
-	Temp scratch = scratch_begin(&client->arena, 1);
-
-	JSON_Value *jwk = acme_jwk_from_key(scratch.arena, client->account_key->pkey);
-
-	JSON_Value *protected = json_object_alloc(scratch.arena);
-	json_object_add(scratch.arena, protected, str8_lit("alg"), json_value_from_string(scratch.arena, str8_lit("EdDSA")));
-	json_object_add(scratch.arena, protected, str8_lit("jwk"), jwk);
-	json_object_add(scratch.arena, protected, str8_lit("nonce"), json_value_from_string(scratch.arena, client->nonce));
-	json_object_add(scratch.arena, protected, str8_lit("url"),
-	                json_value_from_string(scratch.arena, client->directory.new_account_url));
-
-	JSON_Value *payload_obj = json_object_alloc(scratch.arena);
-	json_object_add(scratch.arena, payload_obj, str8_lit("termsOfServiceAgreed"), json_value_from_bool(scratch.arena, 1));
-
-	JSON_Value *contact_array = json_array_alloc(scratch.arena, 1);
-	String8 mailto = str8f(scratch.arena, "mailto:%S", email);
-	json_array_add(contact_array, json_value_from_string(scratch.arena, mailto));
-	json_object_add(scratch.arena, payload_obj, str8_lit("contact"), contact_array);
-
-	String8 payload_json = json_serialize(scratch.arena, payload_obj);
-	String8 jws = acme_jws_sign(scratch.arena, client->account_key->pkey, protected, payload_json);
-	URL_Parts url = url_parse_https(client->directory.new_account_url);
-	String8 location = str8_zero();
-	String8 response = acme_https_request(client->arena, url.host, url.port, str8_lit("POST"), url.path, jws, &location);
-
-	if(location.size > 0)
+	String8 acme_prefix = str8_lit("/.well-known/acme-challenge/");
+	if(req->path.size <= acme_prefix.size)
 	{
-		client->account_url = location;
-		log_infof("acme: created account at %S\n", location);
+		return 0;
+	}
+
+	String8 path_prefix = str8_prefix(req->path, acme_prefix.size);
+	if(!str8_match(path_prefix, acme_prefix, 0))
+	{
+		return 0;
+	}
+
+	String8 token = str8_skip(req->path, acme_prefix.size);
+	if(token.size == 0)
+	{
+		return 0;
+	}
+
+	if(acme_challenges == 0)
+	{
+		return 0;
+	}
+
+	String8 key_auth = acme_challenge_lookup(acme_challenges, token);
+	if(key_auth.size == 0)
+	{
+		Temp scratch = scratch_begin(0, 0);
+		HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_404_NotFound);
+		http_header_add(scratch.arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/plain"));
+		http_header_add(scratch.arena, &res->headers, str8_lit("Connection"), str8_lit("close"));
+		res->body = str8_lit("Challenge not found");
+		String8 content_length = str8_from_u64(scratch.arena, res->body.size, 10, 0, 0);
+		http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), content_length);
+		String8 response_data = http_response_serialize(scratch.arena, res);
+
+		if(client_ssl != 0)
+		{
+			for(u64 written = 0; written < response_data.size;)
+			{
+				int result = SSL_write(client_ssl, response_data.str + written, (int)(response_data.size - written));
+				if(result <= 0)
+				{
+					break;
+				}
+				written += result;
+			}
+		}
+		else
+		{
+			int fd = (int)client_socket.u64[0];
+			for(u64 written = 0; written < response_data.size;)
+			{
+				ssize_t result = write(fd, response_data.str + written, response_data.size - written);
+				if(result <= 0)
+				{
+					break;
+				}
+				written += result;
+			}
+		}
+
 		scratch_end(scratch);
 		return 1;
 	}
 
-	log_errorf("acme: failed to create account: %S\n", response);
+	Temp scratch = scratch_begin(0, 0);
+	HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_200_OK);
+	http_header_add(scratch.arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/plain"));
+	res->body = key_auth;
+
+	String8 content_length = str8_from_u64(scratch.arena, key_auth.size, 10, 0, 0);
+	http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), content_length);
+
+	String8 response_data = http_response_serialize(scratch.arena, res);
+
+	if(client_ssl != 0)
+	{
+		for(u64 written = 0; written < response_data.size;)
+		{
+			int result = SSL_write(client_ssl, response_data.str + written, (int)(response_data.size - written));
+			if(result <= 0)
+			{
+				break;
+			}
+			written += result;
+		}
+	}
+	else
+	{
+		int fd = (int)client_socket.u64[0];
+		for(u64 written = 0; written < response_data.size;)
+		{
+			ssize_t result = write(fd, response_data.str + written, response_data.size - written);
+			if(result <= 0)
+			{
+				break;
+			}
+			written += result;
+		}
+	}
+
 	scratch_end(scratch);
-	return 0;
+	return 1;
+}
+
+////////////////////////////////
+//~ HTTP Port 80 Handler (ACME challenges + HTTPS redirect)
+
+typedef struct HTTP80_Config HTTP80_Config;
+struct HTTP80_Config
+{
+	String8 domain;
+	b32 is_live;
+};
+
+global HTTP80_Config *http80_config = 0;
+
+internal void
+http80_handler_thread(void *ptr)
+{
+	HTTP80_Config *config = (HTTP80_Config *)ptr;
+	Temp scratch = scratch_begin(0, 0);
+	Log *log = log_alloc();
+	log_select(log);
+	log_scope_begin();
+
+	log_info(str8_lit("http80: handler thread started\n"));
+
+	OS_Handle listen_socket = os_socket_listen_tcp(80);
+	if(os_handle_match(listen_socket, os_handle_zero()))
+	{
+		log_error(str8_lit("http80: failed to listen on port 80\n"));
+
+		LogScopeResult result = log_scope_end(scratch.arena);
+		if(result.strings[LogMsgKind_Error].size > 0)
+		{
+			fwrite(result.strings[LogMsgKind_Error].str, 1, result.strings[LogMsgKind_Error].size, stderr);
+			fflush(stderr);
+		}
+
+		log_release(log);
+		scratch_end(scratch);
+		return;
+	}
+
+	log_info(str8_lit("http80: listening on port 80 for ACME challenges and redirects\n"));
+
+	LogScopeResult result = log_scope_end(scratch.arena);
+	if(result.strings[LogMsgKind_Info].size > 0)
+	{
+		fwrite(result.strings[LogMsgKind_Info].str, 1, result.strings[LogMsgKind_Info].size, stdout);
+		fflush(stdout);
+	}
+
+	log_release(log);
+	scratch_end(scratch);
+
+	for(;;)
+	{
+		if(!config->is_live)
+		{
+			break;
+		}
+
+		OS_Handle client_socket = os_socket_accept(listen_socket);
+		if(os_handle_match(client_socket, os_handle_zero()))
+		{
+			continue;
+		}
+
+		Temp scratch = scratch_begin(0, 0);
+
+		u8 buffer[KB(16)];
+		int client_fd = (int)client_socket.u64[0];
+		ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer));
+
+		if(bytes_read > 0)
+		{
+			String8 request_data = str8(buffer, (u64)bytes_read);
+			HTTP_Request *req = http_request_parse(scratch.arena, request_data);
+
+			if(req != 0)
+			{
+				if(handle_acme_challenge(req, 0, client_socket))
+				{
+					os_file_close(client_socket);
+					scratch_end(scratch);
+					continue;
+				}
+
+				String8 redirect_location = str8f(scratch.arena, "https://%S%S", config->domain, req->path);
+				String8 response = str8f(scratch.arena,
+				                         "HTTP/1.1 301 Moved Permanently\r\n"
+				                         "Location: %S\r\n"
+				                         "Content-Length: 0\r\n"
+				                         "Connection: close\r\n"
+				                         "\r\n",
+				                         redirect_location);
+
+				for(u64 written = 0; written < response.size;)
+				{
+					ssize_t result = write(client_fd, response.str + written, response.size - written);
+					if(result <= 0)
+					{
+						break;
+					}
+					written += result;
+				}
+			}
+		}
+
+		os_file_close(client_socket);
+		scratch_end(scratch);
+	}
+
+	os_file_close(listen_socket);
+	fprintf(stdout, "http80: handler thread stopped\n");
+	fflush(stdout);
 }
 
 ////////////////////////////////
@@ -847,6 +1071,11 @@ internal void
 send_error_response(SSL *ssl, OS_Handle socket, HTTP_Status status, String8 message)
 {
 	Temp scratch = scratch_begin(0, 0);
+
+	DateTime now = os_now_universal_time();
+	String8 timestamp = str8_from_datetime(scratch.arena, now);
+	log_infof("[%S] httpproxy: error response %u %S\n", timestamp, (u32)status, message.size > 0 ? message : str8_zero());
+
 	HTTP_Response *res = http_response_alloc(scratch.arena, status);
 	http_header_add(scratch.arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/plain"));
 	http_header_add(scratch.arena, &res->headers, str8_lit("Connection"), str8_lit("close"));
@@ -966,79 +1195,6 @@ proxy_to_backend(HTTP_Request *req, Backend *backend, SSL *client_ssl, OS_Handle
 	scratch_end(scratch);
 }
 
-internal b32
-handle_acme_challenge(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket)
-{
-	String8 acme_prefix = str8_lit("/.well-known/acme-challenge/");
-	if(req->path.size <= acme_prefix.size)
-	{
-		return 0;
-	}
-
-	String8 path_prefix = str8_prefix(req->path, acme_prefix.size);
-	if(!str8_match(path_prefix, acme_prefix, 0))
-	{
-		return 0;
-	}
-
-	String8 token = str8_skip(req->path, acme_prefix.size);
-	if(token.size == 0)
-	{
-		return 0;
-	}
-
-	if(acme_challenges == 0)
-	{
-		return 0;
-	}
-
-	String8 key_auth = acme_challenge_lookup(acme_challenges, token);
-	if(key_auth.size == 0)
-	{
-		send_error_response(client_ssl, client_socket, HTTP_Status_404_NotFound, str8_lit("Challenge not found"));
-		return 1;
-	}
-
-	Temp scratch = scratch_begin(0, 0);
-	HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_200_OK);
-	http_header_add(scratch.arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/plain"));
-	res->body = key_auth;
-
-	String8 content_length = str8_from_u64(scratch.arena, key_auth.size, 10, 0, 0);
-	http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), content_length);
-
-	String8 response_data = http_response_serialize(scratch.arena, res);
-
-	if(client_ssl != 0)
-	{
-		for(u64 written = 0; written < response_data.size;)
-		{
-			int result = SSL_write(client_ssl, response_data.str + written, (int)(response_data.size - written));
-			if(result <= 0)
-			{
-				break;
-			}
-			written += result;
-		}
-	}
-	else
-	{
-		int fd = (int)client_socket.u64[0];
-		for(u64 written = 0; written < response_data.size;)
-		{
-			ssize_t result = write(fd, response_data.str + written, response_data.size - written);
-			if(result <= 0)
-			{
-				break;
-			}
-			written += result;
-		}
-	}
-
-	scratch_end(scratch);
-	return 1;
-}
-
 internal void
 handle_http_request(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket, ProxyConfig *config)
 {
@@ -1046,6 +1202,9 @@ handle_http_request(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket,
 
 	if(handle_acme_challenge(req, client_ssl, client_socket))
 	{
+		DateTime now = os_now_universal_time();
+		String8 timestamp = str8_from_datetime(scratch.arena, now);
+		log_infof("[%S] httpproxy: served ACME challenge\n", timestamp);
 		scratch_end(scratch);
 		return;
 	}
@@ -1053,13 +1212,24 @@ handle_http_request(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket,
 	Backend *backend = find_backend_for_path(config, req->path);
 	if(backend == 0)
 	{
+		DateTime now = os_now_universal_time();
+		String8 timestamp = str8_from_datetime(scratch.arena, now);
+		log_infof("[%S] httpproxy: no backend for path %S\n", timestamp, req->path);
 		send_error_response(client_ssl, client_socket, HTTP_Status_404_NotFound,
 		                    str8_lit("No backend configured for this path"));
 		scratch_end(scratch);
 		return;
 	}
 
+	u64 proxy_start_us = os_now_microseconds();
+	log_infof("httpproxy: proxy to %S:%u\n", backend->backend_host, backend->backend_port);
+
 	proxy_to_backend(req, backend, client_ssl, client_socket);
+
+	u64 proxy_end_us = os_now_microseconds();
+	u64 duration_us = proxy_end_us - proxy_start_us;
+	log_infof("httpproxy: proxy complete (%u μs)\n", duration_us);
+
 	scratch_end(scratch);
 }
 
@@ -1079,9 +1249,35 @@ handle_connection(OS_Handle connection_socket)
 	SSL *ssl = 0;
 	b32 should_process_request = 1;
 
+	struct sockaddr_storage client_addr_storage;
+	socklen_t client_addr_len = sizeof(client_addr_storage);
+	String8 client_ip = str8_lit("unknown");
+	u16 client_port = 0;
+
+	if(getpeername(client_fd, (struct sockaddr *)&client_addr_storage, &client_addr_len) == 0)
+	{
+		if(client_addr_storage.ss_family == AF_INET)
+		{
+			struct sockaddr_in *addr_in = (struct sockaddr_in *)&client_addr_storage;
+			u8 *ip_bytes = (u8 *)&addr_in->sin_addr.s_addr;
+			client_ip = str8f(scratch.arena, "%u.%u.%u.%u", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
+			client_port = ntohs(addr_in->sin_port);
+		}
+		else if(client_addr_storage.ss_family == AF_INET6)
+		{
+			struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *)&client_addr_storage;
+			u8 *ip_bytes = addr_in6->sin6_addr.s6_addr;
+			client_ip =
+			    str8f(scratch.arena, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x", ip_bytes[0],
+			          ip_bytes[1], ip_bytes[2], ip_bytes[3], ip_bytes[4], ip_bytes[5], ip_bytes[6], ip_bytes[7], ip_bytes[8],
+			          ip_bytes[9], ip_bytes[10], ip_bytes[11], ip_bytes[12], ip_bytes[13], ip_bytes[14], ip_bytes[15]);
+			client_port = ntohs(addr_in6->sin6_port);
+		}
+	}
+
 	DateTime now = os_now_universal_time();
 	String8 timestamp = str8_from_datetime(scratch.arena, now);
-	log_infof("[%S] httpproxy: connection established\n", timestamp);
+	log_infof("[%S] httpproxy: connection from %S:%u\n", timestamp, client_ip, client_port);
 
 	if(tls_context != 0 && tls_context->enabled)
 	{
@@ -1140,7 +1336,15 @@ handle_connection(OS_Handle connection_socket)
 
 				if(req->method != HTTP_Method_Unknown && req->path.size > 0)
 				{
-					log_infof("[%S] httpproxy: %S %S\n", timestamp, str8_from_http_method(req->method), req->path);
+					String8 user_agent = http_header_get(&req->headers, str8_lit("User-Agent"));
+					String8 referer = http_header_get(&req->headers, str8_lit("Referer"));
+					log_infof("[%S] %S:%u %S %S%S%S%S%S%S%S\n", timestamp, client_ip, client_port,
+					          str8_from_http_method(req->method), req->path,
+					          user_agent.size > 0 ? str8_lit(" UA=\"") : str8_zero(),
+					          user_agent.size > 0 ? user_agent : str8_zero(), user_agent.size > 0 ? str8_lit("\"") : str8_zero(),
+					          referer.size > 0 ? str8_lit(" Referer=\"") : str8_zero(), referer.size > 0 ? referer : str8_zero(),
+					          referer.size > 0 ? str8_lit("\"") : str8_zero());
+
 					handle_http_request(req, ssl, connection_socket, proxy_config);
 				}
 				else
@@ -1265,8 +1469,15 @@ entry_point(CmdLine *cmd_line)
 		worker_count = u64_from_str8(threads_str, 10);
 	}
 
+	String8 acme_domain = cmd_line_string(cmd_line, str8_lit("acme-domain"));
+	b32 acme_enabled = (acme_domain.size > 0);
+
 	String8 port_str = cmd_line_string(cmd_line, str8_lit("port"));
 	u16 listen_port = 8080;
+	if(acme_enabled)
+	{
+		listen_port = 443;
+	}
 	if(port_str.size > 0)
 	{
 		listen_port = (u16)u64_from_str8(port_str, 10);
@@ -1280,15 +1491,6 @@ entry_point(CmdLine *cmd_line)
 	acme_challenges = acme_challenge_table_alloc(arena);
 	fprintf(stdout, "httpproxy: ACME challenge handler initialized\n");
 	fflush(stdout);
-
-	if(cmd_line_has_flag(cmd_line, str8_lit("test-acme")))
-	{
-		String8 test_token = str8_lit("test-token-12345");
-		String8 test_key_auth = str8_lit("test-key-authorization-67890");
-		acme_challenge_add(acme_challenges, test_token, test_key_auth);
-		fprintf(stdout, "httpproxy: Added test ACME challenge (token: %.*s)\n", (int)test_token.size, test_token.str);
-		fflush(stdout);
-	}
 
 	String8 cert_path = cmd_line_string(cmd_line, str8_lit("cert"));
 	String8 key_path = cmd_line_string(cmd_line, str8_lit("key"));
@@ -1310,6 +1512,76 @@ entry_point(CmdLine *cmd_line)
 			scratch_end(scratch);
 			return;
 		}
+	}
+
+	String8 acme_cert_path = cmd_line_string(cmd_line, str8_lit("acme-cert"));
+	String8 acme_key_path = cmd_line_string(cmd_line, str8_lit("acme-key"));
+	String8 acme_account_key_path = cmd_line_string(cmd_line, str8_lit("acme-account-key"));
+	String8 acme_directory = cmd_line_string(cmd_line, str8_lit("acme-directory"));
+
+	if(acme_enabled)
+	{
+		if(acme_cert_path.size == 0)
+		{
+			acme_cert_path = str8_lit("/var/lib/httpproxy/cert.pem");
+		}
+		if(acme_key_path.size == 0)
+		{
+			acme_key_path = str8_lit("/var/lib/httpproxy/key.pem");
+		}
+		if(acme_account_key_path.size == 0)
+		{
+			acme_account_key_path = str8_lit("/var/lib/httpproxy/acme-account.key");
+		}
+		if(acme_directory.size == 0)
+		{
+			acme_directory = str8_lit("https://acme-v02.api.letsencrypt.org/directory");
+		}
+
+		fprintf(stdout, "httpproxy: ACME enabled for domain %.*s\n", (int)acme_domain.size, acme_domain.str);
+		fflush(stdout);
+
+		acme_account_key = acme_account_key_alloc(arena, acme_account_key_path);
+		if(acme_account_key == 0 || acme_account_key->pkey == 0)
+		{
+			fprintf(stderr, "httpproxy: failed to load or generate ACME account key\n");
+			fflush(stderr);
+			arena_release(arena);
+			scratch_end(scratch);
+			return;
+		}
+
+		acme_client = acme_client_alloc(arena, acme_client_ssl_ctx, acme_directory, acme_account_key->pkey);
+		if(acme_client == 0)
+		{
+			fprintf(stderr, "httpproxy: failed to initialize ACME client\n");
+			fflush(stderr);
+			arena_release(arena);
+			scratch_end(scratch);
+			return;
+		}
+
+		fprintf(stdout, "httpproxy: ACME client initialized (directory: %.*s)\n", (int)acme_directory.size,
+		        acme_directory.str);
+		fflush(stdout);
+
+		renewal_config = push_array(arena, ACME_RenewalConfig, 1);
+		renewal_config->arena = arena;
+		renewal_config->domain = str8_copy(arena, acme_domain);
+		renewal_config->cert_path = str8_copy(arena, acme_cert_path);
+		renewal_config->key_path = str8_copy(arena, acme_key_path);
+		renewal_config->renew_days_before_expiry = 30;
+		renewal_config->is_live = 1;
+
+		Thread renewal_thread = thread_launch(acme_renewal_thread, renewal_config);
+		thread_detach(renewal_thread);
+
+		http80_config = push_array(arena, HTTP80_Config, 1);
+		http80_config->domain = str8_copy(arena, acme_domain);
+		http80_config->is_live = 1;
+
+		Thread http80_thread = thread_launch(http80_handler_thread, http80_config);
+		thread_detach(http80_thread);
 	}
 
 	proxy_config = push_array(arena, ProxyConfig, 1);
@@ -1347,18 +1619,41 @@ entry_point(CmdLine *cmd_line)
 
 		for(;;)
 		{
+			Temp accept_scratch = scratch_begin(0, 0);
+			Log *accept_log = log_alloc();
+			log_select(accept_log);
+			log_scope_begin();
+
 			OS_Handle connection_socket = os_socket_accept(listen_socket);
 			if(os_handle_match(connection_socket, os_handle_zero()))
 			{
-				fprintf(stderr, "httpproxy: failed to accept connection\n");
-				fflush(stderr);
+				log_error(str8_lit("httpproxy: failed to accept connection\n"));
+
+				LogScopeResult result = log_scope_end(accept_scratch.arena);
+				if(result.strings[LogMsgKind_Error].size > 0)
+				{
+					fwrite(result.strings[LogMsgKind_Error].str, 1, result.strings[LogMsgKind_Error].size, stderr);
+					fflush(stderr);
+				}
+
+				log_release(accept_log);
+				scratch_end(accept_scratch);
 				continue;
 			}
 
 			DateTime accept_time = os_now_universal_time();
-			String8 accept_timestamp = str8_from_datetime(scratch.arena, accept_time);
-			fprintf(stdout, "[%.*s] httpproxy: accepted connection\n", (int)accept_timestamp.size, accept_timestamp.str);
-			fflush(stdout);
+			String8 accept_timestamp = str8_from_datetime(accept_scratch.arena, accept_time);
+			log_infof("[%S] httpproxy: accepted connection\n", accept_timestamp);
+
+			LogScopeResult result = log_scope_end(accept_scratch.arena);
+			if(result.strings[LogMsgKind_Info].size > 0)
+			{
+				fwrite(result.strings[LogMsgKind_Info].str, 1, result.strings[LogMsgKind_Info].size, stdout);
+				fflush(stdout);
+			}
+
+			log_release(accept_log);
+			scratch_end(accept_scratch);
 
 			work_queue_push(worker_pool, connection_socket);
 		}

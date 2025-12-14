@@ -4,8 +4,10 @@
 ////////////////////////////////
 //~ HTTP Includes
 
-#include "http/core.h"
-#include "http/request.h"
-#include "http/response.h"
+// clang-format off
+#include "core.h"
+#include "request.h"
+#include "response.h"
+// clang-format on
 
 #endif // HTTP_INC_H

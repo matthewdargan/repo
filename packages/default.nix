@@ -9,7 +9,6 @@
     ./9p.nix
     ./httpproxy.nix
     ./httpproxy-test.nix
-    ./httpproxy-acme-test.nix
     ./installer-image.nix
     ./neovim.nix
   ];

@@ -1,6 +1,8 @@
 ////////////////////////////////
 //~ HTTP Includes
 
-#include "http/core.c"
-#include "http/request.c"
-#include "http/response.c"
+// clang-format off
+#include "core.c"
+#include "request.c"
+#include "response.c"
+// clang-format on

@@ -11,7 +11,7 @@
       description = "HTTP reverse proxy with TLS termination";
       version = "0.1.0";
       buildInputs = [pkgs.openssl];
-      extraLinkFlags = "-lssl -lcrypto";
+      extraLinkFlags = "-lm -lssl -lcrypto";
     };
   };
 }
