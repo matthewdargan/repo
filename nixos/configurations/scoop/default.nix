@@ -36,8 +36,8 @@ in {
     systemd-boot.enable = true;
   };
   networking = {
-    firewall.checkReversePath = "loose";
     hostName = "scoop";
+    firewall.checkReversePath = "loose";
     networkmanager.enable = true;
   };
   programs.steam.enable = true;

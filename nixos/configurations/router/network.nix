@@ -1,8 +1,8 @@
 _: {
   networking = rec {
-    firewall.enable = false;
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "router";
+    firewall.enable = false;
     networkmanager.enable = false;
     nftables = {
       enable = true;

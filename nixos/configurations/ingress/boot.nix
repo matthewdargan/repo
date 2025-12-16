@@ -1,12 +1,13 @@
-{inputs, ...}: {
-  imports = [inputs.disko.nixosModules.disko];
+{
+  inputs,
+  modulesPath,
+  ...
+}: {
+  imports = [
+    inputs.disko.nixosModules.disko
+    (modulesPath + "/profiles/qemu-guest.nix")
+  ];
   boot = {
-    kernel.sysctl = {
-      "net.ipv4.conf.all.forwarding" = 1;
-      "net.ipv4.conf.br-lan.rp_filter" = 1;
-      "net.ipv4.conf.default.rp_filter" = 1;
-      "net.ipv4.conf.enp3s0.rp_filter" = 1;
-    };
     loader = {
       efi.canTouchEfiVariables = true;
       systemd-boot.enable = true;
@@ -56,7 +57,7 @@
           };
           type = "gpt";
         };
-        device = "/dev/nvme0n1";
+        device = "/dev/sda";
         type = "disk";
       };
     };

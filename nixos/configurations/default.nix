@@ -15,6 +15,7 @@
         system = "x86_64-linux";
       };
   in {
+    ingress = mkSystem "ingress";
     nas = mkSystem "nas";
     router = mkSystem "router";
     scoop = mkSystem "scoop";

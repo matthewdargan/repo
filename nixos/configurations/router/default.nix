@@ -51,7 +51,6 @@ in {
     description = "Matthew Dargan";
     extraGroups = [
       "input"
-      "networkmanager"
       "systemd-journal"
       "wheel"
     ];
