@@ -12,8 +12,8 @@ in {
     mounts = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [];
-      description = "List of systemd mount unit names to monitor (e.g., n-media, n-nix)";
-      example = ["n-media" "n-nix"];
+      description = "List of mount paths to monitor (e.g., /n/media, /var/lib/nix-client/n/nix)";
+      example = ["/n/media" "/var/lib/nix-client/n/nix"];
     };
 
     interval = lib.mkOption {
@@ -27,20 +27,22 @@ in {
     systemd = {
       services."9p-health-check" = {
         description = "Check 9P mount health and restart if stale";
+        path = [pkgs.systemd pkgs.coreutils];
         serviceConfig = {
           Type = "oneshot";
           User = "root";
         };
         script = ''
-          for mount in ${lib.concatStringsSep " " cfg.mounts}; do
-            if ${pkgs.systemd}/bin/systemctl is-active --quiet $mount.mount; then
-              path="/''${mount//-//}"
-              if ! ${pkgs.coreutils}/bin/timeout 5 ${pkgs.coreutils}/bin/stat "$path" >/dev/null 2>&1; then
-                echo "9P mount at $path is unresponsive, restarting..."
-                ${pkgs.systemd}/bin/systemctl restart $mount.mount
+          ${lib.concatMapStringsSep "\n" (mountPath: ''
+              unit_name=$(systemd-escape --path "${mountPath}")
+              if systemctl is-active --quiet "$unit_name.mount"; then
+                if ! timeout 5 stat "${mountPath}" >/dev/null 2>&1; then
+                  echo "9P mount at ${mountPath} is unresponsive, restarting..."
+                  systemctl restart "$unit_name.mount"
+                fi
               fi
-            fi
-          done
+            '')
+            cfg.mounts}
         '';
       };
 

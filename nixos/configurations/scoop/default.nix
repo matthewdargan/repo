@@ -6,7 +6,7 @@
   mounts = [
     {
       what = "nas";
-      where = "/n/media";
+      where = "/home/mpd/n/media";
       type = "9p";
       options = "port=5640";
       after = ["network-online.target"];
@@ -14,7 +14,7 @@
     }
     {
       what = "nas";
-      where = "/n/nix";
+      where = "/var/lib/nix-client/n/nix";
       type = "9p";
       options = "port=5641";
       after = ["network-online.target"];
@@ -45,7 +45,7 @@ in {
   services = {
     "9p-health-check" = {
       enable = true;
-      mounts = ["n-media" "n-nix"];
+      mounts = ["/home/mpd/n/media" "/var/lib/nix-client/n/nix"];
     };
     desktopManager.plasma6.enable = true;
     displayManager.sddm = {

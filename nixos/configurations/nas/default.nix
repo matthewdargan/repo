@@ -7,7 +7,7 @@
   mounts = [
     {
       what = "127.0.0.1";
-      where = "/n/media";
+      where = "/var/lib/jellyfin/n/media";
       type = "9p";
       options = "port=5640";
       requires = ["media-serve.service"];
@@ -16,7 +16,7 @@
     }
     {
       what = "127.0.0.1";
-      where = "/n/nix";
+      where = "/var/lib/nix-client/n/nix";
       type = "9p";
       options = "port=5641";
       requires = ["nix-serve.service"];
@@ -50,12 +50,12 @@ in {
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "nas";
     firewall = {
-      allowedTCPPorts = [5640 5641];
-      interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [
-        22
-        7246
-        8096
-      ];
+      allowedTCPPorts = [5640 5641 8096];
+      allowedUDPPorts = [8096];
+      interfaces.${config.services.tailscale.interfaceName} = {
+        allowedTCPPorts = [22 8096];
+        allowedUDPPorts = [8096];
+      };
     };
     networkmanager.enable = true;
   };
@@ -86,12 +86,9 @@ in {
     };
     "9p-health-check" = {
       enable = true;
-      mounts = ["n-media" "n-nix"];
+      mounts = ["/var/lib/jellyfin/n/media" "/var/lib/nix-client/n/nix"];
     };
-    jellyfin = {
-      enable = true;
-      openFirewall = true;
-    };
+    jellyfin.enable = true;
     nix-client.enable = true;
     openssh = {
       enable = true;
@@ -117,8 +114,6 @@ in {
           ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs-debug"}/bin/9pfs --root=/media tcp!*!5640";
           Restart = "always";
           RestartSec = "5s";
-          StandardError = "journal";
-          StandardOutput = "journal";
           User = "storage";
         };
         wantedBy = ["multi-user.target"];
@@ -128,20 +123,17 @@ in {
         after = ["network.target"];
         wantedBy = ["multi-user.target"];
         serviceConfig = {
-          Type = "simple";
           User = "git";
           Group = "git";
           ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs"}/bin/9pfs --root=/srv/nix tcp!*!5641";
           Restart = "always";
           RestartSec = "10s";
-          StandardOutput = "journal";
-          StandardError = "journal";
         };
       };
       # Service dependencies
       jellyfin = {
-        after = ["n-media.automount"];
-        wants = ["n-media.automount"];
+        after = ["var-lib-jellyfin-n-media.automount"];
+        wants = ["var-lib-jellyfin-n-media.automount"];
       };
 
       # Nix rebuild automation
@@ -225,6 +217,8 @@ in {
       "d /srv/nix/hosts 0755 git git -"
       "d /srv/nix/keys 0755 git git -"
       "d /var/lib/git-server 0755 git git -"
+      "d /var/lib/jellyfin/n 0755 jellyfin jellyfin -"
+      "d /var/lib/nix-client/n 0755 root root -"
     ];
   };
   system.stateVersion = "25.05";

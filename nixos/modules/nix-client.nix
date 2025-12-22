@@ -11,7 +11,7 @@ in {
 
     cacheMount = lib.mkOption {
       type = lib.types.str;
-      default = "/n/nix";
+      default = "/var/lib/nix-client/n/nix";
       description = "Path where nix 9P filesystem is mounted";
     };
 

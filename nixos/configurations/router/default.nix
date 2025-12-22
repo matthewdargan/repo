@@ -6,7 +6,7 @@
   mounts = [
     {
       what = "10.0.0.2";
-      where = "/n/nix";
+      where = "/var/lib/nix-client/n/nix";
       type = "9p";
       options = "port=5641";
       after = ["network-online.target"];
@@ -32,7 +32,7 @@ in {
   services = {
     "9p-health-check" = {
       enable = true;
-      mounts = ["n-nix"];
+      mounts = ["/var/lib/nix-client/n/nix"];
     };
     nix-client.enable = true;
   };
