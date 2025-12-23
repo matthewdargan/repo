@@ -1494,40 +1494,18 @@ entry_point(CmdLine *cmd_line)
 
 	String8 cert_path = cmd_line_string(cmd_line, str8_lit("cert"));
 	String8 key_path = cmd_line_string(cmd_line, str8_lit("key"));
-
-	if(cert_path.size > 0 && key_path.size > 0)
-	{
-		tls_context = tls_context_alloc(arena, cert_path, key_path);
-		if(tls_context->enabled)
-		{
-			fprintf(stdout, "httpproxy: TLS enabled (cert: %.*s, key: %.*s)\n", (int)cert_path.size, cert_path.str,
-			        (int)key_path.size, key_path.str);
-			fflush(stdout);
-		}
-		else
-		{
-			fprintf(stderr, "httpproxy: TLS initialization failed\n");
-			fflush(stderr);
-			arena_release(arena);
-			scratch_end(scratch);
-			return;
-		}
-	}
-
-	String8 acme_cert_path = cmd_line_string(cmd_line, str8_lit("acme-cert"));
-	String8 acme_key_path = cmd_line_string(cmd_line, str8_lit("acme-key"));
 	String8 acme_account_key_path = cmd_line_string(cmd_line, str8_lit("acme-account-key"));
 	String8 acme_directory = cmd_line_string(cmd_line, str8_lit("acme-directory"));
 
 	if(acme_enabled)
 	{
-		if(acme_cert_path.size == 0)
+		if(cert_path.size == 0)
 		{
-			acme_cert_path = str8_lit("/var/lib/httpproxy/cert.pem");
+			cert_path = str8_lit("/var/lib/httpproxy/cert.pem");
 		}
-		if(acme_key_path.size == 0)
+		if(key_path.size == 0)
 		{
-			acme_key_path = str8_lit("/var/lib/httpproxy/key.pem");
+			key_path = str8_lit("/var/lib/httpproxy/key.pem");
 		}
 		if(acme_account_key_path.size == 0)
 		{
@@ -1540,7 +1518,37 @@ entry_point(CmdLine *cmd_line)
 
 		fprintf(stdout, "httpproxy: ACME enabled for domain %.*s\n", (int)acme_domain.size, acme_domain.str);
 		fflush(stdout);
+	}
 
+	if(cert_path.size > 0 && key_path.size > 0)
+	{
+		tls_context = tls_context_alloc(arena, cert_path, key_path);
+		if(tls_context->enabled)
+		{
+			fprintf(stdout, "httpproxy: TLS enabled (cert: %.*s, key: %.*s)\n", (int)cert_path.size, cert_path.str,
+			        (int)key_path.size, key_path.str);
+			fflush(stdout);
+		}
+		else
+		{
+			if(acme_enabled)
+			{
+				fprintf(stdout, "httpproxy: TLS certificates not found, waiting for ACME provisioning\n");
+				fflush(stdout);
+			}
+			else
+			{
+				fprintf(stderr, "httpproxy: TLS initialization failed\n");
+				fflush(stderr);
+				arena_release(arena);
+				scratch_end(scratch);
+				return;
+			}
+		}
+	}
+
+	if(acme_enabled)
+	{
 		acme_account_key = acme_account_key_alloc(arena, acme_account_key_path);
 		if(acme_account_key == 0 || acme_account_key->pkey == 0)
 		{
@@ -1568,8 +1576,8 @@ entry_point(CmdLine *cmd_line)
 		renewal_config = push_array(arena, ACME_RenewalConfig, 1);
 		renewal_config->arena = arena;
 		renewal_config->domain = str8_copy(arena, acme_domain);
-		renewal_config->cert_path = str8_copy(arena, acme_cert_path);
-		renewal_config->key_path = str8_copy(arena, acme_key_path);
+		renewal_config->cert_path = str8_copy(arena, cert_path);
+		renewal_config->key_path = str8_copy(arena, key_path);
 		renewal_config->renew_days_before_expiry = 30;
 		renewal_config->is_live = 1;
 
