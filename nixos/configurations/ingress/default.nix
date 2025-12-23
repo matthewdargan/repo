@@ -33,6 +33,7 @@ in {
       # interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [22];
       allowedTCPPorts = [22 80 443];
     };
+    useDHCP = true;
   };
   services = {
     "9p-health-check" = {
