@@ -9,8 +9,10 @@
   ];
   boot = {
     loader = {
-      efi.canTouchEfiVariables = true;
-      systemd-boot.enable = true;
+      grub = {
+        device = "/dev/sda";
+        efiSupport = true;
+      };
     };
   };
   disko.devices = {
@@ -18,6 +20,11 @@
       main = {
         content = {
           partitions = {
+            boot = {
+              priority = 1;
+              size = "1M";
+              type = "EF02";
+            };
             ESP = {
               content = {
                 format = "vfat";
@@ -25,10 +32,8 @@
                 mountpoint = "/boot";
                 type = "filesystem";
               };
-              end = "1G";
               name = "ESP";
-              priority = 1;
-              start = "1M";
+              size = "1G";
               type = "EF00";
             };
             root = {
