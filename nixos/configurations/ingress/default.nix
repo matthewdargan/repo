@@ -1,4 +1,5 @@
 {
+  config,
   pkgs,
   self,
   ...
@@ -28,10 +29,8 @@ in {
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "ingress";
     firewall = {
-      # TODO: Move SSH to Tailscale interface only like nas:
-      # allowedTCPPorts = [80 443];
-      # interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [22];
-      allowedTCPPorts = [22 80 443];
+      allowedTCPPorts = [80 443];
+      interfaces.${config.services.tailscale.interfaceName}.allowedTCPPorts = [22];
     };
     useDHCP = true;
   };
