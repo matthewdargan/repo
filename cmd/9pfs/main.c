@@ -10,6 +10,8 @@ global FsContext9P *fs_context = 0;
 ////////////////////////////////
 //~ Worker Thread Pool
 
+// TODO: replace with shared base/thread_pool implementation
+
 typedef struct Worker Worker;
 struct Worker
 {

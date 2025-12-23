@@ -41,8 +41,26 @@ url_parse_https(String8 url)
 //~ HTTPS Requests
 
 internal String8
+http_header_find(Arena *arena, String8 headers, String8 header_name)
+{
+	u64 name_len = header_name.size;
+	for(u64 i = 0; i + name_len < headers.size; i += 1)
+	{
+		if(MemoryMatch(headers.str + i, header_name.str, name_len))
+		{
+			u64 start = i + name_len;
+			u64 end = start;
+			for(; end < headers.size && headers.str[end] != '\r' && headers.str[end] != '\n'; end += 1)
+				;
+			return str8_copy(arena, str8(headers.str + start, end - start));
+		}
+	}
+	return str8_zero();
+}
+
+internal String8
 acme_https_request(ACME_Client *client, Arena *arena, String8 host, u16 port, String8 method, String8 path,
-                   String8 body, String8 *out_location)
+                   String8 body, String8 *out_location, String8 *out_nonce)
 {
 	Temp scratch = scratch_begin(&arena, 1);
 
@@ -145,19 +163,12 @@ acme_https_request(ACME_Client *client, Arena *arena, String8 host, u16 port, St
 
 	if(out_location != 0)
 	{
-		String8 location_prefix = str8_lit("Location: ");
-		for(u64 i = 0; i + location_prefix.size < headers.size; i += 1)
-		{
-			if(MemoryMatch(headers.str + i, location_prefix.str, location_prefix.size))
-			{
-				u64 start = i + location_prefix.size;
-				u64 end = start;
-				for(; end < headers.size && headers.str[end] != '\r' && headers.str[end] != '\n'; end += 1)
-					;
-				*out_location = str8_copy(arena, str8(headers.str + start, end - start));
-				break;
-			}
-		}
+		*out_location = http_header_find(arena, headers, str8_lit("Location: "));
+	}
+
+	if(out_nonce != 0)
+	{
+		*out_nonce = http_header_find(arena, headers, str8_lit("Replay-Nonce: "));
 	}
 
 	String8 result = str8_copy(arena, body_response);
@@ -173,8 +184,8 @@ acme_get_nonce(ACME_Client *client)
 {
 	Temp scratch = scratch_begin(&client->arena, 1);
 	URL_Parts url = url_parse_https(client->directory.new_nonce_url);
-	acme_https_request(client, scratch.arena, url.host, url.port, str8_lit("HEAD"), url.path, str8_zero(), 0);
-	String8 nonce = str8_copy(client->arena, str8_lit("dummy_nonce_for_testing"));
+	String8 nonce = str8_zero();
+	acme_https_request(client, client->arena, url.host, url.port, str8_lit("HEAD"), url.path, str8_zero(), 0, &nonce);
 	scratch_end(scratch);
 	return nonce;
 }
@@ -193,7 +204,7 @@ acme_client_alloc(Arena *arena, SSL_CTX *ssl_ctx, String8 directory_url, EVP_PKE
 	URL_Parts url = url_parse_https(directory_url);
 
 	String8 directory_json =
-	    acme_https_request(client, scratch.arena, url.host, url.port, str8_lit("GET"), url.path, str8_zero(), 0);
+	    acme_https_request(client, scratch.arena, url.host, url.port, str8_lit("GET"), url.path, str8_zero(), 0, 0);
 	if(directory_json.size == 0)
 	{
 		log_error(str8_lit("acme: failed to fetch directory\n"));
@@ -236,6 +247,40 @@ acme_client_alloc(Arena *arena, SSL_CTX *ssl_ctx, String8 directory_url, EVP_PKE
 	}
 
 	client->nonce = acme_get_nonce(client);
+
+	JSON_Value *protected_reg = json_object_alloc(scratch.arena);
+	json_object_add(scratch.arena, protected_reg, str8_lit("alg"),
+	                json_value_from_string(scratch.arena, str8_lit("ES256")));
+	json_object_add(scratch.arena, protected_reg, str8_lit("nonce"),
+	                json_value_from_string(scratch.arena, client->nonce));
+	json_object_add(scratch.arena, protected_reg, str8_lit("url"),
+	                json_value_from_string(scratch.arena, client->directory.new_account_url));
+
+	JSON_Value *jwk = acme_jwk_from_key(scratch.arena, account_key);
+	json_object_add(scratch.arena, protected_reg, str8_lit("jwk"), jwk);
+
+	JSON_Value *payload_obj = json_object_alloc(scratch.arena);
+	json_object_add(scratch.arena, payload_obj, str8_lit("termsOfServiceAgreed"), json_value_from_bool(scratch.arena, 1));
+
+	String8 payload_json = json_serialize(scratch.arena, payload_obj);
+	String8 jws = acme_jws_sign(scratch.arena, account_key, protected_reg, payload_json);
+
+	URL_Parts reg_url = url_parse_https(client->directory.new_account_url);
+	String8 account_location = str8_zero();
+	String8 reg_response = acme_https_request(client, scratch.arena, reg_url.host, reg_url.port, str8_lit("POST"),
+	                                          reg_url.path, jws, &account_location, 0);
+
+	if(account_location.size > 0)
+	{
+		client->account_url = str8_copy(arena, account_location);
+		log_infof("acme: registered account at %S\n", client->account_url);
+	}
+	else
+	{
+		log_errorf("acme: failed to register account: %S\n", reg_response);
+		scratch_end(scratch);
+		return 0;
+	}
 
 	scratch_end(scratch);
 	return client;

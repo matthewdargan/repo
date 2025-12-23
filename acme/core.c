@@ -47,26 +47,158 @@ base64url_encode(Arena *arena, String8 data)
 internal JSON_Value *
 acme_jwk_from_key(Arena *arena, EVP_PKEY *pkey)
 {
-	size_t pubkey_len = 0;
-	if(EVP_PKEY_get_raw_public_key(pkey, 0, &pubkey_len) <= 0)
+	int key_type = EVP_PKEY_id(pkey);
+	if(key_type == EVP_PKEY_EC)
 	{
-		return json_value_null(arena);
+		BIGNUM *x = 0;
+		BIGNUM *y = 0;
+		if(!EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_EC_PUB_X, &x) ||
+		   !EVP_PKEY_get_bn_param(pkey, OSSL_PKEY_PARAM_EC_PUB_Y, &y))
+		{
+			BN_free(x);
+			BN_free(y);
+			return json_value_null(arena);
+		}
+
+		u8 x_bytes[32];
+		u8 y_bytes[32];
+		MemoryZero(x_bytes, sizeof(x_bytes));
+		MemoryZero(y_bytes, sizeof(y_bytes));
+
+		BN_bn2binpad(x, x_bytes, 32);
+		BN_bn2binpad(y, y_bytes, 32);
+
+		BN_free(x);
+		BN_free(y);
+
+		String8 x_b64 = base64url_encode(arena, str8(x_bytes, 32));
+		String8 y_b64 = base64url_encode(arena, str8(y_bytes, 32));
+
+		JSON_Value *jwk = json_object_alloc(arena);
+		json_object_add(arena, jwk, str8_lit("crv"), json_value_from_string(arena, str8_lit("P-256")));
+		json_object_add(arena, jwk, str8_lit("kty"), json_value_from_string(arena, str8_lit("EC")));
+		json_object_add(arena, jwk, str8_lit("x"), json_value_from_string(arena, x_b64));
+		json_object_add(arena, jwk, str8_lit("y"), json_value_from_string(arena, y_b64));
+
+		return jwk;
 	}
 
-	u8 *pubkey_bytes = push_array(arena, u8, pubkey_len);
-	if(EVP_PKEY_get_raw_public_key(pkey, pubkey_bytes, &pubkey_len) <= 0)
+	return json_value_null(arena);
+}
+
+////////////////////////////////
+//~ ECDSA Signature Conversion
+
+internal String8
+ecdsa_raw_from_der(Arena *arena, String8 der_sig, u64 coord_size)
+{
+	if(der_sig.size < 8)
 	{
-		return json_value_null(arena);
+		return str8_zero();
 	}
 
-	String8 x_b64 = base64url_encode(arena, str8(pubkey_bytes, pubkey_len));
+	u8 *p = der_sig.str;
+	if(p[0] != 0x30)
+	{
+		return str8_zero();
+	}
 
-	JSON_Value *jwk = json_object_alloc(arena);
-	json_object_add(arena, jwk, str8_lit("kty"), json_value_from_string(arena, str8_lit("OKP")));
-	json_object_add(arena, jwk, str8_lit("crv"), json_value_from_string(arena, str8_lit("Ed25519")));
-	json_object_add(arena, jwk, str8_lit("x"), json_value_from_string(arena, x_b64));
+	u64 pos = 1;
+	u64 seq_len = p[pos];
+	pos += 1;
+	if(seq_len & 0x80)
+	{
+		u64 len_bytes = seq_len & 0x7F;
+		if(pos + len_bytes > der_sig.size)
+		{
+			return str8_zero();
+		}
+		pos += len_bytes;
+	}
 
-	return jwk;
+	if(pos >= der_sig.size || p[pos] != 0x02)
+	{
+		return str8_zero();
+	}
+	pos += 1;
+
+	u64 r_len = p[pos];
+	pos += 1;
+	if(r_len & 0x80)
+	{
+		u64 len_bytes = r_len & 0x7F;
+		if(pos + len_bytes > der_sig.size)
+		{
+			return str8_zero();
+		}
+		r_len = 0;
+		for(u64 i = 0; i < len_bytes; i += 1)
+		{
+			r_len = (r_len << 8) | p[pos + i];
+		}
+		pos += len_bytes;
+	}
+
+	if(pos + r_len > der_sig.size)
+	{
+		return str8_zero();
+	}
+
+	u8 *r_bytes = p + pos;
+	pos += r_len;
+
+	if(pos >= der_sig.size || p[pos] != 0x02)
+	{
+		return str8_zero();
+	}
+	pos += 1;
+
+	u64 s_len = p[pos];
+	pos += 1;
+	if(s_len & 0x80)
+	{
+		u64 len_bytes = s_len & 0x7F;
+		if(pos + len_bytes > der_sig.size)
+		{
+			return str8_zero();
+		}
+		s_len = 0;
+		for(u64 i = 0; i < len_bytes; i += 1)
+		{
+			s_len = (s_len << 8) | p[pos + i];
+		}
+		pos += len_bytes;
+	}
+
+	if(pos + s_len > der_sig.size)
+	{
+		return str8_zero();
+	}
+
+	u8 *s_bytes = p + pos;
+
+	if(r_len == coord_size + 1 && r_bytes[0] == 0)
+	{
+		r_bytes += 1;
+		r_len -= 1;
+	}
+
+	if(s_len == coord_size + 1 && s_bytes[0] == 0)
+	{
+		s_bytes += 1;
+		s_len -= 1;
+	}
+
+	u8 *raw = push_array(arena, u8, coord_size * 2);
+	MemoryZero(raw, coord_size * 2);
+
+	u64 r_offset = (r_len < coord_size) ? (coord_size - r_len) : 0;
+	u64 s_offset = (s_len < coord_size) ? (coord_size - s_len) : 0;
+
+	MemoryCopy(raw + r_offset, r_bytes, Min(r_len, coord_size));
+	MemoryCopy(raw + coord_size + s_offset, s_bytes, Min(s_len, coord_size));
+
+	return str8(raw, coord_size * 2);
 }
 
 ////////////////////////////////
@@ -88,7 +220,7 @@ acme_jws_sign(Arena *arena, EVP_PKEY *pkey, JSON_Value *protected_header, String
 		return str8_zero();
 	}
 
-	if(EVP_DigestSignInit(md_ctx, 0, 0, 0, pkey) <= 0)
+	if(EVP_DigestSignInit(md_ctx, 0, EVP_sha256(), 0, pkey) <= 0)
 	{
 		EVP_MD_CTX_free(md_ctx);
 		scratch_end(scratch);
@@ -112,7 +244,21 @@ acme_jws_sign(Arena *arena, EVP_PKEY *pkey, JSON_Value *protected_header, String
 	}
 
 	EVP_MD_CTX_free(md_ctx);
-	String8 signature_b64 = base64url_encode(scratch.arena, str8(signature, sig_len));
+
+	String8 sig_to_encode = str8(signature, sig_len);
+	int key_type = EVP_PKEY_id(pkey);
+	if(key_type == EVP_PKEY_EC)
+	{
+		sig_to_encode = ecdsa_raw_from_der(scratch.arena, str8(signature, sig_len), 32);
+		if(sig_to_encode.size == 0)
+		{
+			log_error(str8_lit("acme: failed to convert ECDSA signature from DER to raw format\n"));
+			scratch_end(scratch);
+			return str8_zero();
+		}
+	}
+
+	String8 signature_b64 = base64url_encode(scratch.arena, sig_to_encode);
 
 	JSON_Value *jws = json_object_alloc(arena);
 	json_object_add(arena, jws, str8_lit("protected"), json_value_from_string(arena, protected_b64));
@@ -186,7 +332,7 @@ acme_generate_cert_key(void)
 		return 0;
 	}
 
-	EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, 0);
+	EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, 0);
 	if(ctx == 0)
 	{
 		EVP_PKEY_free(key);
@@ -194,6 +340,13 @@ acme_generate_cert_key(void)
 	}
 
 	if(EVP_PKEY_keygen_init(ctx) <= 0)
+	{
+		EVP_PKEY_CTX_free(ctx);
+		EVP_PKEY_free(key);
+		return 0;
+	}
+
+	if(EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx, NID_X9_62_prime256v1) <= 0)
 	{
 		EVP_PKEY_CTX_free(ctx);
 		EVP_PKEY_free(key);

@@ -43,7 +43,7 @@ internal URL_Parts url_parse_https(String8 url);
 //~ HTTPS Requests
 
 internal String8 acme_https_request(ACME_Client *client, Arena *arena, String8 host, u16 port, String8 method,
-                                    String8 path, String8 body, String8 *out_location);
+                                    String8 path, String8 body, String8 *out_location, String8 *out_nonce);
 
 ////////////////////////////////
 //~ ACME Client Functions

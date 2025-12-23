@@ -1,3 +1,4 @@
+#include <openssl/core_names.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
@@ -277,31 +278,13 @@ acme_account_key_alloc(Arena *arena, String8 key_path)
 
 	log_infof("httpproxy: generating new ACME account key at %S\n", key_path);
 
-	EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, 0);
-	if(ctx == 0)
+	key->pkey = acme_generate_cert_key();
+	if(key->pkey == 0)
 	{
-		log_error(str8_lit("httpproxy: failed to create EVP_PKEY_CTX\n"));
+		log_error(str8_lit("httpproxy: failed to generate ACME account key\n"));
 		scratch_end(scratch);
 		return key;
 	}
-
-	if(EVP_PKEY_keygen_init(ctx) <= 0)
-	{
-		log_error(str8_lit("httpproxy: failed to initialize key generation\n"));
-		EVP_PKEY_CTX_free(ctx);
-		scratch_end(scratch);
-		return key;
-	}
-
-	if(EVP_PKEY_keygen(ctx, &key->pkey) <= 0)
-	{
-		log_error(str8_lit("httpproxy: failed to generate key\n"));
-		EVP_PKEY_CTX_free(ctx);
-		scratch_end(scratch);
-		return key;
-	}
-
-	EVP_PKEY_CTX_free(ctx);
 
 	BIO *bio = BIO_new(BIO_s_mem());
 	PEM_write_bio_PrivateKey(bio, key->pkey, 0, 0, 0, 0, 0);
@@ -945,6 +928,8 @@ http80_handler_thread(void *ptr)
 ////////////////////////////////
 //~ Worker Thread Pool
 
+// TODO: replace with shared base/thread_pool implementation
+
 typedef struct Worker Worker;
 struct Worker
 {
@@ -1279,7 +1264,13 @@ handle_connection(OS_Handle connection_socket)
 	String8 timestamp = str8_from_datetime(scratch.arena, now);
 	log_infof("[%S] httpproxy: connection from %S:%u\n", timestamp, client_ip, client_port);
 
-	if(tls_context != 0 && tls_context->enabled)
+	if(tls_context == 0 || !tls_context->enabled)
+	{
+		log_infof("[%S] httpproxy: TLS not available\n", timestamp);
+		os_file_close(connection_socket);
+		should_process_request = 0;
+	}
+	else if(tls_context != 0 && tls_context->enabled)
 	{
 		ssl = SSL_new(tls_context->ssl_ctx);
 		if(ssl == 0)
@@ -1461,6 +1452,9 @@ entry_point(CmdLine *cmd_line)
 {
 	Temp scratch = scratch_begin(0, 0);
 	Arena *arena = arena_alloc();
+	Log *setup_log = log_alloc();
+	log_select(setup_log);
+	log_scope_begin();
 
 	u64 worker_count = 0;
 	String8 threads_str = cmd_line_string(cmd_line, str8_lit("threads"));
@@ -1489,8 +1483,7 @@ entry_point(CmdLine *cmd_line)
 	SSL_CTX_set_verify(acme_client_ssl_ctx, SSL_VERIFY_PEER, 0);
 
 	acme_challenges = acme_challenge_table_alloc(arena);
-	fprintf(stdout, "httpproxy: ACME challenge handler initialized\n");
-	fflush(stdout);
+	log_info(str8_lit("httpproxy: ACME challenge handler initialized\n"));
 
 	String8 cert_path = cmd_line_string(cmd_line, str8_lit("cert"));
 	String8 key_path = cmd_line_string(cmd_line, str8_lit("key"));
@@ -1516,8 +1509,7 @@ entry_point(CmdLine *cmd_line)
 			acme_directory = str8_lit("https://acme-v02.api.letsencrypt.org/directory");
 		}
 
-		fprintf(stdout, "httpproxy: ACME enabled for domain %.*s\n", (int)acme_domain.size, acme_domain.str);
-		fflush(stdout);
+		log_infof("httpproxy: ACME enabled for domain %S\n", acme_domain);
 	}
 
 	if(cert_path.size > 0 && key_path.size > 0)
@@ -1525,21 +1517,31 @@ entry_point(CmdLine *cmd_line)
 		tls_context = tls_context_alloc(arena, cert_path, key_path);
 		if(tls_context->enabled)
 		{
-			fprintf(stdout, "httpproxy: TLS enabled (cert: %.*s, key: %.*s)\n", (int)cert_path.size, cert_path.str,
-			        (int)key_path.size, key_path.str);
-			fflush(stdout);
+			log_infof("httpproxy: TLS enabled (cert: %S, key: %S)\n", cert_path, key_path);
 		}
 		else
 		{
 			if(acme_enabled)
 			{
-				fprintf(stdout, "httpproxy: TLS certificates not found, waiting for ACME provisioning\n");
-				fflush(stdout);
+				log_info(str8_lit("httpproxy: TLS certificates not found, waiting for ACME provisioning\n"));
 			}
 			else
 			{
-				fprintf(stderr, "httpproxy: TLS initialization failed\n");
-				fflush(stderr);
+				log_error(str8_lit("httpproxy: TLS initialization failed\n"));
+
+				LogScopeResult setup_result = log_scope_end(scratch.arena);
+				if(setup_result.strings[LogMsgKind_Info].size > 0)
+				{
+					fwrite(setup_result.strings[LogMsgKind_Info].str, 1, setup_result.strings[LogMsgKind_Info].size, stdout);
+					fflush(stdout);
+				}
+				if(setup_result.strings[LogMsgKind_Error].size > 0)
+				{
+					fwrite(setup_result.strings[LogMsgKind_Error].str, 1, setup_result.strings[LogMsgKind_Error].size, stderr);
+					fflush(stderr);
+				}
+
+				log_release(setup_log);
 				arena_release(arena);
 				scratch_end(scratch);
 				return;
@@ -1552,8 +1554,21 @@ entry_point(CmdLine *cmd_line)
 		acme_account_key = acme_account_key_alloc(arena, acme_account_key_path);
 		if(acme_account_key == 0 || acme_account_key->pkey == 0)
 		{
-			fprintf(stderr, "httpproxy: failed to load or generate ACME account key\n");
-			fflush(stderr);
+			log_error(str8_lit("httpproxy: failed to load or generate ACME account key\n"));
+
+			LogScopeResult setup_result = log_scope_end(scratch.arena);
+			if(setup_result.strings[LogMsgKind_Info].size > 0)
+			{
+				fwrite(setup_result.strings[LogMsgKind_Info].str, 1, setup_result.strings[LogMsgKind_Info].size, stdout);
+				fflush(stdout);
+			}
+			if(setup_result.strings[LogMsgKind_Error].size > 0)
+			{
+				fwrite(setup_result.strings[LogMsgKind_Error].str, 1, setup_result.strings[LogMsgKind_Error].size, stderr);
+				fflush(stderr);
+			}
+
+			log_release(setup_log);
 			arena_release(arena);
 			scratch_end(scratch);
 			return;
@@ -1562,16 +1577,27 @@ entry_point(CmdLine *cmd_line)
 		acme_client = acme_client_alloc(arena, acme_client_ssl_ctx, acme_directory, acme_account_key->pkey);
 		if(acme_client == 0)
 		{
-			fprintf(stderr, "httpproxy: failed to initialize ACME client\n");
-			fflush(stderr);
+			log_error(str8_lit("httpproxy: failed to initialize ACME client\n"));
+
+			LogScopeResult setup_result = log_scope_end(scratch.arena);
+			if(setup_result.strings[LogMsgKind_Info].size > 0)
+			{
+				fwrite(setup_result.strings[LogMsgKind_Info].str, 1, setup_result.strings[LogMsgKind_Info].size, stdout);
+				fflush(stdout);
+			}
+			if(setup_result.strings[LogMsgKind_Error].size > 0)
+			{
+				fwrite(setup_result.strings[LogMsgKind_Error].str, 1, setup_result.strings[LogMsgKind_Error].size, stderr);
+				fflush(stderr);
+			}
+
+			log_release(setup_log);
 			arena_release(arena);
 			scratch_end(scratch);
 			return;
 		}
 
-		fprintf(stdout, "httpproxy: ACME client initialized (directory: %.*s)\n", (int)acme_directory.size,
-		        acme_directory.str);
-		fflush(stdout);
+		log_infof("httpproxy: ACME client initialized (directory: %S)\n", acme_directory);
 
 		renewal_config = push_array(arena, ACME_RenewalConfig, 1);
 		renewal_config->arena = arena;
@@ -1580,16 +1606,12 @@ entry_point(CmdLine *cmd_line)
 		renewal_config->key_path = str8_copy(arena, key_path);
 		renewal_config->renew_days_before_expiry = 30;
 		renewal_config->is_live = 1;
-
-		Thread renewal_thread = thread_launch(acme_renewal_thread, renewal_config);
-		thread_detach(renewal_thread);
+		thread_launch(acme_renewal_thread, renewal_config);
 
 		http80_config = push_array(arena, HTTP80_Config, 1);
 		http80_config->domain = str8_copy(arena, acme_domain);
 		http80_config->is_live = 1;
-
-		Thread http80_thread = thread_launch(http80_handler_thread, http80_config);
-		thread_detach(http80_thread);
+		thread_launch(http80_handler_thread, http80_config);
 	}
 
 	proxy_config = push_array(arena, ProxyConfig, 1);
@@ -1600,73 +1622,94 @@ entry_point(CmdLine *cmd_line)
 	proxy_config->backends[0].backend_host = str8_lit("127.0.0.1");
 	proxy_config->backends[0].backend_port = 8000;
 
-	fprintf(stdout, "httpproxy: listening on port %u\n", listen_port);
-	fprintf(stdout, "httpproxy: proxying / to %.*s:%u\n", (int)proxy_config->backends[0].backend_host.size,
-	        proxy_config->backends[0].backend_host.str, proxy_config->backends[0].backend_port);
-	fflush(stdout);
+	log_infof("httpproxy: listening on port %u\n", listen_port);
+	log_infof("httpproxy: proxying / to %S:%u\n", proxy_config->backends[0].backend_host,
+	          proxy_config->backends[0].backend_port);
 
 	OS_Handle listen_socket = os_socket_listen_tcp(listen_port);
 	if(os_handle_match(listen_socket, os_handle_zero()))
 	{
-		fprintf(stderr, "httpproxy: failed to listen on port %u\n", listen_port);
-		fflush(stderr);
-	}
-	else
-	{
-		if(worker_count == 0)
+		log_errorf("httpproxy: failed to listen on port %u\n", listen_port);
+
+		LogScopeResult setup_result = log_scope_end(scratch.arena);
+		if(setup_result.strings[LogMsgKind_Info].size > 0)
 		{
-			u64 logical_cores = os_get_system_info()->logical_processor_count;
-			worker_count = Max(4, logical_cores / 4);
+			fwrite(setup_result.strings[LogMsgKind_Info].str, 1, setup_result.strings[LogMsgKind_Info].size, stdout);
+			fflush(stdout);
+		}
+		if(setup_result.strings[LogMsgKind_Error].size > 0)
+		{
+			fwrite(setup_result.strings[LogMsgKind_Error].str, 1, setup_result.strings[LogMsgKind_Error].size, stderr);
+			fflush(stderr);
 		}
 
-		worker_pool = worker_pool_alloc(arena, worker_count);
-		worker_pool_start(worker_pool);
+		log_release(setup_log);
+		arena_release(arena);
+		scratch_end(scratch);
+		return;
+	}
 
-		fprintf(stdout, "httpproxy: launched %lu worker threads\n", (unsigned long)worker_count);
+	if(worker_count == 0)
+	{
+		u64 logical_cores = os_get_system_info()->logical_processor_count;
+		worker_count = Max(4, logical_cores / 4);
+	}
+
+	worker_pool = worker_pool_alloc(arena, worker_count);
+	worker_pool_start(worker_pool);
+
+	log_infof("httpproxy: launched %lu worker threads\n", (unsigned long)worker_count);
+
+	LogScopeResult setup_result = log_scope_end(scratch.arena);
+	if(setup_result.strings[LogMsgKind_Info].size > 0)
+	{
+		fwrite(setup_result.strings[LogMsgKind_Info].str, 1, setup_result.strings[LogMsgKind_Info].size, stdout);
 		fflush(stdout);
+	}
+	if(setup_result.strings[LogMsgKind_Error].size > 0)
+	{
+		fwrite(setup_result.strings[LogMsgKind_Error].str, 1, setup_result.strings[LogMsgKind_Error].size, stderr);
+		fflush(stderr);
+	}
 
-		for(;;)
+	for(;;)
+	{
+		Temp accept_scratch = scratch_begin(0, 0);
+		Log *accept_log = log_alloc();
+		log_select(accept_log);
+		log_scope_begin();
+
+		OS_Handle connection_socket = os_socket_accept(listen_socket);
+		if(os_handle_match(connection_socket, os_handle_zero()))
 		{
-			Temp accept_scratch = scratch_begin(0, 0);
-			Log *accept_log = log_alloc();
-			log_select(accept_log);
-			log_scope_begin();
+			log_error(str8_lit("httpproxy: failed to accept connection\n"));
 
-			OS_Handle connection_socket = os_socket_accept(listen_socket);
-			if(os_handle_match(connection_socket, os_handle_zero()))
+			LogScopeResult accept_result = log_scope_end(accept_scratch.arena);
+			if(accept_result.strings[LogMsgKind_Error].size > 0)
 			{
-				log_error(str8_lit("httpproxy: failed to accept connection\n"));
-
-				LogScopeResult result = log_scope_end(accept_scratch.arena);
-				if(result.strings[LogMsgKind_Error].size > 0)
-				{
-					fwrite(result.strings[LogMsgKind_Error].str, 1, result.strings[LogMsgKind_Error].size, stderr);
-					fflush(stderr);
-				}
-
-				log_release(accept_log);
-				scratch_end(accept_scratch);
-				continue;
-			}
-
-			DateTime accept_time = os_now_universal_time();
-			String8 accept_timestamp = str8_from_datetime(accept_scratch.arena, accept_time);
-			log_infof("[%S] httpproxy: accepted connection\n", accept_timestamp);
-
-			LogScopeResult result = log_scope_end(accept_scratch.arena);
-			if(result.strings[LogMsgKind_Info].size > 0)
-			{
-				fwrite(result.strings[LogMsgKind_Info].str, 1, result.strings[LogMsgKind_Info].size, stdout);
-				fflush(stdout);
+				fwrite(accept_result.strings[LogMsgKind_Error].str, 1, accept_result.strings[LogMsgKind_Error].size, stderr);
+				fflush(stderr);
 			}
 
 			log_release(accept_log);
 			scratch_end(accept_scratch);
-
-			work_queue_push(worker_pool, connection_socket);
+			continue;
 		}
-	}
 
-	arena_release(arena);
-	scratch_end(scratch);
+		DateTime accept_time = os_now_universal_time();
+		String8 accept_timestamp = str8_from_datetime(accept_scratch.arena, accept_time);
+		log_infof("[%S] httpproxy: accepted connection\n", accept_timestamp);
+
+		LogScopeResult accept_result = log_scope_end(accept_scratch.arena);
+		if(accept_result.strings[LogMsgKind_Info].size > 0)
+		{
+			fwrite(accept_result.strings[LogMsgKind_Info].str, 1, accept_result.strings[LogMsgKind_Info].size, stdout);
+			fflush(stdout);
+		}
+
+		log_release(accept_log);
+		scratch_end(accept_scratch);
+
+		work_queue_push(worker_pool, connection_socket);
+	}
 }
