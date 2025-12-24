@@ -5,15 +5,6 @@ internal String8
 acme_create_order(ACME_Client *client, String8 domain)
 {
 	Temp scratch = scratch_begin(&client->arena, 1);
-	client->nonce = acme_get_nonce(client);
-
-	JSON_Value *protected = json_object_alloc(scratch.arena);
-	json_object_add(scratch.arena, protected, str8_lit("alg"), json_value_from_string(scratch.arena, str8_lit("ES256")));
-	json_object_add(scratch.arena, protected, str8_lit("kid"),
-	                json_value_from_string(scratch.arena, client->account_url));
-	json_object_add(scratch.arena, protected, str8_lit("nonce"), json_value_from_string(scratch.arena, client->nonce));
-	json_object_add(scratch.arena, protected, str8_lit("url"),
-	                json_value_from_string(scratch.arena, client->directory.new_order_url));
 
 	JSON_Value *identifiers = json_array_alloc(scratch.arena, 1);
 	JSON_Value *identifier = json_object_alloc(scratch.arena);
@@ -25,12 +16,9 @@ acme_create_order(ACME_Client *client, String8 domain)
 	json_object_add(scratch.arena, payload_obj, str8_lit("identifiers"), identifiers);
 
 	String8 payload_json = json_serialize(scratch.arena, payload_obj);
-	String8 jws = acme_jws_sign(scratch.arena, client->account_key, protected, payload_json);
-
-	URL_Parts url = url_parse_https(client->directory.new_order_url);
 	String8 location = str8_zero();
 	String8 response =
-	    acme_https_request(client, client->arena, url.host, url.port, str8_lit("POST"), url.path, jws, &location, 0);
+	    acme_post_as_json_with_location(client, client->arena, client->directory.new_order_url, payload_json, &location);
 
 	if(location.size > 0)
 	{
@@ -48,20 +36,8 @@ internal String8
 acme_get_authorization_url(ACME_Client *client, String8 order_url)
 {
 	Temp scratch = scratch_begin(&client->arena, 1);
-	client->nonce = acme_get_nonce(client);
 
-	JSON_Value *protected = json_object_alloc(scratch.arena);
-	json_object_add(scratch.arena, protected, str8_lit("alg"), json_value_from_string(scratch.arena, str8_lit("ES256")));
-	json_object_add(scratch.arena, protected, str8_lit("kid"),
-	                json_value_from_string(scratch.arena, client->account_url));
-	json_object_add(scratch.arena, protected, str8_lit("nonce"), json_value_from_string(scratch.arena, client->nonce));
-	json_object_add(scratch.arena, protected, str8_lit("url"), json_value_from_string(scratch.arena, order_url));
-
-	String8 jws = acme_jws_sign(scratch.arena, client->account_key, protected, str8_zero());
-
-	URL_Parts url = url_parse_https(order_url);
-	String8 response =
-	    acme_https_request(client, scratch.arena, url.host, url.port, str8_lit("POST"), url.path, jws, 0, 0);
+	String8 response = acme_post_as_json(client, scratch.arena, order_url, str8_zero());
 
 	JSON_Value *order = json_parse(scratch.arena, response);
 	if(order == 0 || order->kind != JSON_ValueKind_Object)
@@ -99,35 +75,11 @@ acme_finalize_order(ACME_Client *client, String8 order_url, EVP_PKEY *cert_key, 
 
 	String8 csr_b64 = acme_generate_csr(scratch.arena, cert_key, domain);
 
-	client->nonce = acme_get_nonce(client);
-
-	JSON_Value *protected = json_object_alloc(scratch.arena);
-	json_object_add(scratch.arena, protected, str8_lit("alg"), json_value_from_string(scratch.arena, str8_lit("ES256")));
-	json_object_add(scratch.arena, protected, str8_lit("kid"),
-	                json_value_from_string(scratch.arena, client->account_url));
-	json_object_add(scratch.arena, protected, str8_lit("nonce"), json_value_from_string(scratch.arena, client->nonce));
-
 	JSON_Value *order = json_parse(scratch.arena, order_url);
 	JSON_Value *finalize_val = json_object_get(order, str8_lit("finalize"));
 	if(finalize_val == 0 || finalize_val->kind != JSON_ValueKind_String)
 	{
-		client->nonce = acme_get_nonce(client);
-
-		JSON_Value *protected_get = json_object_alloc(scratch.arena);
-		json_object_add(scratch.arena, protected_get, str8_lit("alg"),
-		                json_value_from_string(scratch.arena, str8_lit("ES256")));
-		json_object_add(scratch.arena, protected_get, str8_lit("kid"),
-		                json_value_from_string(scratch.arena, client->account_url));
-		json_object_add(scratch.arena, protected_get, str8_lit("nonce"),
-		                json_value_from_string(scratch.arena, client->nonce));
-		json_object_add(scratch.arena, protected_get, str8_lit("url"), json_value_from_string(scratch.arena, order_url));
-
-		String8 jws = acme_jws_sign(scratch.arena, client->account_key, protected_get, str8_zero());
-
-		URL_Parts url = url_parse_https(order_url);
-		String8 order_response =
-		    acme_https_request(client, scratch.arena, url.host, url.port, str8_lit("POST"), url.path, jws, 0, 0);
-
+		String8 order_response = acme_post_as_json(client, scratch.arena, order_url, str8_zero());
 		order = json_parse(scratch.arena, order_response);
 		finalize_val = json_object_get(order, str8_lit("finalize"));
 	}
@@ -140,17 +92,12 @@ acme_finalize_order(ACME_Client *client, String8 order_url, EVP_PKEY *cert_key, 
 	}
 
 	String8 finalize_url = finalize_val->string;
-	json_object_add(scratch.arena, protected, str8_lit("url"), json_value_from_string(scratch.arena, finalize_url));
 
 	JSON_Value *payload_obj = json_object_alloc(scratch.arena);
 	json_object_add(scratch.arena, payload_obj, str8_lit("csr"), json_value_from_string(scratch.arena, csr_b64));
 
 	String8 payload_json = json_serialize(scratch.arena, payload_obj);
-	String8 jws = acme_jws_sign(scratch.arena, client->account_key, protected, payload_json);
-
-	URL_Parts url = url_parse_https(finalize_url);
-	String8 response =
-	    acme_https_request(client, scratch.arena, url.host, url.port, str8_lit("POST"), url.path, jws, 0, 0);
+	String8 response = acme_post_as_json(client, scratch.arena, finalize_url, payload_json);
 
 	JSON_Value *result = json_parse(scratch.arena, response);
 	if(result == 0 || result->kind != JSON_ValueKind_Object)
@@ -187,21 +134,8 @@ acme_poll_order_status(ACME_Client *client, String8 order_url, u64 max_attempts,
 	for(u64 attempt = 0; attempt < max_attempts; attempt += 1)
 	{
 		Temp scratch = scratch_begin(&client->arena, 1);
-		client->nonce = acme_get_nonce(client);
 
-		JSON_Value *protected = json_object_alloc(scratch.arena);
-		json_object_add(scratch.arena, protected, str8_lit("alg"),
-		                json_value_from_string(scratch.arena, str8_lit("ES256")));
-		json_object_add(scratch.arena, protected, str8_lit("kid"),
-		                json_value_from_string(scratch.arena, client->account_url));
-		json_object_add(scratch.arena, protected, str8_lit("nonce"), json_value_from_string(scratch.arena, client->nonce));
-		json_object_add(scratch.arena, protected, str8_lit("url"), json_value_from_string(scratch.arena, order_url));
-
-		String8 jws = acme_jws_sign(scratch.arena, client->account_key, protected, str8_zero());
-
-		URL_Parts url = url_parse_https(order_url);
-		String8 response =
-		    acme_https_request(client, scratch.arena, url.host, url.port, str8_lit("POST"), url.path, jws, 0, 0);
+		String8 response = acme_post_as_json(client, scratch.arena, order_url, str8_zero());
 
 		JSON_Value *result = json_parse(scratch.arena, response);
 		if(result != 0 && result->kind == JSON_ValueKind_Object)
@@ -255,20 +189,8 @@ internal String8
 acme_download_certificate(ACME_Client *client, String8 order_url)
 {
 	Temp scratch = scratch_begin(&client->arena, 1);
-	client->nonce = acme_get_nonce(client);
 
-	JSON_Value *protected = json_object_alloc(scratch.arena);
-	json_object_add(scratch.arena, protected, str8_lit("alg"), json_value_from_string(scratch.arena, str8_lit("ES256")));
-	json_object_add(scratch.arena, protected, str8_lit("kid"),
-	                json_value_from_string(scratch.arena, client->account_url));
-	json_object_add(scratch.arena, protected, str8_lit("nonce"), json_value_from_string(scratch.arena, client->nonce));
-	json_object_add(scratch.arena, protected, str8_lit("url"), json_value_from_string(scratch.arena, order_url));
-
-	String8 jws = acme_jws_sign(scratch.arena, client->account_key, protected, str8_zero());
-
-	URL_Parts url = url_parse_https(order_url);
-	String8 response =
-	    acme_https_request(client, scratch.arena, url.host, url.port, str8_lit("POST"), url.path, jws, 0, 0);
+	String8 response = acme_post_as_json(client, scratch.arena, order_url, str8_zero());
 
 	JSON_Value *order = json_parse(scratch.arena, response);
 	if(order == 0 || order->kind != JSON_ValueKind_Object)
@@ -287,23 +209,7 @@ acme_download_certificate(ACME_Client *client, String8 order_url)
 	}
 
 	String8 cert_url = cert_url_val->string;
-
-	client->nonce = acme_get_nonce(client);
-
-	JSON_Value *protected_cert = json_object_alloc(scratch.arena);
-	json_object_add(scratch.arena, protected_cert, str8_lit("alg"),
-	                json_value_from_string(scratch.arena, str8_lit("ES256")));
-	json_object_add(scratch.arena, protected_cert, str8_lit("kid"),
-	                json_value_from_string(scratch.arena, client->account_url));
-	json_object_add(scratch.arena, protected_cert, str8_lit("nonce"),
-	                json_value_from_string(scratch.arena, client->nonce));
-	json_object_add(scratch.arena, protected_cert, str8_lit("url"), json_value_from_string(scratch.arena, cert_url));
-
-	String8 jws_cert = acme_jws_sign(scratch.arena, client->account_key, protected_cert, str8_zero());
-
-	URL_Parts cert_url_parts = url_parse_https(cert_url);
-	String8 cert_pem = acme_https_request(client, client->arena, cert_url_parts.host, cert_url_parts.port,
-	                                      str8_lit("POST"), cert_url_parts.path, jws_cert, 0, 0);
+	String8 cert_pem = acme_post_as_json(client, client->arena, cert_url, str8_zero());
 
 	log_info(str8_lit("acme: certificate downloaded\n"));
 	scratch_end(scratch);

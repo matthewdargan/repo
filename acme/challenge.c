@@ -6,20 +6,8 @@ acme_get_http01_challenge(ACME_Client *client, String8 authz_url)
 {
 	ACME_ChallengeInfo info = {0};
 	Temp scratch = scratch_begin(&client->arena, 1);
-	client->nonce = acme_get_nonce(client);
 
-	JSON_Value *protected = json_object_alloc(scratch.arena);
-	json_object_add(scratch.arena, protected, str8_lit("alg"), json_value_from_string(scratch.arena, str8_lit("ES256")));
-	json_object_add(scratch.arena, protected, str8_lit("kid"),
-	                json_value_from_string(scratch.arena, client->account_url));
-	json_object_add(scratch.arena, protected, str8_lit("nonce"), json_value_from_string(scratch.arena, client->nonce));
-	json_object_add(scratch.arena, protected, str8_lit("url"), json_value_from_string(scratch.arena, authz_url));
-
-	String8 jws = acme_jws_sign(scratch.arena, client->account_key, protected, str8_zero());
-
-	URL_Parts url = url_parse_https(authz_url);
-	String8 response =
-	    acme_https_request(client, scratch.arena, url.host, url.port, str8_lit("POST"), url.path, jws, 0, 0);
+	String8 response = acme_post_as_json(client, scratch.arena, authz_url, str8_zero());
 
 	JSON_Value *authz = json_parse(scratch.arena, response);
 	if(authz == 0 || authz->kind != JSON_ValueKind_Object)
@@ -68,22 +56,8 @@ internal b32
 acme_notify_challenge_ready(ACME_Client *client, String8 challenge_url)
 {
 	Temp scratch = scratch_begin(&client->arena, 1);
-	client->nonce = acme_get_nonce(client);
 
-	JSON_Value *protected = json_object_alloc(scratch.arena);
-	json_object_add(scratch.arena, protected, str8_lit("alg"), json_value_from_string(scratch.arena, str8_lit("ES256")));
-	json_object_add(scratch.arena, protected, str8_lit("kid"),
-	                json_value_from_string(scratch.arena, client->account_url));
-	json_object_add(scratch.arena, protected, str8_lit("nonce"), json_value_from_string(scratch.arena, client->nonce));
-	json_object_add(scratch.arena, protected, str8_lit("url"), json_value_from_string(scratch.arena, challenge_url));
-
-	JSON_Value *payload_obj = json_object_alloc(scratch.arena);
-	String8 payload_json = json_serialize(scratch.arena, payload_obj);
-	String8 jws = acme_jws_sign(scratch.arena, client->account_key, protected, payload_json);
-
-	URL_Parts url = url_parse_https(challenge_url);
-	String8 response =
-	    acme_https_request(client, scratch.arena, url.host, url.port, str8_lit("POST"), url.path, jws, 0, 0);
+	String8 response = acme_post_as_json(client, scratch.arena, challenge_url, str8_lit("{}"));
 
 	JSON_Value *result = json_parse(scratch.arena, response);
 	if(result == 0 || result->kind != JSON_ValueKind_Object)
@@ -111,21 +85,8 @@ acme_poll_challenge_status(ACME_Client *client, String8 challenge_url, u64 max_a
 	for(u64 attempt = 0; attempt < max_attempts; attempt += 1)
 	{
 		Temp scratch = scratch_begin(&client->arena, 1);
-		client->nonce = acme_get_nonce(client);
 
-		JSON_Value *protected = json_object_alloc(scratch.arena);
-		json_object_add(scratch.arena, protected, str8_lit("alg"),
-		                json_value_from_string(scratch.arena, str8_lit("ES256")));
-		json_object_add(scratch.arena, protected, str8_lit("kid"),
-		                json_value_from_string(scratch.arena, client->account_url));
-		json_object_add(scratch.arena, protected, str8_lit("nonce"), json_value_from_string(scratch.arena, client->nonce));
-		json_object_add(scratch.arena, protected, str8_lit("url"), json_value_from_string(scratch.arena, challenge_url));
-
-		String8 jws = acme_jws_sign(scratch.arena, client->account_key, protected, str8_zero());
-
-		URL_Parts url = url_parse_https(challenge_url);
-		String8 response =
-		    acme_https_request(client, scratch.arena, url.host, url.port, str8_lit("POST"), url.path, jws, 0, 0);
+		String8 response = acme_post_as_json(client, scratch.arena, challenge_url, str8_zero());
 
 		JSON_Value *result = json_parse(scratch.arena, response);
 		if(result != 0 && result->kind == JSON_ValueKind_Object)

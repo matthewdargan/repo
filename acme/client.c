@@ -190,6 +190,39 @@ acme_get_nonce(ACME_Client *client)
 	return nonce;
 }
 
+internal JSON_Value *
+acme_protected_header(Arena *arena, ACME_Client *client, String8 url)
+{
+	JSON_Value *protected = json_object_alloc(arena);
+	json_object_add(arena, protected, str8_lit("alg"), json_value_from_string(arena, str8_lit("ES256")));
+	json_object_add(arena, protected, str8_lit("kid"), json_value_from_string(arena, client->account_url));
+	json_object_add(arena, protected, str8_lit("nonce"), json_value_from_string(arena, client->nonce));
+	json_object_add(arena, protected, str8_lit("url"), json_value_from_string(arena, url));
+	return protected;
+}
+
+internal String8
+acme_post_as_json(ACME_Client *client, Arena *arena, String8 url, String8 payload)
+{
+	client->nonce = acme_get_nonce(client);
+	JSON_Value *protected = acme_protected_header(arena, client, url);
+	String8 jws = acme_jws_sign(arena, client->account_key, protected, payload);
+
+	URL_Parts parts = url_parse_https(url);
+	return acme_https_request(client, arena, parts.host, parts.port, str8_lit("POST"), parts.path, jws, 0, 0);
+}
+
+internal String8
+acme_post_as_json_with_location(ACME_Client *client, Arena *arena, String8 url, String8 payload, String8 *out_location)
+{
+	client->nonce = acme_get_nonce(client);
+	JSON_Value *protected = acme_protected_header(arena, client, url);
+	String8 jws = acme_jws_sign(arena, client->account_key, protected, payload);
+
+	URL_Parts parts = url_parse_https(url);
+	return acme_https_request(client, arena, parts.host, parts.port, str8_lit("POST"), parts.path, jws, out_location, 0);
+}
+
 internal ACME_Client *
 acme_client_alloc(Arena *arena, SSL_CTX *ssl_ctx, String8 directory_url, EVP_PKEY *account_key)
 {
