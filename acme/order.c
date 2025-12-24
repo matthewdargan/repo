@@ -213,13 +213,30 @@ acme_poll_order_status(ACME_Client *client, String8 order_url, u64 max_attempts,
 
 				if(str8_match(status->string, str8_lit("valid"), 0))
 				{
+					log_info(str8_lit("acme: order processing succeeded\n"));
 					scratch_end(scratch);
 					return 1;
 				}
 
 				if(str8_match(status->string, str8_lit("invalid"), 0))
 				{
-					log_error(str8_lit("acme: order failed\n"));
+					JSON_Value *error_val = json_object_get(result, str8_lit("error"));
+					if(error_val != 0 && error_val->kind == JSON_ValueKind_Object)
+					{
+						JSON_Value *detail = json_object_get(error_val, str8_lit("detail"));
+						if(detail != 0 && detail->kind == JSON_ValueKind_String)
+						{
+							log_errorf("acme: order failed: %S\n", detail->string);
+						}
+						else
+						{
+							log_error(str8_lit("acme: order failed\n"));
+						}
+					}
+					else
+					{
+						log_error(str8_lit("acme: order failed\n"));
+					}
 					scratch_end(scratch);
 					return 0;
 				}

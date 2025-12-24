@@ -137,6 +137,7 @@ acme_poll_challenge_status(ACME_Client *client, String8 challenge_url, u64 max_a
 
 				if(str8_match(status->string, str8_lit("valid"), 0))
 				{
+					log_info(str8_lit("acme: challenge validation succeeded\n"));
 					scratch_end(scratch);
 					return 1;
 				}
@@ -151,6 +152,14 @@ acme_poll_challenge_status(ACME_Client *client, String8 challenge_url, u64 max_a
 						{
 							log_errorf("acme: challenge failed: %S\n", detail->string);
 						}
+						else
+						{
+							log_error(str8_lit("acme: challenge validation failed\n"));
+						}
+					}
+					else
+					{
+						log_error(str8_lit("acme: challenge validation failed\n"));
 					}
 					scratch_end(scratch);
 					return 0;
