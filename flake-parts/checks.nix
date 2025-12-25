@@ -44,34 +44,6 @@
           echo "[$passed_count tests passed]"
           touch $out
         '';
-
-      "httpproxy-test" = let
-        testClient = self'.packages."httpproxy-test-debug";
-      in
-        pkgs.runCommand "httpproxy-test-check" {
-          buildInputs = [testClient pkgs.coreutils];
-        } ''
-          set -e
-
-          ${testClient}/bin/httpproxy-test > test_output.txt 2>&1 || true
-          cat test_output.txt
-
-          failed_count=$(grep -oP '\d+(?= failed)' test_output.txt || echo "0")
-          passed_count=$(grep -oP '\d+(?= passed)' test_output.txt || echo "0")
-
-          if [ "$failed_count" != "0" ]; then
-            echo "[ERROR] $failed_count tests failed"
-            exit 1
-          fi
-
-          if [ "$passed_count" = "0" ]; then
-            echo "[ERROR] no tests ran"
-            exit 1
-          fi
-
-          echo "[$passed_count tests passed]"
-          touch $out
-        '';
     };
   };
 }

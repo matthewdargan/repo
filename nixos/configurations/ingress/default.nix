@@ -7,6 +7,14 @@
   mounts = [
     {
       what = "nas";
+      where = "/var/lib/httpproxy/n/media";
+      type = "9p";
+      options = "port=5640";
+      after = ["network-online.target"];
+      wants = ["network-online.target"];
+    }
+    {
+      what = "nas";
       where = "/var/lib/nix-client/n/nix";
       type = "9p";
       options = "port=5641";
@@ -37,7 +45,7 @@ in {
   services = {
     "9p-health-check" = {
       enable = true;
-      mounts = ["/var/lib/nix-client/n/nix"];
+      mounts = ["/var/lib/httpproxy/n/media" "/var/lib/nix-client/n/nix"];
     };
     nix-client.enable = true;
     openssh = {
@@ -63,12 +71,13 @@ in {
       serviceConfig = {
         AmbientCapabilities = ["CAP_NET_BIND_SERVICE"];
         CapabilityBoundingSet = ["CAP_NET_BIND_SERVICE"];
-        ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.httpproxy}/bin/httpproxy --acme-domain=dargs.dev";
+        ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.httpproxy}/bin/httpproxy --acme-domain=dargs.dev --file-root=/var/lib/httpproxy/n/media/www";
         Group = "httpproxy";
         NoNewPrivileges = true;
         PrivateTmp = true;
         ProtectHome = true;
         ProtectSystem = "strict";
+        ReadOnlyPaths = ["/var/lib/httpproxy/n/media"];
         Restart = "always";
         RestartSec = "5s";
         RestrictSUIDSGID = true;
@@ -81,6 +90,9 @@ in {
         User = "httpproxy";
       };
     };
+    tmpfiles.rules = [
+      "d /var/lib/httpproxy/n 0755 httpproxy httpproxy -"
+    ];
   };
   system.stateVersion = "26.05";
   users = {

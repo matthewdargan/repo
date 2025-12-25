@@ -1,15 +1,16 @@
 # httpproxy
 
-HTTP reverse proxy with TLS termination and automatic ACME certificate provisioning.
+Static file server with TLS termination and automatic ACME certificate provisioning.
 
 ## Usage
 
 ```sh
-httpproxy [options]
+httpproxy --file-root=<path> [options]
 ```
 
 **Options:**
 
+- `--file-root=<path>` - Directory to serve files from (required)
 - `--port=<n>` - HTTPS listen port (default: 8080, or 443 when ACME enabled)
 - `--threads=<n>` - Number of worker threads (default: max(4, cores/4))
 - `--cert=<path>` - TLS certificate path (default: /var/lib/httpproxy/cert.pem when ACME enabled)
@@ -20,44 +21,32 @@ httpproxy [options]
 
 ## Examples
 
-Basic HTTP proxy on port 8080:
+Serve files with ACME (production):
 
 ```sh
-httpproxy
+httpproxy --file-root=/var/www --acme-domain=dargs.dev
 ```
 
-HTTPS proxy with manual certificate:
+Serve files with manual certificate:
 
 ```sh
-httpproxy --cert=/etc/ssl/cert.pem --key=/etc/ssl/key.pem
-```
-
-HTTPS proxy with automatic ACME certificates (listens on ports 80 and 443):
-
-```sh
-httpproxy --acme-domain=dargs.dev
-```
-
-ACME with custom certificate paths:
-
-```sh
-httpproxy --acme-domain=dargs.dev \
-  --cert=/etc/httpproxy/cert.pem \
-  --key=/etc/httpproxy/key.pem \
-  --acme-account-key=/etc/httpproxy/account.key
+httpproxy --file-root=/var/www \
+  --cert=/etc/ssl/cert.pem \
+  --key=/etc/ssl/key.pem
 ```
 
 ACME with Let's Encrypt staging (for testing):
 
 ```sh
-httpproxy --acme-domain=dargs.dev \
+httpproxy --file-root=/var/www \
+  --acme-domain=dargs.dev \
   --acme-directory=https://acme-staging-v02.api.letsencrypt.org/directory
 ```
 
 Custom worker threads:
 
 ```sh
-httpproxy --threads=16
+httpproxy --file-root=/var/www --threads=16
 ```
 
 ## ACME Certificate Provisioning
@@ -73,7 +62,3 @@ When `--acme-domain` is specified, httpproxy automatically:
 7. Automatically renews certificates 30 days before expiry
 
 The first certificate provisioning happens on startup. Subsequent renewals happen automatically in the background.
-
-## Backend Configuration
-
-Currently hard-coded to proxy all requests to `127.0.0.1:8000`. Backend configuration will be made configurable in a future version.

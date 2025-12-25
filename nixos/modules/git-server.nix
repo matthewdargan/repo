@@ -33,6 +33,12 @@ in {
       description = "SSH authorized keys for git user";
     };
 
+    extraGroups = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = "Additional groups for git user";
+    };
+
     repositories = lib.mkOption {
       type = lib.types.attrsOf (lib.types.submodule {
         options = {
@@ -51,7 +57,7 @@ in {
   config = lib.mkIf cfg.enable {
     users.users.${cfg.user} = {
       isSystemUser = true;
-      inherit (cfg) group;
+      inherit (cfg) group extraGroups;
       home = cfg.baseDir;
       createHome = true;
       shell = "${pkgs.git}/bin/git-shell";

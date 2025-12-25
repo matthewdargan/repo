@@ -23,12 +23,10 @@ read_only global u64 cert_renewal_days_threshold = 30;
 read_only global u64 acme_poll_max_attempts = 30;
 read_only global u64 acme_poll_delay_ms = 2000;
 read_only global u64 http_read_buffer_size = KB(16);
-read_only global u64 backend_read_buffer_size = KB(64);
 
 ////////////////////////////////
 //~ Forward Declarations
 
-typedef struct Backend Backend;
 typedef struct ProxyConfig ProxyConfig;
 typedef struct TLS_Context TLS_Context;
 typedef struct ACME_ChallengeTable ACME_ChallengeTable;
@@ -58,21 +56,12 @@ struct HTTPProxy_Context
 global HTTPProxy_Context *proxy_ctx = 0;
 
 ////////////////////////////////
-//~ Backend Configuration
-
-typedef struct Backend Backend;
-struct Backend
-{
-	String8 path_prefix;
-	String8 backend_host;
-	u16 backend_port;
-};
+//~ Proxy Configuration
 
 typedef struct ProxyConfig ProxyConfig;
 struct ProxyConfig
 {
-	Backend *backends;
-	u64 backend_count;
+	String8 file_root;
 	u16 listen_port;
 };
 
@@ -949,26 +938,119 @@ work_queue_pop(WorkerPool *pool)
 }
 
 ////////////////////////////////
-//~ Backend Selection
+//~ MIME Type Detection
 
-internal Backend *
-find_backend_for_path(ProxyConfig *config, String8 path)
+internal String8
+mime_type_from_extension(String8 path)
 {
-	Backend *result = 0;
-	u64 longest_match = 0;
+	String8 result = str8_lit("application/octet-stream");
 
-	for(u64 i = 0; i < config->backend_count; i += 1)
+	u64 dot_pos = 0;
+	for(u64 i = path.size; i > 0; i -= 1)
 	{
-		Backend *backend = &config->backends[i];
-		if(backend->path_prefix.size <= path.size && backend->path_prefix.size > longest_match)
+		if(path.str[i - 1] == '.')
 		{
-			String8 path_prefix = str8_prefix(path, backend->path_prefix.size);
-			if(str8_match(path_prefix, backend->path_prefix, 0))
-			{
-				result = backend;
-				longest_match = backend->path_prefix.size;
-			}
+			dot_pos = i;
+			break;
 		}
+		if(path.str[i - 1] == '/')
+		{
+			break;
+		}
+	}
+
+	if(dot_pos == 0)
+	{
+		return result;
+	}
+
+	String8 ext = str8_skip(path, dot_pos);
+
+	if(str8_match(ext, str8_lit("html"), StringMatchFlag_CaseInsensitive) ||
+	   str8_match(ext, str8_lit("htm"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("text/html; charset=utf-8");
+	}
+	else if(str8_match(ext, str8_lit("css"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("text/css; charset=utf-8");
+	}
+	else if(str8_match(ext, str8_lit("js"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("application/javascript; charset=utf-8");
+	}
+	else if(str8_match(ext, str8_lit("json"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("application/json; charset=utf-8");
+	}
+	else if(str8_match(ext, str8_lit("xml"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("application/xml; charset=utf-8");
+	}
+	else if(str8_match(ext, str8_lit("txt"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("text/plain; charset=utf-8");
+	}
+	else if(str8_match(ext, str8_lit("png"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("image/png");
+	}
+	else if(str8_match(ext, str8_lit("jpg"), StringMatchFlag_CaseInsensitive) ||
+	        str8_match(ext, str8_lit("jpeg"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("image/jpeg");
+	}
+	else if(str8_match(ext, str8_lit("gif"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("image/gif");
+	}
+	else if(str8_match(ext, str8_lit("svg"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("image/svg+xml");
+	}
+	else if(str8_match(ext, str8_lit("webp"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("image/webp");
+	}
+	else if(str8_match(ext, str8_lit("ico"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("image/x-icon");
+	}
+	else if(str8_match(ext, str8_lit("woff"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("font/woff");
+	}
+	else if(str8_match(ext, str8_lit("woff2"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("font/woff2");
+	}
+	else if(str8_match(ext, str8_lit("ttf"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("font/ttf");
+	}
+	else if(str8_match(ext, str8_lit("pdf"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("application/pdf");
+	}
+	else if(str8_match(ext, str8_lit("zip"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("application/zip");
+	}
+	else if(str8_match(ext, str8_lit("mp4"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("video/mp4");
+	}
+	else if(str8_match(ext, str8_lit("webm"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("video/webm");
+	}
+	else if(str8_match(ext, str8_lit("mp3"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("audio/mpeg");
+	}
+	else if(str8_match(ext, str8_lit("wav"), StringMatchFlag_CaseInsensitive))
+	{
+		result = str8_lit("audio/wav");
 	}
 
 	return result;
@@ -1008,46 +1090,93 @@ send_error_response(SSL *ssl, OS_Handle socket, HTTP_Status status, String8 mess
 }
 
 internal void
-proxy_to_backend(HTTP_Request *req, Backend *backend, SSL *client_ssl, OS_Handle client_socket)
+serve_file(HTTP_Request *req, String8 file_root, SSL *client_ssl, OS_Handle client_socket)
 {
-	OS_Handle backend_socket = os_socket_connect_tcp(backend->backend_host, backend->backend_port);
-	if(os_handle_match(backend_socket, os_handle_zero()))
+	Temp scratch = scratch_begin(0, 0);
+
+	String8 request_path = req->path;
+	if(request_path.size > 0 && request_path.str[0] == '/')
 	{
-		send_error_response(client_ssl, client_socket, HTTP_Status_502_BadGateway, str8_lit("Backend unavailable"));
+		request_path = str8_skip(request_path, 1);
+	}
+
+	for(u64 i = 0; i + 1 < request_path.size; i += 1)
+	{
+		if(request_path.str[i] == '.' && request_path.str[i + 1] == '.')
+		{
+			send_error_response(client_ssl, client_socket, HTTP_Status_400_BadRequest, str8_lit("Invalid path"));
+			scratch_end(scratch);
+			return;
+		}
+	}
+
+	String8 file_path = str8f(scratch.arena, "%S/%S", file_root, request_path);
+	String8 canonical_root = os_full_path_from_path(scratch.arena, file_root);
+	String8 canonical_file = os_full_path_from_path(scratch.arena, file_path);
+
+	if(canonical_file.size < canonical_root.size ||
+	   !str8_match(str8_prefix(canonical_file, canonical_root.size), canonical_root, 0))
+	{
+		send_error_response(client_ssl, client_socket, HTTP_Status_403_Forbidden, str8_lit("Access denied"));
+		scratch_end(scratch);
 		return;
 	}
 
-	int backend_fd = (int)backend_socket.u64[0];
+	file_path = canonical_file;
 
-	Temp scratch = scratch_begin(0, 0);
-	String8 request_data = http_request_serialize(scratch.arena, req);
-	scratch_end(scratch);
-
-	for(u64 written = 0; written < request_data.size;)
+	OS_FileProperties props = os_properties_from_file_path(file_path);
+	if(props.flags & OS_FilePropertyFlag_Directory)
 	{
-		ssize_t result = write(backend_fd, request_data.str + written, request_data.size - written);
-		if(result <= 0)
+		String8 index_path = str8f(scratch.arena, "%S/index.html", file_path);
+		OS_FileProperties index_props = os_properties_from_file_path(index_path);
+		if(!(index_props.flags & OS_FilePropertyFlag_Directory) && index_props.size > 0)
 		{
-			os_file_close(backend_socket);
-			send_error_response(client_ssl, client_socket, HTTP_Status_502_BadGateway, str8_lit("Backend write failed"));
+			file_path = index_path;
+			props = index_props;
+		}
+		else
+		{
+			send_error_response(client_ssl, client_socket, HTTP_Status_403_Forbidden,
+			                    str8_lit("Directory listing not allowed"));
+			scratch_end(scratch);
 			return;
 		}
-		written += result;
 	}
 
-	u8 buffer[backend_read_buffer_size];
-	for(;;)
+	OS_Handle file = os_file_open(OS_AccessFlag_Read, file_path);
+	if(os_handle_match(file, os_handle_zero()))
 	{
-		ssize_t bytes = read(backend_fd, buffer, sizeof(buffer));
-		if(bytes <= 0)
-		{
-			break;
-		}
-
-		socket_write_all(client_ssl, client_socket, str8(buffer, (u64)bytes));
+		send_error_response(client_ssl, client_socket, HTTP_Status_404_NotFound, str8_lit("File not found"));
+		scratch_end(scratch);
+		return;
 	}
 
-	os_file_close(backend_socket);
+	u8 *file_data = push_array(scratch.arena, u8, props.size);
+	u64 bytes_read = os_file_read(file, rng_1u64(0, props.size), file_data);
+	os_file_close(file);
+
+	if(bytes_read != props.size)
+	{
+		send_error_response(client_ssl, client_socket, HTTP_Status_500_InternalServerError,
+		                    str8_lit("Failed to read file"));
+		scratch_end(scratch);
+		return;
+	}
+
+	String8 mime_type = mime_type_from_extension(file_path);
+
+	HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_200_OK);
+	http_header_add(scratch.arena, &res->headers, str8_lit("Content-Type"), mime_type);
+	String8 content_length = str8_from_u64(scratch.arena, bytes_read, 10, 0, 0);
+	http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), content_length);
+	res->body = str8(file_data, bytes_read);
+
+	String8 response_data = http_response_serialize(scratch.arena, res);
+	socket_write_all(client_ssl, client_socket, response_data);
+
+	log_infof("httpproxy: served file %S (%u bytes, %S)\n", file_path, bytes_read, mime_type);
+
+	scratch_end(scratch);
 }
 
 internal void
@@ -1059,23 +1188,18 @@ handle_http_request(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket,
 		return;
 	}
 
-	Backend *backend = find_backend_for_path(config, req->path);
-	if(backend == 0)
+	if(config->file_root.size == 0)
 	{
-		log_infof("httpproxy: no backend for path %S\n", req->path);
-		send_error_response(client_ssl, client_socket, HTTP_Status_404_NotFound,
-		                    str8_lit("No backend configured for this path"));
+		send_error_response(client_ssl, client_socket, HTTP_Status_500_InternalServerError,
+		                    str8_lit("No file root configured"));
 		return;
 	}
 
-	u64 proxy_start_us = os_now_microseconds();
-	log_infof("httpproxy: proxy to %S:%u\n", backend->backend_host, backend->backend_port);
-
-	proxy_to_backend(req, backend, client_ssl, client_socket);
-
-	u64 proxy_end_us = os_now_microseconds();
-	u64 duration_us = proxy_end_us - proxy_start_us;
-	log_infof("httpproxy: proxy complete (%u μs)\n", duration_us);
+	u64 request_start_us = os_now_microseconds();
+	serve_file(req, config->file_root, client_ssl, client_socket);
+	u64 request_end_us = os_now_microseconds();
+	u64 duration_us = request_end_us - request_start_us;
+	log_infof("httpproxy: request complete (%u μs)\n", duration_us);
 }
 
 ////////////////////////////////
@@ -1440,16 +1564,23 @@ entry_point(CmdLine *cmd_line)
 	}
 
 	proxy_ctx->config = push_array(arena, ProxyConfig, 1);
+	proxy_ctx->config->file_root = cmd_line_string(cmd_line, str8_lit("file-root"));
 	proxy_ctx->config->listen_port = listen_port;
-	proxy_ctx->config->backend_count = 1;
-	proxy_ctx->config->backends = push_array(arena, Backend, 1);
-	proxy_ctx->config->backends[0].path_prefix = str8_lit("/");
-	proxy_ctx->config->backends[0].backend_host = str8_lit("127.0.0.1");
-	proxy_ctx->config->backends[0].backend_port = 8000;
 
-	log_infof("httpproxy: listening on port %u\n", listen_port);
-	log_infof("httpproxy: proxying / to %S:%u\n", proxy_ctx->config->backends[0].backend_host,
-	          proxy_ctx->config->backends[0].backend_port);
+	if(proxy_ctx->config->file_root.size > 0)
+	{
+		log_infof("httpproxy: serving files from %S\n", proxy_ctx->config->file_root);
+		log_infof("httpproxy: listening on port %u\n", listen_port);
+	}
+	else
+	{
+		log_error(str8_lit("httpproxy: --file-root required\n"));
+		log_scope_flush(scratch.arena);
+		log_release(setup_log);
+		arena_release(arena);
+		scratch_end(scratch);
+		return;
+	}
 
 	OS_Handle listen_socket = os_socket_listen_tcp(listen_port);
 	if(os_handle_match(listen_socket, os_handle_zero()))

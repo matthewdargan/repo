@@ -107,6 +107,7 @@ in {
       tmpfiles.rules = [
         "d /var/lib/nix-client 0755 root root -"
         "d /var/lib/nix-client/history 0755 root root -"
+        "d /var/lib/nix-client/n 0755 root root -"
       ];
     };
   };

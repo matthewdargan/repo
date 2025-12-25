@@ -64,6 +64,7 @@ in {
     git-server = {
       enable = true;
       baseDir = "/srv/git";
+      extraGroups = ["storage"];
       authorizedKeys = [
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILe/v2phdFJcaINc1bphWEM6vXDSlXY/e0B2zyb3ik1M matthewdargan57@gmail.com"
       ];
@@ -77,6 +78,9 @@ in {
         if [[ -n "''${branch:-}" ]]; then
           git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo reset --hard "$branch"
           git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo clean -fd
+
+          mkdir -p /media/www
+          ${pkgs.rsync}/bin/rsync -av --delete /srv/git/repo/www/ /media/www/
 
           # Trigger systemd service to rebuild in background
           mkdir -p /var/lib/git-server
@@ -213,12 +217,12 @@ in {
       };
     };
     tmpfiles.rules = [
+      "d /media/www 0775 storage storage -"
       "d /srv/nix 0755 git git -"
       "d /srv/nix/hosts 0755 git git -"
       "d /srv/nix/keys 0755 git git -"
       "d /var/lib/git-server 0755 git git -"
       "d /var/lib/jellyfin/n 0755 jellyfin jellyfin -"
-      "d /var/lib/nix-client/n 0755 root root -"
     ];
   };
   system.stateVersion = "25.05";
