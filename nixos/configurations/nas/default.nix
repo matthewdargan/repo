@@ -76,11 +76,11 @@ in {
         done
 
         if [[ -n "''${branch:-}" ]]; then
-          git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo reset --hard "$branch"
-          git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo clean -fd
+          ${pkgs.git}/bin/git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo reset --hard "$branch"
+          ${pkgs.git}/bin/git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo clean -fd
 
           mkdir -p /media/www
-          ${pkgs.rsync}/bin/rsync -av --delete /srv/git/repo/www/ /media/www/
+          ${pkgs.rsync}/bin/rsync -av --delete --no-g /srv/git/repo/www/ /media/www/
 
           # Trigger systemd service to rebuild in background
           mkdir -p /var/lib/git-server
