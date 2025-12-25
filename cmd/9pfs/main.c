@@ -545,10 +545,8 @@ handle_connection(OS_Handle connection_socket)
 	log_select(log);
 	log_scope_begin();
 
-	DateTime now = os_now_universal_time();
-	String8 timestamp = str8_from_datetime(scratch.arena, now);
 	u64 connection_fd = connection_socket.u64[0];
-	log_infof("[%S] 9pfs: connection established\n", timestamp);
+	log_info(str8_lit("9pfs: connection established\n"));
 
 	Server9P *server = server9p_alloc(connection_arena, connection_fd, connection_fd);
 	if(server == 0)
@@ -618,9 +616,7 @@ handle_connection(OS_Handle connection_socket)
 
 	os_file_close(connection_socket);
 
-	DateTime end_time = os_now_universal_time();
-	String8 end_timestamp = str8_from_datetime(scratch.arena, end_time);
-	log_infof("[%S] 9pfs: connection closed\n", end_timestamp);
+	log_info(str8_lit("9pfs: connection closed\n"));
 
 	LogScopeResult result = log_scope_end(scratch.arena);
 	if(result.strings[LogMsgKind_Info].size > 0)
@@ -719,7 +715,6 @@ worker_pool_shutdown(WorkerPool *pool)
 internal void
 entry_point(CmdLine *cmd_line)
 {
-	Temp scratch = scratch_begin(0, 0);
 	Arena *arena = arena_alloc();
 
 	String8 root_path = cmd_line_string(cmd_line, str8_lit("root"));
@@ -792,9 +787,7 @@ entry_point(CmdLine *cmd_line)
 					continue;
 				}
 
-				DateTime accept_time = os_now_universal_time();
-				String8 accept_timestamp = str8_from_datetime(scratch.arena, accept_time);
-				fprintf(stdout, "[%.*s] 9pfs: accepted connection\n", (int)accept_timestamp.size, accept_timestamp.str);
+				fprintf(stdout, "9pfs: accepted connection\n");
 				fflush(stdout);
 
 				work_queue_push(worker_pool, connection_socket);
@@ -803,5 +796,4 @@ entry_point(CmdLine *cmd_line)
 	}
 
 	arena_release(arena);
-	scratch_end(scratch);
 }

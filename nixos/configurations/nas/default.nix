@@ -115,7 +115,7 @@ in {
         after = ["network.target"];
         description = "9P server for media files";
         serviceConfig = {
-          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs-debug"}/bin/9pfs --root=/media tcp!*!5640";
+          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs"}/bin/9pfs --root=/media tcp!*!5640";
           Restart = "always";
           RestartSec = "5s";
           User = "storage";
