@@ -7,6 +7,7 @@
 #include "math.c"
 #include "string.c"
 #include "thread.c"
+#include "worker_pool.c"
 #include "thread_context.c"
 #include "command_line.c"
 #include "os.c"

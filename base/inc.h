@@ -11,6 +11,7 @@
 #include "math.h"
 #include "string.h"
 #include "thread.h"
+#include "worker_pool.h"
 #include "thread_context.h"
 #include "command_line.h"
 #include "os.h"

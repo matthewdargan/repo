@@ -6,104 +6,7 @@
 // clang-format on
 
 global FsContext9P *fs_context = 0;
-
-////////////////////////////////
-//~ Worker Thread Pool
-
-// TODO: replace with shared base/thread_pool implementation
-
-typedef struct Worker Worker;
-struct Worker
-{
-	u64 id;
-	Thread handle;
-};
-
-typedef struct WorkQueueNode WorkQueueNode;
-struct WorkQueueNode
-{
-	WorkQueueNode *next;
-	OS_Handle connection;
-};
-
-typedef struct WorkerPool WorkerPool;
-struct WorkerPool
-{
-	b32 is_live;
-	Semaphore semaphore;
-	Mutex mutex;
-	Arena *arena;
-	WorkQueueNode *queue_first;
-	WorkQueueNode *queue_last;
-	WorkQueueNode *node_free_list;
-	Worker *workers;
-	u64 worker_count;
-};
-
-global WorkerPool *worker_pool = 0;
-
-internal WorkQueueNode *
-work_queue_node_alloc(WorkerPool *pool)
-{
-	WorkQueueNode *node = 0;
-	MutexScope(pool->mutex)
-	{
-		node = pool->node_free_list;
-		if(node != 0)
-		{
-			SLLStackPop(pool->node_free_list);
-		}
-		else
-		{
-			node = push_array_no_zero(pool->arena, WorkQueueNode, 1);
-		}
-	}
-	MemoryZeroStruct(node);
-	return node;
-}
-
-internal void
-work_queue_node_release(WorkerPool *pool, WorkQueueNode *node)
-{
-	MutexScope(pool->mutex) { SLLStackPush(pool->node_free_list, node); }
-}
-
-internal void
-work_queue_push(WorkerPool *pool, OS_Handle connection)
-{
-	WorkQueueNode *node = work_queue_node_alloc(pool);
-	node->connection = connection;
-	MutexScope(pool->mutex) { SLLQueuePush(pool->queue_first, pool->queue_last, node); }
-	semaphore_drop(pool->semaphore);
-}
-
-internal OS_Handle
-work_queue_pop(WorkerPool *pool)
-{
-	if(!semaphore_take(pool->semaphore, max_u64))
-	{
-		return os_handle_zero();
-	}
-
-	OS_Handle result = os_handle_zero();
-	WorkQueueNode *node = 0;
-	MutexScope(pool->mutex)
-	{
-		if(pool->queue_first != 0)
-		{
-			node = pool->queue_first;
-			result = node->connection;
-			SLLQueuePop(pool->queue_first, pool->queue_last);
-		}
-	}
-
-	if(node != 0)
-	{
-		work_queue_node_release(pool, node);
-	}
-
-	return result;
-}
+global WP_Pool *worker_pool = 0;
 
 internal void
 fid_release(Server9P *server, ServerFid9P *fid)
@@ -635,78 +538,11 @@ handle_connection(OS_Handle connection_socket)
 	scratch_end(scratch);
 }
 
-////////////////////////////////
-//~ Worker Thread Entry Point
-
 internal void
-worker_thread_entry_point(void *ptr)
+handle_connection_task(void *params)
 {
-	WorkerPool *pool = (WorkerPool *)ptr;
-	for(; pool->is_live;)
-	{
-		OS_Handle connection = work_queue_pop(pool);
-		if(!os_handle_match(connection, os_handle_zero()))
-		{
-			handle_connection(connection);
-		}
-	}
-}
-
-////////////////////////////////
-//~ Worker Pool Lifecycle
-
-internal WorkerPool *
-worker_pool_alloc(Arena *arena, u64 worker_count)
-{
-	WorkerPool *pool = push_array(arena, WorkerPool, 1);
-	pool->arena = arena_alloc();
-
-	pool->mutex = mutex_alloc();
-	AssertAlways(pool->mutex.u64[0] != 0);
-
-	pool->semaphore = semaphore_alloc(0, 1024, str8_zero());
-	AssertAlways(pool->semaphore.u64[0] != 0);
-
-	pool->worker_count = worker_count;
-	pool->workers = push_array(arena, Worker, worker_count);
-
-	return pool;
-}
-
-internal void
-worker_pool_start(WorkerPool *pool)
-{
-	pool->is_live = 1;
-	for(u64 i = 0; i < pool->worker_count; i += 1)
-	{
-		Worker *worker = &pool->workers[i];
-		worker->id = i;
-		worker->handle = thread_launch(worker_thread_entry_point, pool);
-		AssertAlways(worker->handle.u64[0] != 0);
-	}
-}
-
-internal void
-worker_pool_shutdown(WorkerPool *pool)
-{
-	pool->is_live = 0;
-
-	for(u64 i = 0; i < pool->worker_count; i += 1)
-	{
-		semaphore_drop(pool->semaphore);
-	}
-
-	for(u64 i = 0; i < pool->worker_count; i += 1)
-	{
-		Worker *worker = &pool->workers[i];
-		if(worker->handle.u64[0] != 0)
-		{
-			thread_join(worker->handle);
-		}
-	}
-
-	semaphore_release(pool->semaphore);
-	mutex_release(pool->mutex);
+	OS_Handle connection = *(OS_Handle *)params;
+	handle_connection(connection);
 }
 
 ////////////////////////////////
@@ -771,8 +607,7 @@ entry_point(CmdLine *cmd_line)
 				worker_count = Max(4, logical_cores / 4);
 			}
 
-			worker_pool = worker_pool_alloc(arena, worker_count);
-			worker_pool_start(worker_pool);
+			worker_pool = wp_pool_alloc(arena, worker_count);
 
 			fprintf(stdout, "9pfs: launched %lu worker threads\n", (unsigned long)worker_count);
 			fflush(stdout);
@@ -790,7 +625,7 @@ entry_point(CmdLine *cmd_line)
 				fprintf(stdout, "9pfs: accepted connection\n");
 				fflush(stdout);
 
-				work_queue_push(worker_pool, connection_socket);
+				wp_submit(worker_pool, handle_connection_task, &connection_socket, sizeof(connection_socket));
 			}
 		}
 	}

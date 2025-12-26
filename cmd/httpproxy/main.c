@@ -34,7 +34,6 @@ typedef struct ACME_AccountKey ACME_AccountKey;
 typedef struct ACME_Client ACME_Client;
 typedef struct ACME_RenewalConfig ACME_RenewalConfig;
 typedef struct HTTP80_Config HTTP80_Config;
-typedef struct WorkerPool WorkerPool;
 
 ////////////////////////////////
 //~ Global Context
@@ -49,7 +48,7 @@ struct HTTPProxy_Context
 	ACME_AccountKey *acme_key;
 	ACME_RenewalConfig *renewal;
 	HTTP80_Config *http80;
-	WorkerPool *workers;
+	WP_Pool *workers;
 	SSL_CTX *acme_ssl;
 };
 
@@ -842,102 +841,6 @@ http80_handler_thread(void *ptr)
 }
 
 ////////////////////////////////
-//~ Worker Thread Pool
-
-// TODO: replace with shared base/thread_pool implementation
-
-typedef struct Worker Worker;
-struct Worker
-{
-	u64 id;
-	Thread handle;
-};
-
-typedef struct WorkQueueNode WorkQueueNode;
-struct WorkQueueNode
-{
-	WorkQueueNode *next;
-	OS_Handle connection;
-};
-
-typedef struct WorkerPool WorkerPool;
-struct WorkerPool
-{
-	b32 is_live;
-	Semaphore semaphore;
-	Mutex mutex;
-	Arena *arena;
-	WorkQueueNode *queue_first;
-	WorkQueueNode *queue_last;
-	WorkQueueNode *node_free_list;
-	Worker *workers;
-	u64 worker_count;
-};
-
-internal WorkQueueNode *
-work_queue_node_alloc(WorkerPool *pool)
-{
-	WorkQueueNode *node = 0;
-	MutexScope(pool->mutex)
-	{
-		node = pool->node_free_list;
-		if(node != 0)
-		{
-			SLLStackPop(pool->node_free_list);
-		}
-		else
-		{
-			node = push_array_no_zero(pool->arena, WorkQueueNode, 1);
-		}
-	}
-	MemoryZeroStruct(node);
-	return node;
-}
-
-internal void
-work_queue_node_release(WorkerPool *pool, WorkQueueNode *node)
-{
-	MutexScope(pool->mutex) { SLLStackPush(pool->node_free_list, node); }
-}
-
-internal void
-work_queue_push(WorkerPool *pool, OS_Handle connection)
-{
-	WorkQueueNode *node = work_queue_node_alloc(pool);
-	node->connection = connection;
-	MutexScope(pool->mutex) { SLLQueuePush(pool->queue_first, pool->queue_last, node); }
-	semaphore_drop(pool->semaphore);
-}
-
-internal OS_Handle
-work_queue_pop(WorkerPool *pool)
-{
-	if(!semaphore_take(pool->semaphore, max_u64))
-	{
-		return os_handle_zero();
-	}
-
-	OS_Handle result = os_handle_zero();
-	WorkQueueNode *node = 0;
-	MutexScope(pool->mutex)
-	{
-		if(pool->queue_first != 0)
-		{
-			node = pool->queue_first;
-			result = node->connection;
-			SLLQueuePop(pool->queue_first, pool->queue_last);
-		}
-	}
-
-	if(node != 0)
-	{
-		work_queue_node_release(pool, node);
-	}
-
-	return result;
-}
-
-////////////////////////////////
 //~ MIME Type Detection
 
 internal String8
@@ -1342,78 +1245,11 @@ handle_connection(OS_Handle connection_socket)
 	scratch_end(scratch);
 }
 
-////////////////////////////////
-//~ Worker Thread Entry Point
-
 internal void
-worker_thread_entry_point(void *ptr)
+handle_connection_task(void *params)
 {
-	WorkerPool *pool = (WorkerPool *)ptr;
-	for(; pool->is_live;)
-	{
-		OS_Handle connection = work_queue_pop(pool);
-		if(!os_handle_match(connection, os_handle_zero()))
-		{
-			handle_connection(connection);
-		}
-	}
-}
-
-////////////////////////////////
-//~ Worker Pool Lifecycle
-
-internal WorkerPool *
-worker_pool_alloc(Arena *arena, u64 worker_count)
-{
-	WorkerPool *pool = push_array(arena, WorkerPool, 1);
-	pool->arena = arena_alloc();
-
-	pool->mutex = mutex_alloc();
-	AssertAlways(pool->mutex.u64[0] != 0);
-
-	pool->semaphore = semaphore_alloc(0, 1024, str8_zero());
-	AssertAlways(pool->semaphore.u64[0] != 0);
-
-	pool->worker_count = worker_count;
-	pool->workers = push_array(arena, Worker, worker_count);
-
-	return pool;
-}
-
-internal void
-worker_pool_start(WorkerPool *pool)
-{
-	pool->is_live = 1;
-	for(u64 i = 0; i < pool->worker_count; i += 1)
-	{
-		Worker *worker = &pool->workers[i];
-		worker->id = i;
-		worker->handle = thread_launch(worker_thread_entry_point, pool);
-		AssertAlways(worker->handle.u64[0] != 0);
-	}
-}
-
-internal void
-worker_pool_shutdown(WorkerPool *pool)
-{
-	pool->is_live = 0;
-
-	for(u64 i = 0; i < pool->worker_count; i += 1)
-	{
-		semaphore_drop(pool->semaphore);
-	}
-
-	for(u64 i = 0; i < pool->worker_count; i += 1)
-	{
-		Worker *worker = &pool->workers[i];
-		if(worker->handle.u64[0] != 0)
-		{
-			thread_join(worker->handle);
-		}
-	}
-
-	semaphore_release(pool->semaphore);
-	mutex_release(pool->mutex);
+	OS_Handle connection = *(OS_Handle *)params;
+	handle_connection(connection);
 }
 
 ////////////////////////////////
@@ -1599,8 +1435,7 @@ entry_point(CmdLine *cmd_line)
 		worker_count = Max(4, logical_cores / 4);
 	}
 
-	proxy_ctx->workers = worker_pool_alloc(arena, worker_count);
-	worker_pool_start(proxy_ctx->workers);
+	proxy_ctx->workers = wp_pool_alloc(arena, worker_count);
 
 	log_infof("httpproxy: launched %lu worker threads\n", (unsigned long)worker_count);
 	log_scope_flush(scratch.arena);
@@ -1627,6 +1462,6 @@ entry_point(CmdLine *cmd_line)
 		log_release(accept_log);
 		scratch_end(accept_scratch);
 
-		work_queue_push(proxy_ctx->workers, connection_socket);
+		wp_submit(proxy_ctx->workers, handle_connection_task, &connection_socket, sizeof(connection_socket));
 	}
 }
