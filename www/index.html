@@ -19,10 +19,50 @@
             font-weight: normal;
             margin-bottom: 20px;
         }
+
+        h2 {
+            font-size: 1.2rem;
+            font-weight: normal;
+            margin-top: 40px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
     </style>
 </head>
 <body>
     <h1>dargs.dev</h1>
-    <p>Under construction.</p>
+    <p class="subtitle">Systems programming and infrastructure</p>
+
+    <h2>Documentation</h2>
+    <ul>
+        <li><a href="/docs/architecture.html">Layered Architecture: Building Code You Can Reason About</a></li>
+        <li><a href="/docs/9p-protocol.html">The 9P Protocol: Network File Systems Done Right</a></li>
+        <li><a href="/docs/9p-server.html">9P Server Implementation</a></li>
+        <li><a href="/docs/media-server.html">Building a Media Server: Simple Tools for Complex Problems</a></li>
+    </ul>
 </body>
 </html>
