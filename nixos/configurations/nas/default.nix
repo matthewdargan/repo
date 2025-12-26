@@ -79,9 +79,6 @@ in {
           ${pkgs.git}/bin/git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo reset --hard "$branch"
           ${pkgs.git}/bin/git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo clean -fd
 
-          mkdir -p /media/www
-          ${pkgs.rsync}/bin/rsync -av --delete --no-g /srv/git/repo/www/ /media/www/
-
           # Trigger systemd service to rebuild in background
           mkdir -p /var/lib/git-server
           date -Iseconds > /var/lib/git-server/rebuild-trigger
@@ -217,7 +214,6 @@ in {
       };
     };
     tmpfiles.rules = [
-      "d /media/www 0775 storage storage -"
       "d /srv/nix 0755 git git -"
       "d /srv/nix/hosts 0755 git git -"
       "d /srv/nix/keys 0755 git git -"

@@ -10,5 +10,6 @@
     ./httpproxy.nix
     ./installer-image.nix
     ./neovim.nix
+    ./www.nix
   ];
 }
