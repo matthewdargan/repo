@@ -71,10 +71,13 @@ h2_on_frame_recv_callback(nghttp2_session *ng_session, const nghttp2_frame *fram
 	(void)ng_session;
 	H2_Session *session = (H2_Session *)user_data;
 
+	log_infof("httpproxy: HTTP/2 received frame type=%d stream_id=%d\n", frame->hd.type, frame->hd.stream_id);
+
 	switch(frame->hd.type)
 	{
 		case NGHTTP2_HEADERS:
 		{
+			log_infof("httpproxy: HTTP/2 HEADERS frame, category=%d\n", frame->headers.cat);
 			if(frame->headers.cat == NGHTTP2_HCAT_REQUEST)
 			{
 				H2_Stream *stream = h2_stream_table_get(session->streams, frame->hd.stream_id);
@@ -85,6 +88,7 @@ h2_on_frame_recv_callback(nghttp2_session *ng_session, const nghttp2_frame *fram
 					if(frame->hd.flags & NGHTTP2_FLAG_END_STREAM)
 					{
 						stream->end_stream = 1;
+						log_infof("httpproxy: HTTP/2 request complete on stream %d, submitting to worker\n", frame->hd.stream_id);
 
 						H2_StreamTask task = {session, frame->hd.stream_id};
 						wp_submit(session->workers, h2_stream_task_handler, &task, sizeof(task));
@@ -96,6 +100,7 @@ h2_on_frame_recv_callback(nghttp2_session *ng_session, const nghttp2_frame *fram
 
 		case NGHTTP2_DATA:
 		{
+			log_info(str8_lit("httpproxy: HTTP/2 DATA frame\n"));
 			if(frame->hd.flags & NGHTTP2_FLAG_END_STREAM)
 			{
 				H2_Stream *stream = h2_stream_table_get(session->streams, frame->hd.stream_id);
@@ -111,6 +116,7 @@ h2_on_frame_recv_callback(nghttp2_session *ng_session, const nghttp2_frame *fram
 		break;
 
 		default:
+			log_infof("httpproxy: HTTP/2 other frame type=%d\n", frame->hd.type);
 			break;
 	}
 

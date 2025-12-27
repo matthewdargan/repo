@@ -95,3 +95,19 @@ log_scope_end(Arena *arena)
 	}
 	return result;
 }
+
+internal void
+log_scope_flush(Arena *arena)
+{
+	LogScopeResult result = log_scope_end(arena);
+	if(result.strings[LogMsgKind_Info].size > 0)
+	{
+		fwrite(result.strings[LogMsgKind_Info].str, 1, result.strings[LogMsgKind_Info].size, stdout);
+		fflush(stdout);
+	}
+	if(result.strings[LogMsgKind_Error].size > 0)
+	{
+		fwrite(result.strings[LogMsgKind_Error].str, 1, result.strings[LogMsgKind_Error].size, stderr);
+		fflush(stderr);
+	}
+}

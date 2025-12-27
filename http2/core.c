@@ -17,7 +17,8 @@ ssl_write_all(SSL *ssl, const u8 *data, u64 size)
 }
 
 internal H2_Session *
-h2_session_alloc(Arena *arena, SSL *ssl, OS_Handle socket, WP_Pool *workers)
+h2_session_alloc(Arena *arena, SSL *ssl, OS_Handle socket, WP_Pool *workers, H2_RequestHandler handler,
+                 void *handler_data)
 {
 	H2_Session *session = push_array(arena, H2_Session, 1);
 	session->arena = arena;
@@ -25,6 +26,8 @@ h2_session_alloc(Arena *arena, SSL *ssl, OS_Handle socket, WP_Pool *workers)
 	session->socket = socket;
 	session->streams = h2_stream_table_alloc(arena);
 	session->workers = workers;
+	session->request_handler = handler;
+	session->request_handler_data = handler_data;
 
 	nghttp2_session_callbacks *callbacks;
 	nghttp2_session_callbacks_new(&callbacks);
@@ -59,15 +62,20 @@ h2_session_flush(H2_Session *session)
 {
 	if(!session->want_write)
 	{
+		log_info(str8_lit("httpproxy: h2_session_flush: no want_write\n"));
 		return;
 	}
 
 	const uint8_t *data;
 	ssize_t datalen = nghttp2_session_mem_send(session->ng_session, &data);
 
+	log_infof("httpproxy: h2_session_flush: mem_send returned %lld bytes\n", (s64)datalen);
+
 	if(datalen > 0)
 	{
-		ssl_write_all(session->ssl, data, (u64)datalen);
+		b32 result = ssl_write_all(session->ssl, data, (u64)datalen);
+		log_infof("httpproxy: h2_session_flush: ssl_write_all %s (%llu bytes)\n", result ? "succeeded" : "failed",
+		          (u64)datalen);
 	}
 
 	session->want_write = 0;
@@ -109,50 +117,45 @@ h2_session_release(H2_Session *session)
 internal void
 h2_stream_task_handler(void *params)
 {
+	log_infof("httpproxy: h2_stream_task_handler ENTRY params=%p\n", params);
+
+	if(params == 0)
+	{
+		log_info(str8_lit("httpproxy: h2_stream_task_handler: params is NULL\n"));
+		return;
+	}
+
 	H2_StreamTask *task = (H2_StreamTask *)params;
+	log_infof("httpproxy: h2_stream_task_handler task=%p\n", task);
+
 	H2_Session *session = task->session;
+	log_infof("httpproxy: h2_stream_task_handler session=%p stream_id=%d\n", session, task->stream_id);
+
+	if(session == 0)
+	{
+		log_info(str8_lit("httpproxy: h2_stream_task_handler: session is NULL\n"));
+		return;
+	}
+
+	log_infof("httpproxy: h2_stream_task_handler session->streams=%p\n", session->streams);
 	H2_Stream *stream = h2_stream_table_get(session->streams, task->stream_id);
+
+	log_infof("httpproxy: h2_stream_task_handler called for stream_id=%d\n", task->stream_id);
 
 	if(stream == 0)
 	{
+		log_infof("httpproxy: h2_stream_task_handler: stream %d not found\n", task->stream_id);
 		return;
 	}
 
-	Temp scratch = scratch_begin(&stream->arena, 1);
 	HTTP_Request *req = h2_stream_to_request(stream->arena, stream);
 
-	if(req == 0 || req->method == HTTP_Method_Unknown || req->path.size == 0)
+	log_infof("httpproxy: h2_stream_task_handler: req=%p method=%d path.size=%llu handler=%p\n", req,
+	          req ? req->method : -1, req ? req->path.size : 0, session->request_handler);
+
+	if(req != 0 && req->method != HTTP_Method_Unknown && req->path.size > 0 && session->request_handler != 0)
 	{
-		scratch_end(scratch);
-		return;
+		log_info(str8_lit("httpproxy: h2_stream_task_handler: calling request handler\n"));
+		session->request_handler(session, stream, req, session->request_handler_data);
 	}
-
-	HTTP_Response *res = http_response_alloc(stream->arena, HTTP_Status_500_InternalServerError);
-	res->body = str8_lit("Internal Server Error");
-
-	// TODO: how do we fix this? we have a production-ready reverse proxy with both HTTP/1.1 and HTTP/2.0 support
-	// NOTE: This is a simplified version - the actual implementation would call
-	// the existing handle_http_request logic, but that function doesn't return
-	// a response currently. For now, we'll create a minimal handler here.
-	// In a full implementation, we'd need to refactor handle_http_request to
-	// return an HTTP_Response instead of writing directly to the socket.
-
-	// For now, let's create a basic response
-	if(req->method == HTTP_Method_GET)
-	{
-		res = http_response_alloc(stream->arena, HTTP_Status_200_OK);
-		res->body = str8_lit("HTTP/2 Response");
-		http_header_add(stream->arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/plain"));
-	}
-
-	String8 content_length = str8_from_u64(stream->arena, res->body.size, 10, 0, 0);
-	http_header_add(stream->arena, &res->headers, str8_lit("Content-Length"), content_length);
-
-	MutexScope(stream->response_mutex)
-	{
-		stream->response = res;
-		stream->response_ready = 1;
-	}
-
-	scratch_end(scratch);
 }

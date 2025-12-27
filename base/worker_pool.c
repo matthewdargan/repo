@@ -56,12 +56,19 @@ wp_submit(WP_Pool *pool, WP_TaskFunc *func, void *params, u64 params_size)
 {
 	AssertAlways(params_size <= sizeof(((WP_Task *)0)->params));
 
+	log_infof("worker_pool: wp_submit called pool=%p func=%p params_size=%llu\n", pool, func, params_size);
+
 	WP_Task *task = wp_task_alloc(pool);
 	task->func = func;
 	MemoryCopy(task->params, params, params_size);
 
+	log_infof("worker_pool: wp_submit task allocated task=%p\n", task);
+
 	MutexScope(pool->mutex) { SLLQueuePush(pool->queue_first, pool->queue_last, task); }
+
+	log_infof("worker_pool: wp_submit about to drop semaphore\n");
 	semaphore_drop(pool->semaphore);
+	log_infof("worker_pool: wp_submit semaphore dropped\n");
 }
 
 ////////////////////////////////
@@ -72,18 +79,36 @@ wp_worker_entry_point(void *ptr)
 {
 	WP_Worker *worker = (WP_Worker *)ptr;
 	WP_Pool *pool = worker->pool;
+
+	// Set up logging for this worker thread
+	Log *log = log_alloc();
+	log_select(log);
+	log_scope_begin();
+
+	log_infof("worker_pool: thread %llu started\n", worker->id);
 	for(; pool->is_live;)
 	{
+		log_infof("worker_pool: thread %llu waiting for task\n", worker->id);
 		WP_Task *task = wp_task_pop(pool);
+		log_infof("worker_pool: thread %llu got task=%p\n", worker->id, task);
 		if(task != 0)
 		{
+			log_infof("worker_pool: thread %llu executing task func=%p\n", worker->id, task->func);
 			if(task->func != 0)
 			{
 				task->func(task->params);
 			}
+			log_infof("worker_pool: thread %llu task complete\n", worker->id);
 			wp_task_release(pool, task);
 		}
 	}
+	log_infof("worker_pool: thread %llu exiting\n", worker->id);
+
+	// Flush and release the log
+	Temp scratch = scratch_begin(0, 0);
+	log_scope_flush(scratch.arena);
+	scratch_end(scratch);
+	log_release(log);
 }
 
 ////////////////////////////////
@@ -92,6 +117,8 @@ wp_worker_entry_point(void *ptr)
 internal WP_Pool *
 wp_pool_alloc(Arena *arena, u64 worker_count)
 {
+	log_infof("worker_pool: wp_pool_alloc called with worker_count=%llu\n", worker_count);
+
 	WP_Pool *pool = push_array(arena, WP_Pool, 1);
 	pool->arena = arena_alloc();
 	pool->mutex = mutex_alloc();
@@ -103,14 +130,20 @@ wp_pool_alloc(Arena *arena, u64 worker_count)
 	AssertAlways(pool->mutex.u64[0] != 0);
 	AssertAlways(pool->semaphore.u64[0] != 0);
 
+	log_infof("worker_pool: launching %llu worker threads\n", worker_count);
+
 	for(u64 i = 0; i < worker_count; i += 1)
 	{
 		WP_Worker *worker = &pool->workers[i];
 		worker->id = i;
 		worker->pool = pool;
+		log_infof("worker_pool: launching thread %llu\n", i);
 		worker->handle = thread_launch(wp_worker_entry_point, worker);
 		AssertAlways(worker->handle.u64[0] != 0);
+		log_infof("worker_pool: thread %llu launched handle=%llu\n", i, worker->handle.u64[0]);
 	}
+
+	log_infof("worker_pool: all threads launched\n");
 
 	return pool;
 }
