@@ -14,15 +14,6 @@
       after = ["media-serve.service" "network-online.target"];
       wants = ["network-online.target"];
     }
-    {
-      what = "127.0.0.1";
-      where = "/var/lib/nix-client/n/nix";
-      type = "9p";
-      options = "port=5641";
-      requires = ["nix-serve.service"];
-      after = ["nix-serve.service" "network-online.target"];
-      wants = ["network-online.target"];
-    }
   ];
 in {
   imports = [
@@ -32,7 +23,6 @@ in {
     self.nixosModules.fish
     self.nixosModules.git-server
     self.nixosModules.locale
-    self.nixosModules.nix-client
     self.nixosModules.nix-config
   ];
   boot = {
@@ -87,10 +77,9 @@ in {
     };
     "9p-health-check" = {
       enable = true;
-      mounts = ["/var/lib/jellyfin/n/media" "/var/lib/nix-client/n/nix"];
+      mounts = ["/var/lib/jellyfin/n/media"];
     };
     jellyfin.enable = true;
-    nix-client.enable = true;
     openssh = {
       enable = true;
       settings.PermitRootLogin = "no";
