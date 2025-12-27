@@ -1,5 +1,5 @@
 ////////////////////////////////
-//~ HTTP Method Helpers
+//~ HTTP API
 
 internal HTTP_Method
 http_method_from_str8(String8 string)
@@ -83,9 +83,6 @@ str8_from_http_method(HTTP_Method method)
 	}
 	return result;
 }
-
-////////////////////////////////
-//~ HTTP Status Helpers
 
 internal String8
 str8_from_http_status(HTTP_Status status)
@@ -201,9 +198,6 @@ str8_from_http_status(HTTP_Status status)
 	}
 	return result;
 }
-
-////////////////////////////////
-//~ HTTP Header Helpers
 
 internal String8
 http_header_get(HTTP_HeaderList *list, String8 name)

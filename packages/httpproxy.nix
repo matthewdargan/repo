@@ -10,8 +10,8 @@
       pname = "httpproxy";
       description = "HTTP reverse proxy with TLS termination";
       version = "0.1.0";
-      buildInputs = [pkgs.openssl];
-      extraLinkFlags = "-lm -lssl -lcrypto";
+      buildInputs = [pkgs.openssl pkgs.nghttp2];
+      extraLinkFlags = "-lm -lssl -lcrypto -lnghttp2";
     };
   };
 }

@@ -1,5 +1,5 @@
 ////////////////////////////////
-//~ HTTP Request Parsing
+//~ HTTP Request
 
 internal HTTP_Request *
 http_request_parse(Arena *arena, String8 data)

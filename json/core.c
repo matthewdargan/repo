@@ -1,5 +1,5 @@
 ////////////////////////////////
-//~ JSON Parser Type
+//~ JSON Parser
 
 typedef struct JSON_Parser JSON_Parser;
 struct JSON_Parser
@@ -8,9 +8,6 @@ struct JSON_Parser
 	u8 *ptr;
 	u8 *end;
 };
-
-////////////////////////////////
-//~ JSON Parser Helpers
 
 internal void
 json_skip_whitespace(JSON_Parser *p)
@@ -41,9 +38,6 @@ json_match_literal(JSON_Parser *p, String8 literal)
 }
 
 internal JSON_Value *json_parse_value(JSON_Parser *p);
-
-////////////////////////////////
-//~ JSON Parser - Primitives
 
 internal JSON_Value *
 json_parse_string(JSON_Parser *p)
@@ -95,9 +89,6 @@ json_parse_number(JSON_Parser *p)
 
 	return json_value_from_number(p->arena, number);
 }
-
-////////////////////////////////
-//~ JSON Parser - Compound Types
 
 internal JSON_Value *
 json_parse_object(JSON_Parser *p)
@@ -250,7 +241,7 @@ json_parse_value(JSON_Parser *p)
 }
 
 ////////////////////////////////
-//~ JSON Parsing
+//~ JSON API
 
 internal JSON_Value *
 json_parse(Arena *arena, String8 text)
@@ -297,9 +288,6 @@ json_value_null(Arena *arena)
 	val->kind = JSON_ValueKind_Null;
 	return val;
 }
-
-////////////////////////////////
-//~ JSON Object Building
 
 internal JSON_Value *
 json_object_alloc(Arena *arena)
@@ -361,9 +349,6 @@ json_array_add(JSON_Value *arr, JSON_Value *value)
 	arr->values[arr->count] = value;
 	arr->count += 1;
 }
-
-////////////////////////////////
-//~ JSON Serialization
 
 internal void
 json_serialize_string(Arena *arena, String8List *list, String8 string)

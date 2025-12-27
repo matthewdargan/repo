@@ -2,7 +2,7 @@
 #define HTTP_CORE_H
 
 ////////////////////////////////
-//~ HTTP Method Types
+//~ HTTP Types
 
 typedef enum HTTP_Method
 {
@@ -17,9 +17,6 @@ typedef enum HTTP_Method
 	HTTP_Method_PATCH,
 	HTTP_Method_Unknown,
 } HTTP_Method;
-
-////////////////////////////////
-//~ HTTP Status Codes
 
 typedef enum HTTP_Status
 {
@@ -63,9 +60,6 @@ typedef enum HTTP_Status
 	HTTP_Status_504_GatewayTimeout = 504,
 } HTTP_Status;
 
-////////////////////////////////
-//~ HTTP Header Types
-
 typedef struct HTTP_Header HTTP_Header;
 struct HTTP_Header
 {
@@ -81,18 +75,11 @@ struct HTTP_HeaderList
 };
 
 ////////////////////////////////
-//~ HTTP Method Helpers
+//~ HTTP API
 
 internal HTTP_Method http_method_from_str8(String8 string);
 internal String8 str8_from_http_method(HTTP_Method method);
-
-////////////////////////////////
-//~ HTTP Status Helpers
-
 internal String8 str8_from_http_status(HTTP_Status status);
-
-////////////////////////////////
-//~ HTTP Header Helpers
 
 internal String8 http_header_get(HTTP_HeaderList *list, String8 name);
 internal void http_header_add(Arena *arena, HTTP_HeaderList *list, String8 name, String8 value);

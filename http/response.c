@@ -1,5 +1,5 @@
 ////////////////////////////////
-//~ HTTP Response Building
+//~ HTTP Response
 
 internal HTTP_Response *
 http_response_alloc(Arena *arena, HTTP_Status status)

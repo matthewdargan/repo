@@ -1,3 +1,4 @@
+#include <nghttp2/nghttp2.h>
 #include <openssl/core_names.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -7,14 +8,16 @@
 #include "json/inc.h"
 #include "http/inc.h"
 #include "acme/inc.h"
+#include "http2/inc.h"
 #include "base/inc.c"
 #include "json/inc.c"
 #include "http/inc.c"
 #include "acme/inc.c"
+#include "http2/inc.c"
 // clang-format on
 
 ////////////////////////////////
-//~ Configuration Constants
+//~ Globals & Configuration
 
 read_only global u64 max_request_size = MB(1);
 read_only global u64 challenge_table_initial_capacity = 16;
@@ -22,13 +25,11 @@ read_only global u64 cert_renewal_check_interval_ms = 24 * 60 * 60 * 1000;
 read_only global u64 cert_renewal_days_threshold = 30;
 read_only global u64 acme_poll_max_attempts = 30;
 read_only global u64 acme_poll_delay_ms = 2000;
-read_only global u64 http_read_buffer_size = KB(16);
+read_only global u64 h1_read_buffer_size = KB(16);
+read_only global u64 h2_read_buffer_size = KB(64);
 read_only global u64 backend_read_buffer_size = KB(64);
 read_only global u64 session_duration_days = 7;
 read_only global u64 session_table_initial_capacity = 64;
-
-////////////////////////////////
-//~ Forward Declarations
 
 typedef struct ProxyConfig ProxyConfig;
 typedef struct AuthConfig AuthConfig;
@@ -40,9 +41,6 @@ typedef struct ACME_AccountKey ACME_AccountKey;
 typedef struct ACME_Client ACME_Client;
 typedef struct ACME_RenewalConfig ACME_RenewalConfig;
 typedef struct HTTP80_Config HTTP80_Config;
-
-////////////////////////////////
-//~ Global Context
 
 typedef struct HTTPProxy_Context HTTPProxy_Context;
 struct HTTPProxy_Context
@@ -62,9 +60,6 @@ struct HTTPProxy_Context
 
 global HTTPProxy_Context *proxy_ctx = 0;
 
-////////////////////////////////
-//~ Proxy Configuration
-
 typedef struct ProxyConfig ProxyConfig;
 struct ProxyConfig
 {
@@ -72,9 +67,6 @@ struct ProxyConfig
 	String8 private_root;
 	u16 listen_port;
 };
-
-////////////////////////////////
-//~ Auth Configuration
 
 typedef struct AuthConfig AuthConfig;
 struct AuthConfig
@@ -85,7 +77,7 @@ struct AuthConfig
 };
 
 ////////////////////////////////
-//~ ACME Challenge Management
+//~ ACME
 
 typedef struct ACME_Challenge ACME_Challenge;
 struct ACME_Challenge
@@ -192,7 +184,7 @@ acme_challenge_remove(ACME_ChallengeTable *table, String8 token)
 }
 
 ////////////////////////////////
-//~ Session Management
+//~ Session & Authentication
 
 typedef struct Session Session;
 struct Session
@@ -348,9 +340,6 @@ session_delete(SessionTable *table, String8 session_id)
 	}
 }
 
-////////////////////////////////
-//~ Cookie Helpers
-
 internal String8
 cookie_parse(String8 cookie_header, String8 name)
 {
@@ -415,9 +404,6 @@ cookie_serialize(Arena *arena, String8 name, String8 value, u64 max_age_seconds,
 	return result;
 }
 
-////////////////////////////////
-//~ URL Decoding
-
 internal String8
 url_decode(Arena *arena, String8 encoded)
 {
@@ -480,9 +466,6 @@ url_decode(Arena *arena, String8 encoded)
 	return result;
 }
 
-////////////////////////////////
-//~ Auth Helpers
-
 internal b32
 auth_check_credentials(AuthConfig *auth, String8 username, String8 password)
 {
@@ -534,6 +517,24 @@ struct TLS_Context
 	String8 key_path;
 	b32 enabled;
 };
+
+static int
+alpn_select_callback(SSL *ssl, const unsigned char **out, unsigned char *outlen, const unsigned char *in,
+                     unsigned int inlen, void *arg)
+{
+	(void)ssl;
+	(void)arg;
+
+	if(SSL_select_next_proto((unsigned char **)out, outlen, (const unsigned char *)"\x02h2", 3, in, inlen) ==
+	   OPENSSL_NPN_NEGOTIATED)
+	{
+		return SSL_TLSEXT_ERR_OK;
+	}
+
+	*out = (const unsigned char *)"http/1.1";
+	*outlen = 8;
+	return SSL_TLSEXT_ERR_OK;
+}
 
 internal b32
 tls_context_load_cert(SSL_CTX *ssl_ctx, String8 cert_path, String8 key_path)
@@ -595,6 +596,7 @@ tls_context_alloc(Arena *arena, String8 cert_path, String8 key_path)
 	}
 
 	SSL_CTX_set_min_proto_version(ctx->ssl_ctx, TLS1_3_VERSION);
+	SSL_CTX_set_alpn_select_cb(ctx->ssl_ctx, alpn_select_callback, 0);
 
 	if(!tls_context_load_cert(ctx->ssl_ctx, cert_path, key_path))
 	{
@@ -605,9 +607,6 @@ tls_context_alloc(Arena *arena, String8 cert_path, String8 key_path)
 	ctx->enabled = 1;
 	return ctx;
 }
-
-////////////////////////////////
-//~ JSON Web Signature for ACME
 
 typedef struct ACME_AccountKey ACME_AccountKey;
 struct ACME_AccountKey
@@ -687,7 +686,7 @@ acme_account_key_alloc(Arena *arena, String8 key_path)
 }
 
 ////////////////////////////////
-//~ Socket Write Helper
+//~ HTTP Request Handling
 
 internal void
 socket_write_all(SSL *ssl, OS_Handle socket, String8 data)
@@ -719,9 +718,6 @@ socket_write_all(SSL *ssl, OS_Handle socket, String8 data)
 	}
 }
 
-////////////////////////////////
-//~ Log Scope Helper
-
 internal void
 log_scope_flush(Arena *arena)
 {
@@ -737,9 +733,6 @@ log_scope_flush(Arena *arena)
 		fflush(stderr);
 	}
 }
-
-////////////////////////////////
-//~ ACME Orchestration
 
 internal b32
 acme_provision_certificate(Arena *arena, ACME_Client *client, String8 domain, EVP_PKEY *cert_key,
@@ -911,9 +904,6 @@ acme_provision_certificate(Arena *arena, ACME_Client *client, String8 domain, EV
 	return 1;
 }
 
-////////////////////////////////
-//~ ACME Certificate Renewal
-
 typedef struct ACME_RenewalConfig ACME_RenewalConfig;
 struct ACME_RenewalConfig
 {
@@ -1043,9 +1033,6 @@ acme_renewal_thread(void *ptr)
 	fflush(stdout);
 }
 
-////////////////////////////////
-//~ ACME Challenge Handler
-
 internal b32
 handle_acme_challenge(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket)
 {
@@ -1099,9 +1086,6 @@ handle_acme_challenge(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socke
 	scratch_end(scratch);
 	return 1;
 }
-
-////////////////////////////////
-//~ Login/Logout Handlers
 
 internal void
 send_error_response(SSL *ssl, OS_Handle socket, HTTP_Status status, String8 message)
@@ -1302,9 +1286,6 @@ handle_logout(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket)
 	scratch_end(scratch);
 }
 
-////////////////////////////////
-//~ HTTP Port 80 Handler (ACME challenges + HTTPS redirect)
-
 typedef struct HTTP80_Config HTTP80_Config;
 struct HTTP80_Config
 {
@@ -1353,7 +1334,7 @@ http80_handler_thread(void *ptr)
 
 		Temp scratch = scratch_begin(0, 0);
 
-		u8 buffer[http_read_buffer_size];
+		u8 buffer[h1_read_buffer_size];
 		int client_fd = (int)client_socket.u64[0];
 		ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer));
 
@@ -1392,9 +1373,6 @@ http80_handler_thread(void *ptr)
 	fprintf(stdout, "http80: handler thread stopped\n");
 	fflush(stdout);
 }
-
-////////////////////////////////
-//~ MIME Type Detection
 
 internal String8
 mime_type_from_extension(String8 path)
@@ -1511,9 +1489,6 @@ mime_type_from_extension(String8 path)
 
 	return result;
 }
-
-////////////////////////////////
-//~ Reverse Proxy
 
 internal void
 proxy_to_backend(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket, String8 backend_host, u16 backend_port,
@@ -1634,9 +1609,6 @@ proxy_to_backend(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket, St
 	scratch_end(response_scratch);
 	os_file_close(backend_socket);
 }
-
-////////////////////////////////
-//~ HTTP Proxy Logic
 
 internal void
 serve_file(HTTP_Request *req, String8 file_root, SSL *client_ssl, OS_Handle client_socket, b32 allow_directory_listing)
@@ -1917,8 +1889,93 @@ handle_http_request(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket,
 	log_infof("httpproxy: request complete (%u μs)\n", duration_us);
 }
 
-////////////////////////////////
-//~ Server Loop
+internal void
+handle_h1_connection(SSL *ssl, OS_Handle connection_socket, Arena *connection_arena)
+{
+	int client_fd = (int)connection_socket.u64[0];
+
+	u8 buffer[h1_read_buffer_size];
+	ssize_t bytes_read = 0;
+
+	if(ssl != 0)
+	{
+		bytes_read = SSL_read(ssl, buffer, sizeof(buffer));
+	}
+	else
+	{
+		bytes_read = read(client_fd, buffer, sizeof(buffer));
+	}
+
+	if(bytes_read > 0)
+	{
+		if((u64)bytes_read > max_request_size)
+		{
+			send_error_response(ssl, connection_socket, HTTP_Status_413_PayloadTooLarge, str8_lit("Request too large"));
+		}
+		else
+		{
+			String8 request_data = str8(buffer, (u64)bytes_read);
+			HTTP_Request *req = http_request_parse(connection_arena, request_data);
+
+			if(req->method != HTTP_Method_Unknown && req->path.size > 0)
+			{
+				handle_http_request(req, ssl, connection_socket, proxy_ctx->config);
+			}
+			else
+			{
+				send_error_response(ssl, connection_socket, HTTP_Status_400_BadRequest, str8_lit("Invalid HTTP request"));
+			}
+		}
+	}
+}
+
+internal void
+handle_h2_connection(SSL *ssl, OS_Handle connection_socket, Arena *connection_arena)
+{
+	H2_Session *session = h2_session_alloc(connection_arena, ssl, connection_socket, proxy_ctx->workers);
+	h2_session_send_settings(session);
+	h2_session_flush(session);
+
+	log_info(str8_lit("httpproxy: HTTP/2 session started\n"));
+
+	for(;;)
+	{
+		u8 buffer[h2_read_buffer_size];
+		ssize_t bytes = SSL_read(ssl, buffer, sizeof(buffer));
+
+		if(bytes <= 0)
+		{
+			int ssl_error = SSL_get_error(ssl, (int)bytes);
+			if(ssl_error == SSL_ERROR_ZERO_RETURN)
+			{
+				log_info(str8_lit("httpproxy: HTTP/2 connection closed cleanly\n"));
+			}
+			else
+			{
+				log_errorf("httpproxy: HTTP/2 SSL read error: %d\n", ssl_error);
+			}
+			break;
+		}
+
+		ssize_t consumed = nghttp2_session_mem_recv(session->ng_session, buffer, (size_t)bytes);
+		if(consumed < 0)
+		{
+			log_errorf("httpproxy: HTTP/2 protocol error: %s\n", nghttp2_strerror((int)consumed));
+			break;
+		}
+
+		h2_session_send_ready_responses(session);
+
+		if(nghttp2_session_want_read(session->ng_session) == 0 && nghttp2_session_want_write(session->ng_session) == 0)
+		{
+			log_info(str8_lit("httpproxy: HTTP/2 session terminating\n"));
+			break;
+		}
+	}
+
+	h2_session_release(session);
+	log_info(str8_lit("httpproxy: HTTP/2 session ended\n"));
+}
 
 internal void
 handle_connection(OS_Handle connection_socket)
@@ -1993,60 +2050,35 @@ handle_connection(OS_Handle connection_socket)
 			else
 			{
 				log_info(str8_lit("httpproxy: TLS handshake complete\n"));
+
+				const unsigned char *alpn_result = 0;
+				unsigned int alpn_len = 0;
+				SSL_get0_alpn_selected(ssl, &alpn_result, &alpn_len);
+
+				String8 protocol = str8_zero();
+				if(alpn_result != 0 && alpn_len > 0)
+				{
+					protocol = str8((u8 *)alpn_result, alpn_len);
+				}
+
+				if(str8_match(protocol, str8_lit("h2"), 0))
+				{
+					log_info(str8_lit("httpproxy: negotiated HTTP/2\n"));
+					handle_h2_connection(ssl, connection_socket, connection_arena);
+				}
+				else
+				{
+					log_info(str8_lit("httpproxy: using HTTP/1.1\n"));
+					handle_h1_connection(ssl, connection_socket, connection_arena);
+				}
 			}
 		}
 	}
 
-	if(should_process_request)
+	if(should_process_request && ssl != 0)
 	{
-		u8 buffer[KB(16)];
-		ssize_t bytes_read = 0;
-
-		if(ssl != 0)
-		{
-			bytes_read = SSL_read(ssl, buffer, sizeof(buffer));
-		}
-		else
-		{
-			bytes_read = read(client_fd, buffer, sizeof(buffer));
-		}
-
-		if(bytes_read > 0)
-		{
-			if((u64)bytes_read > max_request_size)
-			{
-				send_error_response(ssl, connection_socket, HTTP_Status_413_PayloadTooLarge, str8_lit("Request too large"));
-			}
-			else
-			{
-				String8 request_data = str8(buffer, (u64)bytes_read);
-				HTTP_Request *req = http_request_parse(connection_arena, request_data);
-
-				if(req->method != HTTP_Method_Unknown && req->path.size > 0)
-				{
-					String8 user_agent = http_header_get(&req->headers, str8_lit("User-Agent"));
-					String8 referer = http_header_get(&req->headers, str8_lit("Referer"));
-					log_infof("httpproxy: %S:%u %S %S%S%S%S%S%S%S\n", client_ip, client_port, str8_from_http_method(req->method),
-					          req->path, user_agent.size > 0 ? str8_lit(" UA=\"") : str8_zero(),
-					          user_agent.size > 0 ? user_agent : str8_zero(), user_agent.size > 0 ? str8_lit("\"") : str8_zero(),
-					          referer.size > 0 ? str8_lit(" Referer=\"") : str8_zero(), referer.size > 0 ? referer : str8_zero(),
-					          referer.size > 0 ? str8_lit("\"") : str8_zero());
-
-					handle_http_request(req, ssl, connection_socket, proxy_ctx->config);
-				}
-				else
-				{
-					send_error_response(ssl, connection_socket, HTTP_Status_400_BadRequest, str8_lit("Invalid HTTP request"));
-				}
-			}
-		}
-
-		if(ssl != 0)
-		{
-			SSL_shutdown(ssl);
-			SSL_free(ssl);
-		}
-
+		SSL_shutdown(ssl);
+		SSL_free(ssl);
 		os_file_close(connection_socket);
 	}
 
