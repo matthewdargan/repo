@@ -73,7 +73,7 @@ in {
         CapabilityBoundingSet = ["CAP_NET_BIND_SERVICE"];
         EnvironmentFile = "/var/lib/httpproxy/secrets";
         ExecStart = builtins.concatStringsSep " " [
-          "${self.packages.${pkgs.stdenv.hostPlatform.system}.httpproxy}/bin/httpproxy"
+          "${self.packages.${pkgs.stdenv.hostPlatform.system}.httpproxy-debug}/bin/httpproxy"
           "--acme-domain=dargs.dev"
           "--file-root=${self.packages.${pkgs.stdenv.hostPlatform.system}.www}"
           "--private-root=/var/lib/httpproxy/n/media/private"

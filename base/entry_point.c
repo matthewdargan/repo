@@ -25,8 +25,14 @@ main_thread_base_entry_point(int arguments_count, char **arguments)
 internal void
 supplement_thread_base_entry_point(ThreadEntryPointFunctionType *entry_point, void *params)
 {
+	// IMPORTANT: Cannot log before tctx_select() because logging requires scratch arenas!
 	TCTX *tctx = tctx_alloc();
 	tctx_select(tctx);
+
+	// Now we can safely log
+	log_infof("supplement_thread_base_entry_point: entry_point=%p params=%p tctx=%p\n", entry_point, params, tctx);
+
 	entry_point(params);
+
 	tctx_release(tctx);
 }

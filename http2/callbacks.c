@@ -7,6 +7,12 @@ h2_on_begin_headers_callback(nghttp2_session *ng_session, const nghttp2_frame *f
 	(void)ng_session;
 	H2_Session *session = (H2_Session *)user_data;
 
+	if(session == 0 || session->arena == 0 || session->streams == 0)
+	{
+		log_error(str8_lit("httpproxy: h2_on_begin_headers_callback: NULL pointer\n"));
+		return 0;
+	}
+
 	if(frame->hd.type != NGHTTP2_HEADERS || frame->headers.cat != NGHTTP2_HCAT_REQUEST)
 	{
 		return 0;
@@ -25,6 +31,13 @@ h2_on_header_callback(nghttp2_session *ng_session, const nghttp2_frame *frame, c
 	(void)ng_session;
 	(void)flags;
 	H2_Session *session = (H2_Session *)user_data;
+
+	if(session == 0 || session->streams == 0)
+	{
+		log_error(str8_lit("httpproxy: h2_on_header_callback: NULL pointer\n"));
+		return 0;
+	}
+
 	H2_Stream *stream = h2_stream_table_get(session->streams, frame->hd.stream_id);
 
 	if(stream == 0)
@@ -71,10 +84,27 @@ h2_on_frame_recv_callback(nghttp2_session *ng_session, const nghttp2_frame *fram
 	(void)ng_session;
 	H2_Session *session = (H2_Session *)user_data;
 
+	log_infof("httpproxy: h2_on_frame_recv_callback ENTRY user_data=%p session=%p\n", user_data, session);
+
+	if(session == 0)
+	{
+		log_error(str8_lit("httpproxy: h2_on_frame_recv_callback: session is NULL\n"));
+		return 0;
+	}
+
+	if(session->streams == 0)
+	{
+		log_error(str8_lit("httpproxy: h2_on_frame_recv_callback: session->streams is NULL\n"));
+		return 0;
+	}
+
+	log_infof("httpproxy: HTTP/2 received frame type=%d stream_id=%d\n", frame->hd.type, frame->hd.stream_id);
+
 	switch(frame->hd.type)
 	{
 		case NGHTTP2_HEADERS:
 		{
+			log_infof("httpproxy: HTTP/2 HEADERS frame, category=%d\n", frame->headers.cat);
 			if(frame->headers.cat == NGHTTP2_HCAT_REQUEST)
 			{
 				H2_Stream *stream = h2_stream_table_get(session->streams, frame->hd.stream_id);
@@ -85,6 +115,7 @@ h2_on_frame_recv_callback(nghttp2_session *ng_session, const nghttp2_frame *fram
 					if(frame->hd.flags & NGHTTP2_FLAG_END_STREAM)
 					{
 						stream->end_stream = 1;
+						log_infof("httpproxy: HTTP/2 request complete on stream %d, submitting to worker\n", frame->hd.stream_id);
 
 						H2_StreamTask task = {session, frame->hd.stream_id};
 						wp_submit(session->workers, h2_stream_task_handler, &task, sizeof(task));
@@ -96,6 +127,7 @@ h2_on_frame_recv_callback(nghttp2_session *ng_session, const nghttp2_frame *fram
 
 		case NGHTTP2_DATA:
 		{
+			log_info(str8_lit("httpproxy: HTTP/2 DATA frame\n"));
 			if(frame->hd.flags & NGHTTP2_FLAG_END_STREAM)
 			{
 				H2_Stream *stream = h2_stream_table_get(session->streams, frame->hd.stream_id);
@@ -111,6 +143,7 @@ h2_on_frame_recv_callback(nghttp2_session *ng_session, const nghttp2_frame *fram
 		break;
 
 		default:
+			log_infof("httpproxy: HTTP/2 other frame type=%d\n", frame->hd.type);
 			break;
 	}
 
@@ -124,6 +157,13 @@ h2_on_data_chunk_recv_callback(nghttp2_session *ng_session, uint8_t flags, int32
 	(void)ng_session;
 	(void)flags;
 	H2_Session *session = (H2_Session *)user_data;
+
+	if(session == 0 || session->streams == 0)
+	{
+		log_error(str8_lit("httpproxy: h2_on_data_chunk_recv_callback: NULL pointer\n"));
+		return 0;
+	}
+
 	H2_Stream *stream = h2_stream_table_get(session->streams, stream_id);
 
 	if(stream == 0)
@@ -145,6 +185,12 @@ h2_on_stream_close_callback(nghttp2_session *ng_session, int32_t stream_id, uint
 	(void)error_code;
 	H2_Session *session = (H2_Session *)user_data;
 
+	if(session == 0 || session->streams == 0)
+	{
+		log_error(str8_lit("httpproxy: h2_on_stream_close_callback: NULL pointer\n"));
+		return 0;
+	}
+
 	H2_Stream *stream = h2_stream_table_get(session->streams, stream_id);
 	if(stream != 0)
 	{
@@ -161,6 +207,12 @@ h2_send_callback(nghttp2_session *ng_session, const uint8_t *data, size_t length
 	(void)ng_session;
 	(void)flags;
 	H2_Session *session = (H2_Session *)user_data;
+
+	if(session == 0 || session->ssl == 0)
+	{
+		log_error(str8_lit("httpproxy: h2_send_callback: NULL pointer\n"));
+		return NGHTTP2_ERR_CALLBACK_FAILURE;
+	}
 
 	if(ssl_write_all(session->ssl, data, length))
 	{
