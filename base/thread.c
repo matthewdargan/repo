@@ -97,6 +97,7 @@ thread_detach(Thread thread)
 	}
 
 	ThreadState *state = (ThreadState *)thread.u64[0];
+	pthread_detach(state->handle);
 	thread_state_release(state);
 }
 

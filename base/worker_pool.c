@@ -61,6 +61,7 @@ wp_submit(WP_Pool *pool, WP_TaskFunc *func, void *params, u64 params_size)
 	MemoryCopy(task->params, params, params_size);
 
 	MutexScope(pool->mutex) { SLLQueuePush(pool->queue_first, pool->queue_last, task); }
+
 	semaphore_drop(pool->semaphore);
 }
 
@@ -72,6 +73,7 @@ wp_worker_entry_point(void *ptr)
 {
 	WP_Worker *worker = (WP_Worker *)ptr;
 	WP_Pool *pool = worker->pool;
+
 	for(; pool->is_live;)
 	{
 		WP_Task *task = wp_task_pop(pool);

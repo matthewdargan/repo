@@ -718,22 +718,6 @@ socket_write_all(SSL *ssl, OS_Handle socket, String8 data)
 	}
 }
 
-internal void
-log_scope_flush(Arena *arena)
-{
-	LogScopeResult result = log_scope_end(arena);
-	if(result.strings[LogMsgKind_Info].size > 0)
-	{
-		fwrite(result.strings[LogMsgKind_Info].str, 1, result.strings[LogMsgKind_Info].size, stdout);
-		fflush(stdout);
-	}
-	if(result.strings[LogMsgKind_Error].size > 0)
-	{
-		fwrite(result.strings[LogMsgKind_Error].str, 1, result.strings[LogMsgKind_Error].size, stderr);
-		fflush(stderr);
-	}
-}
-
 internal b32
 acme_provision_certificate(Arena *arena, ACME_Client *client, String8 domain, EVP_PKEY *cert_key,
                            String8 cert_output_path, String8 key_output_path)
@@ -1889,6 +1873,643 @@ handle_http_request(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket,
 	log_infof("httpproxy: request complete (%u μs)\n", duration_us);
 }
 
+////////////////////////////////
+//~ HTTP/2 Request Handlers
+
+internal void
+h2_send_response(H2_Session *session, H2_Stream *stream, HTTP_Response *res)
+{
+	MutexScope(stream->response_mutex)
+	{
+		stream->response = res;
+		stream->response_ready = 1;
+	}
+	session->want_write = 1;
+}
+
+internal void
+h2_respond_error(H2_Session *session, H2_Stream *stream, HTTP_Status status, String8 message)
+{
+	HTTP_Response *res = http_response_alloc(stream->arena, status);
+	http_header_add(stream->arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/plain"));
+	res->body = message.size > 0 ? message : res->status_text;
+	String8 content_length = str8_from_u64(stream->arena, res->body.size, 10, 0, 0);
+	http_header_add(stream->arena, &res->headers, str8_lit("Content-Length"), content_length);
+	h2_send_response(session, stream, res);
+}
+
+internal void
+h2_respond_redirect(H2_Session *session, H2_Stream *stream, String8 location)
+{
+	HTTP_Response *res = http_response_alloc(stream->arena, HTTP_Status_302_Found);
+	http_header_add(stream->arena, &res->headers, str8_lit("Location"), location);
+	http_header_add(stream->arena, &res->headers, str8_lit("Content-Length"), str8_lit("0"));
+	res->body = str8_zero();
+	h2_send_response(session, stream, res);
+}
+
+internal void
+h2_proxy_to_backend(H2_Session *session, H2_Stream *stream, HTTP_Request *req, String8 backend_host, u16 backend_port,
+                    String8 path_prefix)
+{
+	fprintf(stderr, "httpproxy: connecting to backend %.*s:%u\n", (int)backend_host.size, backend_host.str, backend_port);
+	fflush(stderr);
+
+	OS_Handle backend_socket = os_socket_connect_tcp(backend_host, backend_port);
+	if(os_handle_match(backend_socket, os_handle_zero()))
+	{
+		fprintf(stderr, "httpproxy: failed to connect to backend %.*s:%u\n", (int)backend_host.size, backend_host.str,
+		        backend_port);
+		fflush(stderr);
+		h2_respond_error(session, stream, HTTP_Status_502_BadGateway, str8_lit("Backend unavailable"));
+		return;
+	}
+	int backend_fd = (int)backend_socket.u64[0];
+	fprintf(stderr, "httpproxy: connected to backend %.*s:%u (fd=%d)\n", (int)backend_host.size, backend_host.str,
+	        backend_port, backend_fd);
+	fflush(stderr);
+
+	// Modify request path to remove the prefix
+	HTTP_Request modified_req = *req;
+	modified_req.path = str8_skip(req->path, path_prefix.size);
+	if(modified_req.path.size == 0)
+	{
+		modified_req.path = str8_lit("/");
+	}
+	modified_req.version = str8_lit("HTTP/1.1");
+	fprintf(stderr, "httpproxy: modified request path from %.*s to %.*s\n", (int)req->path.size, req->path.str,
+	        (int)modified_req.path.size, modified_req.path.str);
+	fflush(stderr);
+
+	// Serialize and send request to backend
+	Temp scratch = scratch_begin(&stream->arena, 1);
+
+	// Build new header list, replacing Host header and adding Connection: close
+	// Also strip cache validation headers to avoid 304 responses with wrong ETags
+	HTTP_HeaderList new_headers = {0};
+	for(u64 i = 0; i < req->headers.count; i += 1)
+	{
+		String8 name = req->headers.headers[i].name;
+		String8 value = req->headers.headers[i].value;
+
+		// Skip the original Host header - we'll add the backend one
+		if(str8_match(name, str8_lit("Host"), StringMatchFlag_CaseInsensitive))
+		{
+			continue;
+		}
+
+		// Strip cache validation headers to force full responses
+		if(str8_match(name, str8_lit("If-None-Match"), StringMatchFlag_CaseInsensitive) ||
+		   str8_match(name, str8_lit("If-Modified-Since"), StringMatchFlag_CaseInsensitive))
+		{
+			fprintf(stderr, "httpproxy: stripping cache header: %.*s\n", (int)name.size, name.str);
+			fflush(stderr);
+			continue;
+		}
+
+		http_header_add(scratch.arena, &new_headers, str8_copy(scratch.arena, name), str8_copy(scratch.arena, value));
+	}
+
+	// Add backend Host header and Connection: close
+	String8 backend_host_header = str8f(scratch.arena, "%S:%u", backend_host, backend_port);
+	http_header_add(scratch.arena, &new_headers, str8_lit("Host"), backend_host_header);
+	http_header_add(scratch.arena, &new_headers, str8_lit("Connection"), str8_lit("close"));
+
+	modified_req.headers = new_headers;
+	String8 request_data = http_request_serialize(scratch.arena, &modified_req);
+	fprintf(stderr, "httpproxy: sending %llu bytes to backend\n", (unsigned long long)request_data.size);
+	fflush(stderr);
+
+	for(u64 written = 0; written < request_data.size;)
+	{
+		ssize_t result = write(backend_fd, request_data.str + written, request_data.size - written);
+		if(result <= 0)
+		{
+			fprintf(stderr, "httpproxy: backend write failed\n");
+			fflush(stderr);
+			os_file_close(backend_socket);
+			h2_respond_error(session, stream, HTTP_Status_502_BadGateway, str8_lit("Backend write failed"));
+			scratch_end(scratch);
+			return;
+		}
+		written += result;
+	}
+	fprintf(stderr, "httpproxy: sent request to backend successfully\n");
+	fflush(stderr);
+
+	// Read response from backend
+	u8 *response_buffer = push_array(scratch.arena, u8, MB(1));
+	u64 response_size = 0;
+	u64 response_capacity = MB(1);
+
+	for(;;)
+	{
+		if(response_size >= response_capacity)
+		{
+			break;
+		}
+
+		ssize_t bytes = read(backend_fd, response_buffer + response_size, response_capacity - response_size);
+		if(bytes <= 0)
+		{
+			break;
+		}
+
+		response_size += (u64)bytes;
+	}
+
+	os_file_close(backend_socket);
+	fprintf(stderr, "httpproxy: received %llu bytes from backend\n", (unsigned long long)response_size);
+	fflush(stderr);
+
+	String8 response_data = {response_buffer, response_size};
+
+	// Parse the HTTP response
+	u64 header_end = str8_find_needle(response_data, 0, str8_lit("\r\n\r\n"), 0);
+	if(header_end >= response_data.size)
+	{
+		fprintf(stderr, "httpproxy: invalid backend response (no header end found)\n");
+		fflush(stderr);
+		h2_respond_error(session, stream, HTTP_Status_502_BadGateway, str8_lit("Invalid backend response"));
+		scratch_end(scratch);
+		return;
+	}
+
+	String8 headers_section = str8_prefix(response_data, header_end);
+	String8 body_raw = str8_skip(response_data, header_end + 4);
+
+	// Parse status line
+	u64 status_line_end = str8_find_needle(headers_section, 0, str8_lit("\r\n"), 0);
+	String8 status_line = str8_prefix(headers_section, status_line_end);
+	String8 headers_only = str8_skip(headers_section, status_line_end + 2);
+
+	// Extract status code from status line (e.g., "HTTP/1.1 200 OK")
+	u64 first_space = str8_find_needle(status_line, 0, str8_lit(" "), 0);
+	String8 after_version = str8_skip(status_line, first_space + 1);
+	u64 second_space = str8_find_needle(after_version, 0, str8_lit(" "), 0);
+	String8 status_code_str = str8_prefix(after_version, second_space);
+
+	u64 status_code = 200;
+	if(status_code_str.size > 0)
+	{
+		status_code = u64_from_str8(status_code_str, 10);
+	}
+	fprintf(stderr, "httpproxy: backend responded with status %llu\n", (unsigned long long)status_code);
+	fflush(stderr);
+
+	HTTP_Response *res = http_response_alloc(stream->arena, (HTTP_Status)status_code);
+
+	// Parse headers and handle Location rewriting
+	b32 is_chunked = 0;
+	String8 remaining = headers_only;
+	while(remaining.size > 0)
+	{
+		u64 line_end = str8_find_needle(remaining, 0, str8_lit("\r\n"), 0);
+
+		String8 header_line;
+		if(line_end >= remaining.size)
+		{
+			// Last header line without \r\n (it's part of the \r\n\r\n separator)
+			header_line = remaining;
+			remaining = str8_zero();
+		}
+		else
+		{
+			header_line = str8_prefix(remaining, line_end);
+			remaining = str8_skip(remaining, line_end + 2);
+		}
+
+		if(header_line.size == 0)
+		{
+			break;
+		}
+
+		u64 colon = str8_find_needle(header_line, 0, str8_lit(":"), 0);
+		if(colon < header_line.size)
+		{
+			String8 name = str8_prefix(header_line, colon);
+			String8 value = str8_skip(header_line, colon + 1);
+
+			// Skip leading whitespace in value
+			while(value.size > 0 && (value.str[0] == ' ' || value.str[0] == '\t'))
+			{
+				value = str8_skip(value, 1);
+			}
+
+			// Detect and skip Transfer-Encoding: chunked
+			if(str8_match(name, str8_lit("Transfer-Encoding"), StringMatchFlag_CaseInsensitive))
+			{
+				if(str8_find_needle(value, 0, str8_lit("chunked"), StringMatchFlag_CaseInsensitive) < value.size)
+				{
+					is_chunked = 1;
+					fprintf(stderr, "httpproxy: detected chunked transfer encoding, will decode\n");
+					fflush(stderr);
+					continue; // Skip adding this header
+				}
+			}
+
+			// Rewrite Location header to include path prefix
+			if(str8_match(name, str8_lit("Location"), StringMatchFlag_CaseInsensitive))
+			{
+				if(value.size > 0 && value.str[0] == '/')
+				{
+					value = str8f(stream->arena, "%S%S", path_prefix, value);
+				}
+				else if(value.size > 0 && value.str[0] != 'h')
+				{
+					value = str8f(stream->arena, "%S/%S", path_prefix, value);
+				}
+			}
+
+			http_header_add(stream->arena, &res->headers, name, value);
+		}
+	}
+
+	// Decode chunked transfer encoding if present
+	String8 body = body_raw;
+	if(is_chunked)
+	{
+		fprintf(stderr, "httpproxy: decoding chunked body (%llu bytes raw)\n", (unsigned long long)body_raw.size);
+		fflush(stderr);
+
+		u8 *decoded = push_array(scratch.arena, u8, body_raw.size);
+		u64 decoded_size = 0;
+		String8 remaining_chunks = body_raw;
+
+		while(remaining_chunks.size > 0)
+		{
+			// Find chunk size line (hex number followed by \r\n)
+			u64 crlf_pos = str8_find_needle(remaining_chunks, 0, str8_lit("\r\n"), 0);
+			if(crlf_pos >= remaining_chunks.size)
+			{
+				break; // No more chunks
+			}
+
+			String8 size_str = str8_prefix(remaining_chunks, crlf_pos);
+			u64 chunk_size = u64_from_str8(size_str, 16); // Parse hex
+
+			if(chunk_size == 0)
+			{
+				// Last chunk
+				break;
+			}
+
+			// Skip size line and \r\n
+			remaining_chunks = str8_skip(remaining_chunks, crlf_pos + 2);
+
+			// Copy chunk data
+			if(chunk_size <= remaining_chunks.size)
+			{
+				MemoryCopy(decoded + decoded_size, remaining_chunks.str, chunk_size);
+				decoded_size += chunk_size;
+			}
+
+			// Skip chunk data and trailing \r\n
+			remaining_chunks = str8_skip(remaining_chunks, chunk_size + 2);
+		}
+
+		body = str8(decoded, decoded_size);
+		fprintf(stderr, "httpproxy: decoded chunked body to %llu bytes\n", (unsigned long long)body.size);
+		fflush(stderr);
+	}
+
+	res->body = str8_copy(stream->arena, body);
+
+	// Log response headers for debugging
+	fprintf(stderr, "httpproxy: response headers from backend:\n");
+	for(u64 i = 0; i < res->headers.count; i += 1)
+	{
+		fprintf(stderr, "  %.*s: %.*s\n", (int)res->headers.headers[i].name.size, res->headers.headers[i].name.str,
+		        (int)res->headers.headers[i].value.size, res->headers.headers[i].value.str);
+	}
+	fflush(stderr);
+
+	fprintf(stderr, "httpproxy: sending response to client (status=%llu, body=%llu bytes)\n",
+	        (unsigned long long)status_code, (unsigned long long)body.size);
+	fflush(stderr);
+	h2_send_response(session, stream, res);
+	scratch_end(scratch);
+}
+
+internal void
+h2_serve_file_from_root(H2_Session *session, H2_Stream *stream, HTTP_Request *req, String8 file_root)
+{
+	Temp scratch = scratch_begin(&stream->arena, 1);
+	String8 request_path = req->path;
+	if(request_path.size > 0 && request_path.str[0] == '/')
+	{
+		request_path = str8_skip(request_path, 1);
+	}
+
+	for(u64 i = 0; i + 1 < request_path.size; i += 1)
+	{
+		if(request_path.str[i] == '.' && request_path.str[i + 1] == '.')
+		{
+			h2_respond_error(session, stream, HTTP_Status_400_BadRequest, str8_lit("Invalid path"));
+			scratch_end(scratch);
+			return;
+		}
+	}
+
+	String8 file_path = str8f(scratch.arena, "%S/%S", file_root, request_path);
+	String8 canonical_file = os_full_path_from_path(scratch.arena, file_path);
+	String8 canonical_root = os_full_path_from_path(scratch.arena, file_root);
+
+	if(canonical_file.size < canonical_root.size ||
+	   !str8_match(str8_prefix(canonical_file, canonical_root.size), canonical_root, 0))
+	{
+		h2_respond_error(session, stream, HTTP_Status_403_Forbidden, str8_lit("Access denied"));
+		scratch_end(scratch);
+		return;
+	}
+
+	OS_FileProperties props = os_properties_from_file_path(canonical_file);
+	if(props.flags & OS_FilePropertyFlag_Directory)
+	{
+		String8 index_path = str8f(scratch.arena, "%S/index.html", canonical_file);
+		OS_FileProperties index_props = os_properties_from_file_path(index_path);
+		if(!(index_props.flags & OS_FilePropertyFlag_Directory) && index_props.size > 0)
+		{
+			canonical_file = index_path;
+			props = index_props;
+		}
+		else
+		{
+			h2_respond_error(session, stream, HTTP_Status_404_NotFound, str8_lit("Not found"));
+			scratch_end(scratch);
+			return;
+		}
+	}
+
+	OS_Handle file = os_file_open(OS_AccessFlag_Read, canonical_file);
+	if(os_handle_match(file, os_handle_zero()))
+	{
+		h2_respond_error(session, stream, HTTP_Status_404_NotFound, str8_lit("File not found"));
+		scratch_end(scratch);
+		return;
+	}
+
+	u8 *file_data = push_array(stream->arena, u8, props.size);
+	u64 bytes_read = os_file_read(file, rng_1u64(0, props.size), file_data);
+	os_file_close(file);
+
+	if(bytes_read != props.size)
+	{
+		h2_respond_error(session, stream, HTTP_Status_500_InternalServerError, str8_lit("Failed to read file"));
+		scratch_end(scratch);
+		return;
+	}
+
+	String8 mime_type = mime_type_from_extension(canonical_file);
+	HTTP_Response *res = http_response_alloc(stream->arena, HTTP_Status_200_OK);
+	http_header_add(stream->arena, &res->headers, str8_lit("Content-Type"), mime_type);
+	String8 content_length = str8_from_u64(stream->arena, bytes_read, 10, 0, 0);
+	http_header_add(stream->arena, &res->headers, str8_lit("Content-Length"), content_length);
+	res->body = str8(file_data, bytes_read);
+
+	h2_send_response(session, stream, res);
+	log_infof("httpproxy: served file %S (%u bytes) via HTTP/2\n", canonical_file, bytes_read);
+	scratch_end(scratch);
+}
+
+internal void
+handle_h2_request(H2_Session *session, H2_Stream *stream, HTTP_Request *req, void *user_data)
+{
+	HTTPProxy_Context *ctx = (HTTPProxy_Context *)user_data;
+	u64 request_start_us = os_now_microseconds();
+
+	// Log incoming request
+	fprintf(stderr, "httpproxy: HTTP/2 request: %.*s %.*s\n", (int)str8_from_http_method(req->method).size,
+	        str8_from_http_method(req->method).str, (int)req->path.size, req->path.str);
+	fflush(stderr);
+
+	// ACME challenges
+	String8 acme_prefix = str8_lit("/.well-known/acme-challenge/");
+	if(str8_find_needle(req->path, 0, acme_prefix, 0) == 0 && req->path.size > acme_prefix.size)
+	{
+		log_info(str8_lit("httpproxy: handling ACME challenge\n"));
+		String8 token = str8_skip(req->path, acme_prefix.size);
+		String8 key_auth = acme_challenge_lookup(ctx->challenges, token);
+
+		if(key_auth.size == 0)
+		{
+			h2_respond_error(session, stream, HTTP_Status_404_NotFound, str8_lit("Challenge not found"));
+			return;
+		}
+
+		HTTP_Response *res = http_response_alloc(stream->arena, HTTP_Status_200_OK);
+		http_header_add(stream->arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/plain"));
+		String8 content_length = str8_from_u64(stream->arena, key_auth.size, 10, 0, 0);
+		http_header_add(stream->arena, &res->headers, str8_lit("Content-Length"), content_length);
+		res->body = key_auth;
+		h2_send_response(session, stream, res);
+		log_info(str8_lit("httpproxy: served ACME challenge (HTTP/2)\n"));
+		return;
+	}
+
+	// Login handling (GET and POST)
+	if(str8_match(req->path, str8_lit("/login"), 0))
+	{
+		if(req->method == HTTP_Method_GET)
+		{
+			// Serve login page (same HTML as HTTP/1.1)
+			Temp scratch = scratch_begin(&stream->arena, 1);
+			String8 redirect_input = str8_zero();
+			if(req->query.size > 0)
+			{
+				u64 redirect_pos = str8_find_needle(req->query, 0, str8_lit("redirect="), 0);
+				if(redirect_pos < req->query.size)
+				{
+					String8 value_part = str8_skip(req->query, redirect_pos + 9);
+					u64 ampersand_pos = str8_find_needle(value_part, 0, str8_lit("&"), 0);
+					String8 redirect_value =
+					    (ampersand_pos < value_part.size) ? str8_prefix(value_part, ampersand_pos) : value_part;
+					redirect_input =
+					    str8f(stream->arena, "    <input type=\"hidden\" name=\"redirect\" value=\"%S\">\n", redirect_value);
+				}
+			}
+
+			String8 login_html = str8f(
+			    stream->arena,
+			    "<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" "
+			    "content=\"width=device-width, initial-scale=1\">\n  <title>Login</title>\n  <style>\n    body { "
+			    "font-family: system-ui, sans-serif; max-width: 400px; margin: 100px auto; padding: 20px; }\n    h1 { "
+			    "text-align: center; }\n    form { display: flex; flex-direction: column; gap: 15px; }\n    label { "
+			    "font-weight: bold; }\n    input { padding: 8px; font-size: 16px; border: 1px solid #ccc; border-radius: "
+			    "4px; "
+			    "}\n    button { padding: 10px; font-size: 16px; background: #007bff; color: white; border: none; "
+			    "border-radius: 4px; cursor: pointer; }\n    button:hover { background: #0056b3; }\n  "
+			    "</style>\n</head>\n<body>\n  "
+			    "<h1>Family Login</h1>\n  <form method=\"POST\" action=\"/login\">\n%S    <label "
+			    "for=\"username\">Username</label>\n    <input type=\"text\" id=\"username\" name=\"username\" required "
+			    "autofocus>\n    <label for=\"password\">Password</label>\n    <input type=\"password\" id=\"password\" "
+			    "name=\"password\" required>\n    <button type=\"submit\">Login</button>\n  </form>\n</body>\n</html>\n",
+			    redirect_input);
+
+			HTTP_Response *res = http_response_alloc(stream->arena, HTTP_Status_200_OK);
+			http_header_add(stream->arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/html; charset=utf-8"));
+			String8 content_length = str8_from_u64(stream->arena, login_html.size, 10, 0, 0);
+			http_header_add(stream->arena, &res->headers, str8_lit("Content-Length"), content_length);
+			res->body = login_html;
+			h2_send_response(session, stream, res);
+			scratch_end(scratch);
+		}
+		else if(req->method == HTTP_Method_POST)
+		{
+			// Process login
+			String8 username = str8_zero();
+			String8 password = str8_zero();
+			String8 redirect_url = str8_lit("/");
+
+			String8List parts = str8_split(stream->arena, req->body, (u8 *)"&", 1, 0);
+			for(String8Node *n = parts.first; n != 0; n = n->next)
+			{
+				String8 part = n->string;
+				u64 eq_pos = str8_find_needle(part, 0, str8_lit("="), 0);
+				if(eq_pos < part.size)
+				{
+					String8 key = str8_prefix(part, eq_pos);
+					String8 value = str8_skip(part, eq_pos + 1);
+					String8 decoded_value = url_decode(stream->arena, value);
+
+					if(str8_match(key, str8_lit("username"), 0))
+					{
+						username = decoded_value;
+					}
+					else if(str8_match(key, str8_lit("password"), 0))
+					{
+						password = decoded_value;
+					}
+					else if(str8_match(key, str8_lit("redirect"), 0))
+					{
+						redirect_url = decoded_value;
+					}
+				}
+			}
+
+			if(auth_check_credentials(ctx->auth, username, password))
+			{
+				String8 session_id = session_create(ctx->sessions, ctx->auth->session_duration_us);
+				u64 max_age = ctx->auth->session_duration_us / 1000000;
+
+				HTTP_Response *res = http_response_alloc(stream->arena, HTTP_Status_302_Found);
+				http_header_add(stream->arena, &res->headers, str8_lit("Location"), redirect_url);
+				String8 cookie = cookie_serialize(stream->arena, str8_lit("session"), session_id, max_age, 0);
+				http_header_add(stream->arena, &res->headers, str8_lit("Set-Cookie"), cookie);
+				http_header_add(stream->arena, &res->headers, str8_lit("Content-Length"), str8_lit("0"));
+				res->body = str8_zero();
+				h2_send_response(session, stream, res);
+				log_infof("httpproxy: user %S logged in (HTTP/2), session=%S\n", username, str8_prefix(session_id, 16));
+			}
+			else
+			{
+				log_infof("httpproxy: login failed for user %S (HTTP/2)\n", username);
+				h2_respond_redirect(session, stream, str8_lit("/login"));
+			}
+		}
+		else
+		{
+			h2_respond_error(session, stream, HTTP_Status_405_MethodNotAllowed,
+			                 str8_from_http_status(HTTP_Status_405_MethodNotAllowed));
+		}
+		return;
+	}
+
+	// Logout
+	if(str8_match(req->path, str8_lit("/logout"), 0))
+	{
+		if(!auth_validate_request(req))
+		{
+			h2_respond_redirect(session, stream, str8_lit("/login?redirect=/logout"));
+			return;
+		}
+
+		String8 session_id = auth_extract_session_from_request(req);
+		if(session_id.size > 0 && ctx->sessions != 0)
+		{
+			session_delete(ctx->sessions, session_id);
+			log_infof("httpproxy: session %S logged out (HTTP/2)\n", str8_prefix(session_id, 16));
+		}
+
+		HTTP_Response *res = http_response_alloc(stream->arena, HTTP_Status_302_Found);
+		http_header_add(stream->arena, &res->headers, str8_lit("Location"), str8_lit("/"));
+		String8 cookie = cookie_serialize(stream->arena, str8_lit("session"), str8_zero(), 0, 1);
+		http_header_add(stream->arena, &res->headers, str8_lit("Set-Cookie"), cookie);
+		http_header_add(stream->arena, &res->headers, str8_lit("Content-Length"), str8_lit("0"));
+		res->body = str8_zero();
+		h2_send_response(session, stream, res);
+		return;
+	}
+
+	// Jellyfin proxy
+	if(str8_find_needle(req->path, 0, str8_lit("/jellyfin"), 0) == 0)
+	{
+		fprintf(stderr, "httpproxy: matched Jellyfin route for path: %.*s\n", (int)req->path.size, req->path.str);
+		fflush(stderr);
+
+		if(!auth_validate_request(req))
+		{
+			fprintf(stderr, "httpproxy: auth validation failed, redirecting to login\n");
+			fflush(stderr);
+			Temp scratch = scratch_begin(&stream->arena, 1);
+			String8 redirect_param = str8f(scratch.arena, "/login?redirect=%S", req->path);
+			h2_respond_redirect(session, stream, redirect_param);
+			scratch_end(scratch);
+			return;
+		}
+
+		fprintf(stderr, "httpproxy: proxying to Jellyfin backend (nas:8096)\n");
+		fflush(stderr);
+		h2_proxy_to_backend(session, stream, req, str8_lit("nas"), 8096, str8_lit("/jellyfin"));
+		return;
+	}
+
+	// Private files
+	if(str8_find_needle(req->path, 0, str8_lit("/private"), 0) == 0)
+	{
+		if(!auth_validate_request(req))
+		{
+			Temp scratch = scratch_begin(&stream->arena, 1);
+			String8 redirect_param = str8f(scratch.arena, "/login?redirect=%S", req->path);
+			h2_respond_redirect(session, stream, redirect_param);
+			scratch_end(scratch);
+			return;
+		}
+
+		if(ctx->config->private_root.size == 0)
+		{
+			h2_respond_error(session, stream, HTTP_Status_500_InternalServerError, str8_lit("Private root not configured"));
+			return;
+		}
+
+		HTTP_Request modified_req = *req;
+		modified_req.path = str8_skip(req->path, 8);
+		if(modified_req.path.size == 0)
+		{
+			modified_req.path = str8_lit("/");
+		}
+
+		h2_serve_file_from_root(session, stream, &modified_req, ctx->config->private_root);
+		return;
+	}
+
+	// Public files
+	fprintf(stderr, "httpproxy: path %.*s did not match any proxy routes, serving from public root\n",
+	        (int)req->path.size, req->path.str);
+	fflush(stderr);
+
+	if(ctx->config->public_root.size == 0)
+	{
+		h2_respond_error(session, stream, HTTP_Status_500_InternalServerError, str8_lit("No file root configured"));
+		return;
+	}
+
+	h2_serve_file_from_root(session, stream, req, ctx->config->public_root);
+}
+
+////////////////////////////////
+//~ HTTP/1.1 Connection Handler
+
 internal void
 handle_h1_connection(SSL *ssl, OS_Handle connection_socket, Arena *connection_arena)
 {
@@ -1932,7 +2553,14 @@ handle_h1_connection(SSL *ssl, OS_Handle connection_socket, Arena *connection_ar
 internal void
 handle_h2_connection(SSL *ssl, OS_Handle connection_socket, Arena *connection_arena)
 {
-	H2_Session *session = h2_session_alloc(connection_arena, ssl, connection_socket, proxy_ctx->workers);
+	// Set receive timeout so we can periodically check for ready responses
+	int client_fd = (int)connection_socket.u64[0];
+	struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 100000; // 100ms
+	setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
+	H2_Session *session = h2_session_alloc(connection_arena, ssl, connection_socket, handle_h2_request, proxy_ctx);
 	h2_session_send_settings(session);
 	h2_session_flush(session);
 
@@ -1943,30 +2571,56 @@ handle_h2_connection(SSL *ssl, OS_Handle connection_socket, Arena *connection_ar
 		u8 buffer[h2_read_buffer_size];
 		ssize_t bytes = SSL_read(ssl, buffer, sizeof(buffer));
 
+		log_infof("httpproxy: HTTP/2 SSL_read returned %lld bytes\n", (s64)bytes);
+
 		if(bytes <= 0)
 		{
 			int ssl_error = SSL_get_error(ssl, (int)bytes);
+			log_infof("httpproxy: HTTP/2 SSL_read error code: %d\n", ssl_error);
 			if(ssl_error == SSL_ERROR_ZERO_RETURN)
 			{
 				log_info(str8_lit("httpproxy: HTTP/2 connection closed cleanly\n"));
+				break;
+			}
+			else if(ssl_error == SSL_ERROR_WANT_READ)
+			{
+				// Timeout - check for ready responses and continue
+				h2_session_send_ready_responses(session);
+				continue;
 			}
 			else
 			{
 				log_errorf("httpproxy: HTTP/2 SSL read error: %d\n", ssl_error);
+				break;
 			}
-			break;
 		}
 
-		ssize_t consumed = nghttp2_session_mem_recv(session->ng_session, buffer, (size_t)bytes);
+		log_infof("httpproxy: HTTP/2 received %lld bytes, passing to nghttp2\n", (s64)bytes);
+
+		ssize_t consumed = 0;
+		MutexScope(session->session_mutex)
+		{
+			consumed = nghttp2_session_mem_recv(session->ng_session, buffer, (size_t)bytes);
+		}
+
 		if(consumed < 0)
 		{
 			log_errorf("httpproxy: HTTP/2 protocol error: %s\n", nghttp2_strerror((int)consumed));
 			break;
 		}
+		log_infof("httpproxy: HTTP/2 nghttp2 consumed %lld bytes\n", (s64)consumed);
 
 		h2_session_send_ready_responses(session);
 
-		if(nghttp2_session_want_read(session->ng_session) == 0 && nghttp2_session_want_write(session->ng_session) == 0)
+		b32 want_read = 0;
+		b32 want_write = 0;
+		MutexScope(session->session_mutex)
+		{
+			want_read = nghttp2_session_want_read(session->ng_session);
+			want_write = nghttp2_session_want_write(session->ng_session);
+		}
+
+		if(want_read == 0 && want_write == 0)
 		{
 			log_info(str8_lit("httpproxy: HTTP/2 session terminating\n"));
 			break;
@@ -2092,7 +2746,8 @@ handle_connection(OS_Handle connection_socket)
 internal void
 handle_connection_task(void *params)
 {
-	OS_Handle connection = *(OS_Handle *)params;
+	OS_Handle connection;
+	connection.u64[0] = (u64)params;
 	handle_connection(connection);
 }
 
@@ -2328,6 +2983,9 @@ entry_point(CmdLine *cmd_line)
 		log_release(accept_log);
 		scratch_end(accept_scratch);
 
-		wp_submit(proxy_ctx->workers, handle_connection_task, &connection_socket, sizeof(connection_socket));
+		// Spawn dedicated thread for this connection (not using worker pool to avoid exhaustion)
+		// Pack OS_Handle (u64) directly into void* to avoid allocation
+		Thread conn_thread = thread_launch(handle_connection_task, (void *)connection_socket.u64[0]);
+		thread_detach(conn_thread);
 	}
 }

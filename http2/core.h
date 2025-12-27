@@ -12,6 +12,8 @@ typedef struct H2_StreamTask H2_StreamTask;
 ////////////////////////////////
 //~ H2 Session Types
 
+typedef void (*H2_RequestHandler)(H2_Session *session, H2_Stream *stream, HTTP_Request *req, void *user_data);
+
 struct H2_Session
 {
 	Arena *arena;
@@ -20,7 +22,9 @@ struct H2_Session
 	SSL *ssl;
 	OS_Handle socket;
 	b32 want_write;
-	WP_Pool *workers;
+	H2_RequestHandler request_handler;
+	void *request_handler_data;
+	Mutex session_mutex;
 };
 
 struct H2_StreamTask
@@ -32,7 +36,8 @@ struct H2_StreamTask
 ////////////////////////////////
 //~ H2 Session Functions
 
-internal H2_Session *h2_session_alloc(Arena *arena, SSL *ssl, OS_Handle socket, WP_Pool *workers);
+internal H2_Session *h2_session_alloc(Arena *arena, SSL *ssl, OS_Handle socket, H2_RequestHandler handler,
+                                      void *handler_data);
 internal void h2_session_send_settings(H2_Session *session);
 internal void h2_session_flush(H2_Session *session);
 internal void h2_session_send_ready_responses(H2_Session *session);

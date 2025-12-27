@@ -57,5 +57,6 @@ internal void log_msgf(LogMsgKind kind, char *fmt, ...);
 
 internal void log_scope_begin(void);
 internal LogScopeResult log_scope_end(Arena *arena);
+internal void log_scope_flush(Arena *arena);
 
 #endif // LOG_H

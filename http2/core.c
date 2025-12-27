@@ -17,14 +17,16 @@ ssl_write_all(SSL *ssl, const u8 *data, u64 size)
 }
 
 internal H2_Session *
-h2_session_alloc(Arena *arena, SSL *ssl, OS_Handle socket, WP_Pool *workers)
+h2_session_alloc(Arena *arena, SSL *ssl, OS_Handle socket, H2_RequestHandler handler, void *handler_data)
 {
 	H2_Session *session = push_array(arena, H2_Session, 1);
 	session->arena = arena;
 	session->ssl = ssl;
 	session->socket = socket;
 	session->streams = h2_stream_table_alloc(arena);
-	session->workers = workers;
+	session->request_handler = handler;
+	session->request_handler_data = handler_data;
+	session->session_mutex = mutex_alloc();
 
 	nghttp2_session_callbacks *callbacks;
 	nghttp2_session_callbacks_new(&callbacks);
@@ -50,7 +52,10 @@ h2_session_send_settings(H2_Session *session)
 	    {NGHTTP2_SETTINGS_INITIAL_WINDOW_SIZE, 65535},
 	};
 
-	nghttp2_submit_settings(session->ng_session, NGHTTP2_FLAG_NONE, settings, ArrayCount(settings));
+	MutexScope(session->session_mutex)
+	{
+		nghttp2_submit_settings(session->ng_session, NGHTTP2_FLAG_NONE, settings, ArrayCount(settings));
+	}
 	session->want_write = 1;
 }
 
@@ -62,12 +67,30 @@ h2_session_flush(H2_Session *session)
 		return;
 	}
 
-	const uint8_t *data;
-	ssize_t datalen = nghttp2_session_mem_send(session->ng_session, &data);
-
-	if(datalen > 0)
+	// Keep flushing until nghttp2 has no more data to send
+	for(;;)
 	{
-		ssl_write_all(session->ssl, data, (u64)datalen);
+		b32 want_write = 0;
+		MutexScope(session->session_mutex) { want_write = nghttp2_session_want_write(session->ng_session); }
+
+		if(!want_write)
+		{
+			break;
+		}
+
+		const uint8_t *data = 0;
+		ssize_t datalen = 0;
+		MutexScope(session->session_mutex) { datalen = nghttp2_session_mem_send(session->ng_session, &data); }
+
+		if(datalen > 0)
+		{
+			ssl_write_all(session->ssl, data, (u64)datalen);
+		}
+		else
+		{
+			// No more data available now, break to avoid infinite loop
+			break;
+		}
 	}
 
 	session->want_write = 0;
@@ -84,9 +107,12 @@ h2_session_send_ready_responses(H2_Session *session)
 			H2_Stream *stream = slot->stream;
 			if(stream->response_ready)
 			{
+				// Hold reference to prevent stream cleanup while sending response
+				h2_stream_ref_inc(stream);
 				h2_stream_send_response(session, stream);
 				stream->response_ready = 0;
 				session->want_write = 1;
+				h2_stream_ref_dec(stream, session->streams);
 			}
 		}
 	}
@@ -109,8 +135,19 @@ h2_session_release(H2_Session *session)
 internal void
 h2_stream_task_handler(void *params)
 {
+	if(params == 0)
+	{
+		return;
+	}
+
 	H2_StreamTask *task = (H2_StreamTask *)params;
 	H2_Session *session = task->session;
+
+	if(session == 0)
+	{
+		return;
+	}
+
 	H2_Stream *stream = h2_stream_table_get(session->streams, task->stream_id);
 
 	if(stream == 0)
@@ -118,41 +155,13 @@ h2_stream_task_handler(void *params)
 		return;
 	}
 
-	Temp scratch = scratch_begin(&stream->arena, 1);
 	HTTP_Request *req = h2_stream_to_request(stream->arena, stream);
 
-	if(req == 0 || req->method == HTTP_Method_Unknown || req->path.size == 0)
+	if(req != 0 && req->method != HTTP_Method_Unknown && req->path.size > 0 && session->request_handler != 0)
 	{
-		scratch_end(scratch);
-		return;
+		session->request_handler(session, stream, req, session->request_handler_data);
 	}
 
-	HTTP_Response *res = http_response_alloc(stream->arena, HTTP_Status_500_InternalServerError);
-	res->body = str8_lit("Internal Server Error");
-
-	// TODO: how do we fix this? we have a production-ready reverse proxy with both HTTP/1.1 and HTTP/2.0 support
-	// NOTE: This is a simplified version - the actual implementation would call
-	// the existing handle_http_request logic, but that function doesn't return
-	// a response currently. For now, we'll create a minimal handler here.
-	// In a full implementation, we'd need to refactor handle_http_request to
-	// return an HTTP_Response instead of writing directly to the socket.
-
-	// For now, let's create a basic response
-	if(req->method == HTTP_Method_GET)
-	{
-		res = http_response_alloc(stream->arena, HTTP_Status_200_OK);
-		res->body = str8_lit("HTTP/2 Response");
-		http_header_add(stream->arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/plain"));
-	}
-
-	String8 content_length = str8_from_u64(stream->arena, res->body.size, 10, 0, 0);
-	http_header_add(stream->arena, &res->headers, str8_lit("Content-Length"), content_length);
-
-	MutexScope(stream->response_mutex)
-	{
-		stream->response = res;
-		stream->response_ready = 1;
-	}
-
-	scratch_end(scratch);
+	// Decrement reference count now that we're done processing
+	h2_stream_ref_dec(stream, session->streams);
 }

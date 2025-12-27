@@ -9,6 +9,9 @@ h2_stream_alloc(Arena *arena, s32 stream_id)
 	stream->arena = arena_alloc();
 	stream->method = HTTP_Method_Unknown;
 	stream->response_mutex = mutex_alloc();
+	stream->ref_mutex = mutex_alloc();
+	stream->ref_count = 1; // Start with 1 reference (for the stream table)
+	stream->marked_for_cleanup = 0;
 	return stream;
 }
 
@@ -72,12 +75,12 @@ h2_stream_send_response(H2_Session *session, H2_Stream *stream)
 	MutexScope(stream->response_mutex)
 	{
 		HTTP_Response *res = stream->response;
-		Temp scratch = scratch_begin(&session->arena, 1);
 
-		String8 status_str = str8_from_u64(scratch.arena, (u64)res->status_code, 10, 0, 0);
+		// Allocate from stream arena so data lives until stream cleanup
+		String8 status_str = str8_from_u64(stream->arena, (u64)res->status_code, 10, 0, 0);
 
 		u64 nv_count = 1 + res->headers.count;
-		nghttp2_nv *nva = push_array(scratch.arena, nghttp2_nv, nv_count);
+		nghttp2_nv *nva = push_array(stream->arena, nghttp2_nv, nv_count);
 		u64 nv_index = 0;
 
 		nva[nv_index] = (nghttp2_nv){
@@ -97,19 +100,64 @@ h2_stream_send_response(H2_Session *session, H2_Stream *stream)
 			nv_index += 1;
 		}
 
-		if(res->body.size > 0)
+		// Protect nghttp2 session access with mutex (nghttp2 is not thread-safe)
+		MutexScope(session->session_mutex)
 		{
-			nghttp2_data_provider data_prd;
-			data_prd.source.ptr = stream;
-			data_prd.read_callback = h2_data_source_read_callback;
-			nghttp2_submit_response(session->ng_session, stream->stream_id, nva, nv_index, &data_prd);
+			if(res->body.size > 0)
+			{
+				nghttp2_data_provider data_prd;
+				data_prd.source.ptr = stream;
+				data_prd.read_callback = h2_data_source_read_callback;
+				nghttp2_submit_response(session->ng_session, stream->stream_id, nva, nv_index, &data_prd);
+			}
+			else
+			{
+				nghttp2_submit_response(session->ng_session, stream->stream_id, nva, nv_index, 0);
+			}
 		}
-		else
+	}
+}
+
+internal void
+h2_stream_ref_inc(H2_Stream *stream)
+{
+	if(stream == 0)
+	{
+		return;
+	}
+
+	MutexScope(stream->ref_mutex) { stream->ref_count += 1; }
+}
+
+internal void
+h2_stream_ref_dec(H2_Stream *stream, H2_StreamTable *table)
+{
+	if(stream == 0)
+	{
+		return;
+	}
+
+	b32 should_cleanup = 0;
+	s32 stream_id = stream->stream_id;
+
+	MutexScope(stream->ref_mutex)
+	{
+		if(stream->ref_count > 0)
 		{
-			nghttp2_submit_response(session->ng_session, stream->stream_id, nva, nv_index, 0);
+			stream->ref_count -= 1;
 		}
 
-		scratch_end(scratch);
+		// If ref_count is 0 and stream is marked for cleanup, we can safely clean up
+		if(stream->ref_count == 0 && stream->marked_for_cleanup)
+		{
+			should_cleanup = 1;
+		}
+	}
+
+	if(should_cleanup)
+	{
+		arena_release(stream->arena);
+		h2_stream_table_remove(table, stream_id);
 	}
 }
 

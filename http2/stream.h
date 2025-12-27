@@ -21,6 +21,11 @@ struct H2_Stream
 	HTTP_Response *response;
 	b32 response_ready;
 	u64 response_body_offset;
+
+	// Reference counting for safe cleanup
+	Mutex ref_mutex;
+	u64 ref_count;
+	b32 marked_for_cleanup;
 };
 
 ////////////////////////////////
@@ -53,6 +58,8 @@ internal void h2_stream_send_response(H2_Session *session, H2_Stream *stream);
 internal ssize_t h2_data_source_read_callback(nghttp2_session *ng_session, int32_t stream_id, uint8_t *buf,
                                               size_t length, uint32_t *data_flags, nghttp2_data_source *source,
                                               void *user_data);
+internal void h2_stream_ref_inc(H2_Stream *stream);
+internal void h2_stream_ref_dec(H2_Stream *stream, H2_StreamTable *table);
 
 ////////////////////////////////
 //~ H2 Stream Table Functions
