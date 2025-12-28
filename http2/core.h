@@ -7,7 +7,7 @@
 typedef struct H2_Session H2_Session;
 typedef struct H2_Stream H2_Stream;
 typedef struct H2_StreamTable H2_StreamTable;
-typedef struct H2_StreamTask H2_StreamTask;
+typedef struct Backend_Connection Backend_Connection;
 
 ////////////////////////////////
 //~ H2 Session Types
@@ -24,13 +24,11 @@ struct H2_Session
 	b32 want_write;
 	H2_RequestHandler request_handler;
 	void *request_handler_data;
-	Mutex session_mutex;
-};
 
-struct H2_StreamTask
-{
-	H2_Session *session;
-	s32 stream_id;
+	// Active backend connections (no threading, just async I/O)
+	Backend_Connection **backends;
+	u64 backend_count;
+	u64 backend_capacity;
 };
 
 ////////////////////////////////
@@ -40,12 +38,13 @@ internal H2_Session *h2_session_alloc(Arena *arena, SSL *ssl, OS_Handle socket, 
                                       void *handler_data);
 internal void h2_session_send_settings(H2_Session *session);
 internal void h2_session_flush(H2_Session *session);
-internal void h2_session_send_ready_responses(H2_Session *session);
 internal void h2_session_release(H2_Session *session);
 
 ////////////////////////////////
-//~ H2 Stream Task Handler
+//~ H2 Event Loop Functions
 
-internal void h2_stream_task_handler(void *params);
+internal void h2_session_add_backend(H2_Session *session, Backend_Connection *backend);
+internal void h2_session_remove_backend(H2_Session *session, u64 index);
+internal void h2_session_run_event_loop(H2_Session *session);
 
 #endif // H2_CORE_H

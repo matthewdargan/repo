@@ -110,15 +110,13 @@ h2_on_frame_recv_callback(nghttp2_session *ng_session, const nghttp2_frame *fram
 					{
 						stream->end_stream = 1;
 
-						// Spawn dedicated thread for this stream to avoid blocking other streams
-						h2_stream_ref_inc(stream);
-
-						H2_StreamTask *task = push_array(session->arena, H2_StreamTask, 1);
-						task->session = session;
-						task->stream_id = frame->hd.stream_id;
-
-						Thread stream_thread = thread_launch(h2_stream_task_handler, task);
-						thread_detach(stream_thread);
+						// Process request inline on connection thread
+						// (compression-oriented: one thread handles everything per connection)
+						HTTP_Request *req = h2_stream_to_request(stream->arena, stream);
+						if(req != 0 && req->method != HTTP_Method_Unknown && req->path.size > 0 && session->request_handler != 0)
+						{
+							session->request_handler(session, stream, req, session->request_handler_data);
+						}
 					}
 				}
 			}
@@ -134,15 +132,12 @@ h2_on_frame_recv_callback(nghttp2_session *ng_session, const nghttp2_frame *fram
 				{
 					stream->end_stream = 1;
 
-					// Spawn dedicated thread for this stream to avoid blocking other streams
-					h2_stream_ref_inc(stream);
-
-					H2_StreamTask *task = push_array(session->arena, H2_StreamTask, 1);
-					task->session = session;
-					task->stream_id = frame->hd.stream_id;
-
-					Thread stream_thread = thread_launch(h2_stream_task_handler, task);
-					thread_detach(stream_thread);
+					// Process request inline on connection thread
+					HTTP_Request *req = h2_stream_to_request(stream->arena, stream);
+					if(req != 0 && req->method != HTTP_Method_Unknown && req->path.size > 0 && session->request_handler != 0)
+					{
+						session->request_handler(session, stream, req, session->request_handler_data);
+					}
 				}
 			}
 		}
@@ -186,23 +181,12 @@ internal int
 h2_on_stream_close_callback(nghttp2_session *ng_session, int32_t stream_id, uint32_t error_code, void *user_data)
 {
 	(void)ng_session;
+	(void)stream_id;
 	(void)error_code;
-	H2_Session *session = (H2_Session *)user_data;
+	(void)user_data;
 
-	if(session == 0 || session->streams == 0)
-	{
-		return 0;
-	}
-
-	H2_Stream *stream = h2_stream_table_get(session->streams, stream_id);
-	if(stream != 0)
-	{
-		// Mark stream for cleanup and decrement ref count (for stream table reference)
-		// If worker threads are still using the stream, cleanup will be deferred
-		MutexScope(stream->ref_mutex) { stream->marked_for_cleanup = 1; }
-		h2_stream_ref_dec(stream, session->streams);
-	}
-
+	// Compression-oriented: streams live until connection closes
+	// No need to free per-stream arenas - connection arena owns everything
 	return 0;
 }
 

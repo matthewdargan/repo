@@ -1876,15 +1876,48 @@ handle_http_request(HTTP_Request *req, SSL *client_ssl, OS_Handle client_socket,
 ////////////////////////////////
 //~ HTTP/2 Request Handlers
 
+internal String8
+http_request_build_for_proxy(Arena *arena, HTTP_Request *req, String8 host, String8 path)
+{
+	// Build HTTP/1.1 request for backend
+	HTTP_Request proxy_req = *req;
+	proxy_req.path = path;
+	proxy_req.version = str8_lit("HTTP/1.1");
+
+	// Set Host header
+	HTTP_HeaderList new_headers = {0};
+	http_header_add(arena, &new_headers, str8_lit("Host"), host);
+
+	// Copy original headers except Host and HTTP/2 pseudo-headers
+	for(u64 i = 0; i < req->headers.count; i++)
+	{
+		String8 name = req->headers.headers[i].name;
+		String8 value = req->headers.headers[i].value;
+
+		// Skip HTTP/2 pseudo-headers and Host
+		if(name.size > 0 && name.str[0] == ':')
+		{
+			continue;
+		}
+		if(str8_match(name, str8_lit("Host"), StringMatchFlag_CaseInsensitive))
+		{
+			continue;
+		}
+
+		http_header_add(arena, &new_headers, name, value);
+	}
+
+	http_header_add(arena, &new_headers, str8_lit("Connection"), str8_lit("close"));
+	proxy_req.headers = new_headers;
+
+	return http_request_serialize(arena, &proxy_req);
+}
+
 internal void
 h2_send_response(H2_Session *session, H2_Stream *stream, HTTP_Response *res)
 {
-	MutexScope(stream->response_mutex)
-	{
-		stream->response = res;
-		stream->response_ready = 1;
-	}
-	session->want_write = 1;
+	stream->response = res;
+	h2_stream_send_response(session, stream);
 }
 
 internal void
@@ -2191,6 +2224,9 @@ h2_proxy_to_backend(H2_Session *session, H2_Stream *stream, HTTP_Request *req, S
 	scratch_end(scratch);
 }
 
+////////////////////////////////
+//~ HTTP/2 File Serving
+
 internal void
 h2_serve_file_from_root(H2_Session *session, H2_Stream *stream, HTTP_Request *req, String8 file_root)
 {
@@ -2451,16 +2487,28 @@ handle_h2_request(H2_Session *session, H2_Stream *stream, HTTP_Request *req, voi
 		{
 			fprintf(stderr, "httpproxy: auth validation failed, redirecting to login\n");
 			fflush(stderr);
-			Temp scratch = scratch_begin(&stream->arena, 1);
-			String8 redirect_param = str8f(scratch.arena, "/login?redirect=%S", req->path);
+			// Allocate from stream->arena so string lives until response is sent
+			String8 redirect_param = str8f(stream->arena, "/login?redirect=%S", req->path);
 			h2_respond_redirect(session, stream, redirect_param);
-			scratch_end(scratch);
 			return;
 		}
 
-		fprintf(stderr, "httpproxy: proxying to Jellyfin backend (nas:8096)\n");
-		fflush(stderr);
-		h2_proxy_to_backend(session, stream, req, str8_lit("nas"), 8096, str8_lit("/jellyfin"));
+		// Create async backend connection (no worker pool, single-threaded event loop)
+		Backend_Connection *backend = backend_connection_alloc(stream->arena, stream->stream_id);
+		backend->path_prefix = str8_lit("/jellyfin");
+		stream->backend = backend;
+
+		// Build HTTP/1.1 request to send to backend
+		String8 backend_path = str8_skip(req->path, str8_lit("/jellyfin").size);
+		if(backend_path.size == 0 || backend_path.str[0] != '/')
+		{
+			backend_path = str8_lit("/");
+		}
+		String8 request_data = http_request_build_for_proxy(stream->arena, req, str8_lit("nas"), backend_path);
+
+		// Start async connection (non-blocking)
+		backend_connection_start(backend, str8_lit("nas"), 8096, request_data);
+		h2_session_add_backend(session, backend);
 		return;
 	}
 
@@ -2469,10 +2517,8 @@ handle_h2_request(H2_Session *session, H2_Stream *stream, HTTP_Request *req, voi
 	{
 		if(!auth_validate_request(req))
 		{
-			Temp scratch = scratch_begin(&stream->arena, 1);
-			String8 redirect_param = str8f(scratch.arena, "/login?redirect=%S", req->path);
+			String8 redirect_param = str8f(stream->arena, "/login?redirect=%S", req->path);
 			h2_respond_redirect(session, stream, redirect_param);
-			scratch_end(scratch);
 			return;
 		}
 
@@ -2553,79 +2599,14 @@ handle_h1_connection(SSL *ssl, OS_Handle connection_socket, Arena *connection_ar
 internal void
 handle_h2_connection(SSL *ssl, OS_Handle connection_socket, Arena *connection_arena)
 {
-	// Set receive timeout so we can periodically check for ready responses
-	int client_fd = (int)connection_socket.u64[0];
-	struct timeval timeout;
-	timeout.tv_sec = 0;
-	timeout.tv_usec = 100000; // 100ms
-	setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+	log_info(str8_lit("httpproxy: HTTP/2 session started\n"));
 
 	H2_Session *session = h2_session_alloc(connection_arena, ssl, connection_socket, handle_h2_request, proxy_ctx);
 	h2_session_send_settings(session);
 	h2_session_flush(session);
 
-	log_info(str8_lit("httpproxy: HTTP/2 session started\n"));
-
-	for(;;)
-	{
-		u8 buffer[h2_read_buffer_size];
-		ssize_t bytes = SSL_read(ssl, buffer, sizeof(buffer));
-
-		log_infof("httpproxy: HTTP/2 SSL_read returned %lld bytes\n", (s64)bytes);
-
-		if(bytes <= 0)
-		{
-			int ssl_error = SSL_get_error(ssl, (int)bytes);
-			log_infof("httpproxy: HTTP/2 SSL_read error code: %d\n", ssl_error);
-			if(ssl_error == SSL_ERROR_ZERO_RETURN)
-			{
-				log_info(str8_lit("httpproxy: HTTP/2 connection closed cleanly\n"));
-				break;
-			}
-			else if(ssl_error == SSL_ERROR_WANT_READ)
-			{
-				// Timeout - check for ready responses and continue
-				h2_session_send_ready_responses(session);
-				continue;
-			}
-			else
-			{
-				log_errorf("httpproxy: HTTP/2 SSL read error: %d\n", ssl_error);
-				break;
-			}
-		}
-
-		log_infof("httpproxy: HTTP/2 received %lld bytes, passing to nghttp2\n", (s64)bytes);
-
-		ssize_t consumed = 0;
-		MutexScope(session->session_mutex)
-		{
-			consumed = nghttp2_session_mem_recv(session->ng_session, buffer, (size_t)bytes);
-		}
-
-		if(consumed < 0)
-		{
-			log_errorf("httpproxy: HTTP/2 protocol error: %s\n", nghttp2_strerror((int)consumed));
-			break;
-		}
-		log_infof("httpproxy: HTTP/2 nghttp2 consumed %lld bytes\n", (s64)consumed);
-
-		h2_session_send_ready_responses(session);
-
-		b32 want_read = 0;
-		b32 want_write = 0;
-		MutexScope(session->session_mutex)
-		{
-			want_read = nghttp2_session_want_read(session->ng_session);
-			want_write = nghttp2_session_want_write(session->ng_session);
-		}
-
-		if(want_read == 0 && want_write == 0)
-		{
-			log_info(str8_lit("httpproxy: HTTP/2 session terminating\n"));
-			break;
-		}
-	}
+	// Run event loop (handles client + backend sockets, async I/O, no threading)
+	h2_session_run_event_loop(session);
 
 	h2_session_release(session);
 	log_info(str8_lit("httpproxy: HTTP/2 session ended\n"));

@@ -164,7 +164,6 @@ h2_session_run_event_loop(H2_Session *session)
 					break;
 
 				case BACKEND_READING_RESPONSE:
-				case BACKEND_HEADERS_PARSED: // Continue reading body after headers sent
 					FD_SET(backend_fd, &read_fds);
 					max_fd = Max(max_fd, backend_fd);
 					break;
@@ -253,6 +252,9 @@ h2_session_run_event_loop(H2_Session *session)
 				H2_Stream *stream = h2_stream_table_get(session->streams, backend->stream_id);
 				if(stream != 0)
 				{
+					// Parse HTTP response manually (simplified version - assumes HTTP/1.1)
+					String8 response_data = {backend->response_buffer, backend->response_size};
+
 					u64 time_done = os_now_microseconds();
 					u64 total_us = time_done - backend->time_start;
 					u64 connect_us = backend->time_connected - backend->time_start;
@@ -261,18 +263,170 @@ h2_session_run_event_loop(H2_Session *session)
 					u64 download_us = time_done - backend->time_first_byte;
 
 					fprintf(stderr,
-					        "httpproxy: backend complete - total=%lluμs (connect=%lluμs send=%lluμs ttfb=%lluμs "
+					        "httpproxy: backend timing - total=%lluμs (connect=%lluμs send=%lluμs ttfb=%lluμs "
 					        "download=%lluμs) size=%lluB\n",
 					        (unsigned long long)total_us, (unsigned long long)connect_us, (unsigned long long)send_us,
 					        (unsigned long long)ttfb_us, (unsigned long long)download_us,
 					        (unsigned long long)backend->response_size);
 					fflush(stderr);
 
-					// Resume data stream to send final EOF
-					nghttp2_session_resume_data(session->ng_session, backend->stream_id);
+					// Find header/body separator
+					u64 header_end = str8_find_needle(response_data, 0, str8_lit("\r\n\r\n"), 0);
+					if(header_end < response_data.size)
+					{
+						String8 headers_section = str8_prefix(response_data, header_end);
+						String8 raw_body = str8_skip(response_data, header_end + 4);
 
-					// Final flush to ensure all data sent
-					h2_session_flush(session);
+						// Parse status line
+						u64 status_line_end = str8_find_needle(headers_section, 0, str8_lit("\r\n"), 0);
+						String8 status_line = str8_prefix(headers_section, status_line_end);
+
+						// Extract status code (e.g., "HTTP/1.1 200 OK")
+						u64 first_space = str8_find_needle(status_line, 0, str8_lit(" "), 0);
+						String8 after_version = str8_skip(status_line, first_space + 1);
+						u64 second_space = str8_find_needle(after_version, 0, str8_lit(" "), 0);
+						String8 status_code_str = str8_prefix(after_version, second_space);
+						u64 status_code = u64_from_str8(status_code_str, 10);
+
+						HTTP_Response *res = http_response_alloc(stream->arena, (HTTP_Status)status_code);
+
+						// Parse headers
+						b32 is_chunked = 0;
+						String8 headers_only = str8_skip(headers_section, status_line_end + 2);
+						String8 remaining = headers_only;
+						while(remaining.size > 0)
+						{
+							u64 line_end = str8_find_needle(remaining, 0, str8_lit("\r\n"), 0);
+							String8 header_line = (line_end >= remaining.size) ? remaining : str8_prefix(remaining, line_end);
+							remaining = (line_end >= remaining.size) ? str8_zero() : str8_skip(remaining, line_end + 2);
+
+							if(header_line.size == 0)
+							{
+								break;
+							}
+
+							u64 colon = str8_find_needle(header_line, 0, str8_lit(":"), 0);
+							if(colon < header_line.size)
+							{
+								String8 name = str8_prefix(header_line, colon);
+								String8 value = str8_skip(header_line, colon + 1);
+
+								// Trim leading whitespace from value
+								while(value.size > 0 && (value.str[0] == ' ' || value.str[0] == '\t'))
+								{
+									value = str8_skip(value, 1);
+								}
+
+								// Check for chunked transfer encoding
+								if(str8_match(name, str8_lit("Transfer-Encoding"), StringMatchFlag_CaseInsensitive) &&
+								   str8_match(value, str8_lit("chunked"), StringMatchFlag_CaseInsensitive))
+								{
+									is_chunked = 1;
+									// Don't add Transfer-Encoding to headers (HTTP/2 doesn't use it)
+								}
+								else
+								{
+									// Rewrite relative Location headers (e.g., "web/" -> "/jellyfin/web/")
+									if(str8_match(name, str8_lit("Location"), StringMatchFlag_CaseInsensitive) && value.size > 0 &&
+									   value.str[0] != '/' &&
+									   !str8_match(str8_prefix(value, 4), str8_lit("http"), StringMatchFlag_CaseInsensitive))
+									{
+										value = str8f(stream->arena, "%S/%S", backend->path_prefix, value);
+									}
+
+									http_header_add(stream->arena, &res->headers, name, value);
+								}
+							}
+						}
+
+						// Decode chunked body if needed
+						String8 body = raw_body;
+						if(is_chunked)
+						{
+							// Parse chunked encoding and extract actual data
+							u8 *decoded = push_array(stream->arena, u8, raw_body.size);
+							u64 decoded_size = 0;
+							String8 chunk_remaining = raw_body;
+
+							while(chunk_remaining.size > 0)
+							{
+								// Read chunk size (hex number followed by \r\n)
+								u64 chunk_size_end = str8_find_needle(chunk_remaining, 0, str8_lit("\r\n"), 0);
+								if(chunk_size_end >= chunk_remaining.size)
+								{
+									break;
+								}
+
+								String8 chunk_size_str = str8_prefix(chunk_remaining, chunk_size_end);
+								u64 chunk_size = 0;
+
+								// Parse hex
+								for(u64 i = 0; i < chunk_size_str.size; i++)
+								{
+									u8 c = chunk_size_str.str[i];
+									if(c >= '0' && c <= '9')
+									{
+										chunk_size = (chunk_size << 4) | (c - '0');
+									}
+									else if(c >= 'a' && c <= 'f')
+									{
+										chunk_size = (chunk_size << 4) | (c - 'a' + 10);
+									}
+									else if(c >= 'A' && c <= 'F')
+									{
+										chunk_size = (chunk_size << 4) | (c - 'A' + 10);
+									}
+									else
+									{
+										break; // Stop at semicolon or other non-hex char
+									}
+								}
+
+								if(chunk_size == 0)
+								{
+									break; // Last chunk
+								}
+
+								// Skip chunk size line
+								chunk_remaining = str8_skip(chunk_remaining, chunk_size_end + 2);
+
+								// Copy chunk data
+								if(chunk_size <= chunk_remaining.size)
+								{
+									MemoryCopy(decoded + decoded_size, chunk_remaining.str, chunk_size);
+									decoded_size += chunk_size;
+									chunk_remaining = str8_skip(chunk_remaining, chunk_size + 2); // +2 for trailing \r\n
+								}
+								else
+								{
+									break;
+								}
+							}
+
+							body = (String8){decoded, decoded_size};
+							fprintf(stderr, "httpproxy: decoded chunked body from %llu to %llu bytes\n",
+							        (unsigned long long)raw_body.size, (unsigned long long)body.size);
+							fflush(stderr);
+						}
+
+						res->body = body;
+						stream->response = res;
+
+						fprintf(stderr, "httpproxy: parsed response - status=%llu, headers=%llu, body_size=%llu\n",
+						        (unsigned long long)status_code, (unsigned long long)res->headers.count,
+						        (unsigned long long)body.size);
+
+						// Dump headers for debugging
+						for(u64 h = 0; h < res->headers.count; h++)
+						{
+							fprintf(stderr, "  %.*s: %.*s\n", (int)res->headers.headers[h].name.size,
+							        res->headers.headers[h].name.str, (int)res->headers.headers[h].value.size,
+							        res->headers.headers[h].value.str);
+						}
+						fflush(stderr);
+
+						h2_stream_send_response(session, stream);
+					}
 				}
 
 				// Close socket and remove from array
@@ -282,27 +436,15 @@ h2_session_run_event_loop(H2_Session *session)
 			}
 			else if(backend->state == BACKEND_ERROR)
 			{
+				// Send error response
 				H2_Stream *stream = h2_stream_table_get(session->streams, backend->stream_id);
 				if(stream != 0)
 				{
-					if(stream->response == 0)
-					{
-						// Error before headers sent - send 502 response
-						HTTP_Response *err_res = http_response_alloc(stream->arena, HTTP_Status_502_BadGateway);
-						http_header_add(stream->arena, &err_res->headers, str8_lit("Content-Type"), str8_lit("text/plain"));
-						err_res->body = str8_lit("Backend error");
-						stream->response = err_res;
-						h2_stream_send_response(session, stream);
-					}
-					else
-					{
-						// Error after headers sent - send RST_STREAM
-						nghttp2_submit_rst_stream(session->ng_session, NGHTTP2_FLAG_NONE, backend->stream_id,
-						                          NGHTTP2_INTERNAL_ERROR);
-						session->want_write = 1;
-						fprintf(stderr, "httpproxy: sent RST_STREAM for mid-stream error (stream_id=%d)\n", backend->stream_id);
-						fflush(stderr);
-					}
+					HTTP_Response *err_res = http_response_alloc(stream->arena, HTTP_Status_502_BadGateway);
+					http_header_add(stream->arena, &err_res->headers, str8_lit("Content-Type"), str8_lit("text/plain"));
+					err_res->body = str8_lit("Backend error");
+					stream->response = err_res;
+					h2_stream_send_response(session, stream);
 				}
 
 				// Close socket and remove from array
