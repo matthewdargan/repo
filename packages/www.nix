@@ -23,7 +23,7 @@
       '';
       installPhase = ''
         mkdir -p $out/docs
-        cp www/index.html $out/
+        cp www/* $out/
         cp docs/*.html $out/docs/ 2>/dev/null || true
       '';
     };
