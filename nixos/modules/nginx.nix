@@ -20,6 +20,12 @@ in {
       description = "Port where authd listens";
     };
 
+    jellyfinSubdomain = mkOption {
+      type = types.str;
+      default = "jellyfin";
+      description = "Subdomain for Jellyfin (e.g., 'jellyfin' becomes 'jellyfin.domain.com')";
+    };
+
     jellyfinHost = mkOption {
       type = types.str;
       default = "nas";
@@ -53,13 +59,8 @@ in {
       enable = true;
       recommendedGzipSettings = true;
       recommendedOptimisation = true;
-      recommendedProxySettings = true;
       recommendedTlsSettings = true;
-
-      appendHttpConfig = ''
-        proxy_headers_hash_max_size 1024;
-        proxy_headers_hash_bucket_size 128;
-      '';
+      clientMaxBodySize = "20M";
 
       virtualHosts.${cfg.domain} = {
         forceSSL = true;
@@ -73,6 +74,7 @@ in {
               proxy_pass_request_body off;
               proxy_set_header Content-Length "";
               proxy_set_header X-Original-URI $request_uri;
+              proxy_set_header X-Real-IP $remote_addr;
             '';
           };
 
@@ -82,21 +84,12 @@ in {
                 rewrite ^ /login.html last;
               }
               proxy_pass http://127.0.0.1:${toString cfg.authPort};
-              proxy_set_header Host $host;
               proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
             '';
           };
 
           "= /logout" = {
             proxyPass = "http://127.0.0.1:${toString cfg.authPort}";
-            extraConfig = ''
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-            '';
           };
 
           "@auth_error" = {
@@ -105,22 +98,9 @@ in {
             '';
           };
 
-          "/jellyfin/" = {
-            proxyPass = "http://${cfg.jellyfinHost}:${toString cfg.jellyfinPort}/";
-            proxyWebsockets = true;
+          "= /private" = {
             extraConfig = ''
-              auth_request /auth;
-              error_page 401 = @auth_error;
-
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-
-              proxy_read_timeout 3600s;
-              proxy_send_timeout 3600s;
-              proxy_connect_timeout 60s;
-              proxy_buffering off;
+              return 301 /private/;
             '';
           };
 
@@ -139,6 +119,27 @@ in {
               try_files $uri $uri/ =404;
             '';
           };
+        };
+      };
+
+      virtualHosts."${cfg.jellyfinSubdomain}.${cfg.domain}" = {
+        forceSSL = true;
+        enableACME = true;
+
+        locations."/" = {
+          proxyPass = "http://${cfg.jellyfinHost}:${toString cfg.jellyfinPort}";
+          proxyWebsockets = true;
+          extraConfig = ''
+            proxy_buffering off;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $http_host;
+            proxy_set_header Range $http_range;
+            proxy_set_header If-Range $http_if_range;
+            proxy_redirect off;
+          '';
         };
       };
     };
