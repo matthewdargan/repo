@@ -161,11 +161,6 @@ entry_point(CmdLine *cmd_line)
 		}
 	}
 
-	LogScopeResult result = log_scope_end(scratch.arena);
-	if(result.strings[LogMsgKind_Error].size > 0)
-	{
-		fwrite(result.strings[LogMsgKind_Error].str, 1, result.strings[LogMsgKind_Error].size, stderr);
-		fflush(stderr);
-	}
+	log_scope_flush(scratch.arena);
 	scratch_end(scratch);
 }

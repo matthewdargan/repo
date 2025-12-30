@@ -518,21 +518,8 @@ handle_connection(OS_Handle connection_socket)
 	}
 
 	os_file_close(connection_socket);
-
 	log_info(str8_lit("9pfs: connection closed\n"));
-
-	LogScopeResult result = log_scope_end(scratch.arena);
-	if(result.strings[LogMsgKind_Info].size > 0)
-	{
-		fwrite(result.strings[LogMsgKind_Info].str, 1, result.strings[LogMsgKind_Info].size, stdout);
-		fflush(stdout);
-	}
-	if(result.strings[LogMsgKind_Error].size > 0)
-	{
-		fwrite(result.strings[LogMsgKind_Error].str, 1, result.strings[LogMsgKind_Error].size, stderr);
-		fflush(stderr);
-	}
-
+	log_scope_flush(scratch.arena);
 	log_release(log);
 	arena_release(connection_arena);
 	scratch_end(scratch);

@@ -554,7 +554,6 @@ handle_connection(OS_Handle connection_socket)
 
 	os_file_close(connection_socket);
 	log_info(str8_lit("authd: connection closed\n"));
-
 	log_scope_flush(scratch.arena);
 	log_release(log);
 	arena_release(connection_arena);
