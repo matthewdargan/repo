@@ -40,10 +40,9 @@ in {
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "nas";
     firewall = {
-      allowedTCPPorts = [5640 5641 8096];
-      allowedUDPPorts = [8096];
+      allowedTCPPorts = [5641];
       interfaces.${config.services.tailscale.interfaceName} = {
-        allowedTCPPorts = [22 8096];
+        allowedTCPPorts = [22 5640 8096];
         allowedUDPPorts = [8096];
       };
     };
