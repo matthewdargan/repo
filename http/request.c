@@ -91,33 +91,3 @@ http_request_parse(Arena *arena, String8 data)
 
 	return req;
 }
-
-internal String8
-http_request_serialize(Arena *arena, HTTP_Request *req)
-{
-	String8List list = {0};
-
-	String8 method_str = str8_from_http_method(req->method);
-	if(req->query.size > 0)
-	{
-		str8_list_pushf(arena, &list, "%S %S?%S %S\r\n", method_str, req->path, req->query, req->version);
-	}
-	else
-	{
-		str8_list_pushf(arena, &list, "%S %S %S\r\n", method_str, req->path, req->version);
-	}
-
-	for(u64 i = 0; i < req->headers.count; i += 1)
-	{
-		str8_list_pushf(arena, &list, "%S: %S\r\n", req->headers.headers[i].name, req->headers.headers[i].value);
-	}
-
-	str8_list_push(arena, &list, str8_lit("\r\n"));
-
-	if(req->body.size > 0)
-	{
-		str8_list_push(arena, &list, req->body);
-	}
-
-	return str8_list_join(arena, &list, 0);
-}

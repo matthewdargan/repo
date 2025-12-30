@@ -2,7 +2,7 @@
 #define HTTP_INC_H
 
 ////////////////////////////////
-//~ HTTP/1.1 Includes
+//~ HTTP Includes
 
 // clang-format off
 #include "core.h"

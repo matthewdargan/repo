@@ -72,13 +72,13 @@ struct HTTP_HeaderList
 {
 	HTTP_Header *headers;
 	u64 count;
+	u64 capacity;
 };
 
 ////////////////////////////////
 //~ HTTP API
 
 internal HTTP_Method http_method_from_str8(String8 string);
-internal String8 str8_from_http_method(HTTP_Method method);
 internal String8 str8_from_http_status(HTTP_Status status);
 
 internal String8 http_header_get(HTTP_HeaderList *list, String8 name);

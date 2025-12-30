@@ -16,6 +16,5 @@ struct HTTP_Request
 };
 
 internal HTTP_Request *http_request_parse(Arena *arena, String8 data);
-internal String8 http_request_serialize(Arena *arena, HTTP_Request *req);
 
 #endif // HTTP_REQUEST_H

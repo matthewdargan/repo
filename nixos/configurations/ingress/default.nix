@@ -7,7 +7,7 @@
   mounts = [
     {
       what = "nas";
-      where = "/var/lib/httpproxy/n/media";
+      where = "/var/www/n/media";
       type = "9p";
       options = "port=5640";
       after = ["network-online.target"];
@@ -29,6 +29,7 @@ in {
     self.nixosModules."9p-tools"
     self.nixosModules.fish
     self.nixosModules.locale
+    self.nixosModules.nginx
     self.nixosModules.nix-client
     self.nixosModules.nix-config
   ];
@@ -45,7 +46,15 @@ in {
   services = {
     "9p-health-check" = {
       enable = true;
-      mounts = ["/var/lib/httpproxy/n/media" "/var/lib/nix-client/n/nix"];
+      mounts = ["/var/www/n/media" "/var/lib/nix-client/n/nix"];
+    };
+    nginx-reverse-proxy = {
+      enable = true;
+      domain = "dargs.dev";
+      authPort = 8080;
+      publicRoot = "${self.packages.${pkgs.stdenv.hostPlatform.system}.www}";
+      privateRoot = "/var/www/n/media/private";
+      email = "matthewdargan57@gmail.com";
     };
     nix-client.enable = true;
     openssh = {
@@ -63,53 +72,48 @@ in {
         automountConfig.TimeoutIdleSec = "600";
       })
       mounts;
-    services.httpproxy = {
-      description = "HTTP reverse proxy with TLS termination";
+    services.authd = {
+      description = "Session authentication daemon";
       after = ["network-online.target"];
       wants = ["network-online.target"];
       wantedBy = ["multi-user.target"];
       serviceConfig = {
-        AmbientCapabilities = ["CAP_NET_BIND_SERVICE"];
-        CapabilityBoundingSet = ["CAP_NET_BIND_SERVICE"];
-        EnvironmentFile = "/var/lib/httpproxy/secrets";
+        EnvironmentFile = "/var/lib/authd/secrets";
         ExecStart = builtins.concatStringsSep " " [
-          "${self.packages.${pkgs.stdenv.hostPlatform.system}.httpproxy}/bin/httpproxy"
-          "--acme-domain=dargs.dev"
-          "--file-root=${self.packages.${pkgs.stdenv.hostPlatform.system}.www}"
-          "--private-root=/var/lib/httpproxy/n/media/private"
+          "${self.packages.${pkgs.stdenv.hostPlatform.system}.authd}/bin/authd"
+          "--port=8080"
           "--auth-user=family"
           "--auth-password=\${AUTH_PASSWORD}"
         ];
-        Group = "httpproxy";
+        Group = "authd";
         NoNewPrivileges = true;
         PrivateTmp = true;
         ProtectHome = true;
         ProtectSystem = "strict";
-        ReadOnlyPaths = ["/var/lib/httpproxy/n/media"];
         Restart = "always";
         RestartSec = "5s";
         RestrictSUIDSGID = true;
-        RuntimeDirectory = "httpproxy";
+        RuntimeDirectory = "authd";
         RuntimeDirectoryMode = "0750";
-        StateDirectory = "httpproxy";
+        StateDirectory = "authd";
         StateDirectoryMode = "0700";
         TimeoutStartSec = "10s";
         TimeoutStopSec = "30s";
-        User = "httpproxy";
+        User = "authd";
       };
     };
     tmpfiles.rules = [
-      "d /var/lib/httpproxy/n 0755 httpproxy httpproxy -"
+      "d /var/www/n 0755 root root -"
     ];
   };
   system.stateVersion = "26.05";
   users = {
-    groups.httpproxy = {};
+    groups.authd = {};
     users = {
-      httpproxy = {
-        description = "HTTP reverse proxy service user";
+      authd = {
+        description = "Authentication daemon service user";
         isSystemUser = true;
-        group = "httpproxy";
+        group = "authd";
       };
       mpd = {
         description = "Matthew Dargan";

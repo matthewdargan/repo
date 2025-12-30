@@ -45,46 +45,6 @@ http_method_from_str8(String8 string)
 }
 
 internal String8
-str8_from_http_method(HTTP_Method method)
-{
-	String8 result = str8_zero();
-	switch(method)
-	{
-		case HTTP_Method_GET:
-			result = str8_lit("GET");
-			break;
-		case HTTP_Method_HEAD:
-			result = str8_lit("HEAD");
-			break;
-		case HTTP_Method_POST:
-			result = str8_lit("POST");
-			break;
-		case HTTP_Method_PUT:
-			result = str8_lit("PUT");
-			break;
-		case HTTP_Method_DELETE:
-			result = str8_lit("DELETE");
-			break;
-		case HTTP_Method_CONNECT:
-			result = str8_lit("CONNECT");
-			break;
-		case HTTP_Method_OPTIONS:
-			result = str8_lit("OPTIONS");
-			break;
-		case HTTP_Method_TRACE:
-			result = str8_lit("TRACE");
-			break;
-		case HTTP_Method_PATCH:
-			result = str8_lit("PATCH");
-			break;
-		case HTTP_Method_Unknown:
-			result = str8_lit("UNKNOWN");
-			break;
-	}
-	return result;
-}
-
-internal String8
 str8_from_http_status(HTTP_Status status)
 {
 	String8 result = str8_zero();
@@ -219,14 +179,17 @@ http_header_add(Arena *arena, HTTP_HeaderList *list, String8 name, String8 value
 {
 	if(list->headers == 0)
 	{
-		list->headers = push_array(arena, HTTP_Header, 1);
+		list->capacity = 8;
+		list->headers = push_array(arena, HTTP_Header, list->capacity);
 		list->count = 0;
 	}
-	else
+	else if(list->count >= list->capacity)
 	{
-		HTTP_Header *new_headers = push_array(arena, HTTP_Header, list->count + 1);
+		u64 new_capacity = list->capacity * 2;
+		HTTP_Header *new_headers = push_array(arena, HTTP_Header, new_capacity);
 		MemoryCopy(new_headers, list->headers, sizeof(HTTP_Header) * list->count);
 		list->headers = new_headers;
+		list->capacity = new_capacity;
 	}
 
 	list->headers[list->count].name = name;

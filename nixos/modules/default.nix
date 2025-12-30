@@ -5,6 +5,7 @@ _: {
     "fish" = ./fish.nix;
     "git-server" = ./git-server.nix;
     "locale" = ./locale.nix;
+    "nginx" = ./nginx.nix;
     "nix-client" = ./nix-client.nix;
     "nix-config" = ./nix-config.nix;
   };
