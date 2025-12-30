@@ -18,15 +18,13 @@
         "nix-command"
         "flakes"
       ];
-      substituters = lib.mkForce [
-        "file:///var/lib/nix-client/n/nix"
+      substituters = lib.mkDefault [
         "https://cache.nixos.org"
       ];
       trusted-public-keys = [
         "nas-cache:zS6WxIVuVrTFhM0lF0jZ7z6QIz48y07LlFLV7clLsIg="
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
       ];
-      trusted-substituters = ["file:///var/lib/nix-client/n/nix"];
       trusted-users = ["@wheel" "git"];
     };
   };

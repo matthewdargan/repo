@@ -110,5 +110,10 @@ in {
         "d /var/lib/nix-client/n 0755 root root -"
       ];
     };
+
+    nix.settings = {
+      substituters = lib.mkBefore ["file://${cfg.cacheMount}"];
+      trusted-substituters = ["file://${cfg.cacheMount}"];
+    };
   };
 }
