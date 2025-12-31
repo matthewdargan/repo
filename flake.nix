@@ -17,6 +17,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/home-manager";
     };
+    jovian = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:jovian-experiments/jovian-nixos";
+    };
     nixpkgs.url = "nixpkgs/nixos-unstable";
     nixvim = {
       inputs.nixpkgs.follows = "nixpkgs";

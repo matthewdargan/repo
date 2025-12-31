@@ -19,5 +19,6 @@
     nas = mkSystem "nas";
     router = mkSystem "router";
     scoop = mkSystem "scoop";
+    steamdeck = mkSystem "steamdeck";
   };
 }
