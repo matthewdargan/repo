@@ -33,11 +33,6 @@ in {
     self.nixosModules.nix-client
     self.nixosModules.nix-config
   ];
-  environment.systemPackages = [
-    pkgs.jellyfin-media-player
-    pkgs.retroarch-full
-    self.packages.${pkgs.stdenv.hostPlatform.system}.neovim
-  ];
   jovian = {
     devices.steamdeck.enable = true;
     steam = {
@@ -61,6 +56,10 @@ in {
       wayland.enable = true;
     };
     nix-client.enable = true;
+    openssh = {
+      enable = true;
+      settings.PermitRootLogin = "no";
+    };
     pipewire = {
       enable = true;
       alsa = {

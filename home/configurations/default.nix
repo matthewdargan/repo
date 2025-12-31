@@ -2,31 +2,35 @@
   inputs,
   self,
   ...
-}: {
-  flake.homeConfigurations = let
-    pkgs = inputs.nixpkgs.legacyPackages."x86_64-linux";
-    baseModules = [
+}: let
+  extraSpecialArgs = {inherit inputs self;};
+  pkgs = inputs.nixpkgs.legacyPackages."x86_64-linux";
+  mkHome = modules:
+    inputs.home-manager.lib.homeManagerConfiguration {
+      inherit extraSpecialArgs modules pkgs;
+    };
+in {
+  flake.homeConfigurations = {
+    "mpd@nas" = mkHome [
       self.homeModules.base
       self.homeModules.development
     ];
-    extraSpecialArgs = {
-      inherit inputs self;
-    };
-  in {
-    "mpd@nas" = inputs.home-manager.lib.homeManagerConfiguration {
-      inherit extraSpecialArgs pkgs;
-      modules = baseModules;
-    };
 
-    "mpd@scoop" = inputs.home-manager.lib.homeManagerConfiguration {
-      inherit extraSpecialArgs pkgs;
-      modules =
-        baseModules
-        ++ [
-          self.homeModules.discord
-          self.homeModules.firefox
-          self.homeModules.ghostty
-        ];
-    };
+    "mpd@scoop" = mkHome [
+      self.homeModules.base
+      self.homeModules.development
+      self.homeModules.discord
+      self.homeModules.firefox
+      self.homeModules.ghostty
+      self.homeModules.retroarch
+    ];
+
+    "mpd@steamdeck" = mkHome [
+      self.homeModules.base
+      self.homeModules.firefox
+      self.homeModules.ghostty
+      self.homeModules.jellyfin
+      self.homeModules.retroarch
+    ];
   };
 }

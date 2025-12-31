@@ -5,5 +5,7 @@ _: {
     "discord" = ./discord.nix;
     "firefox" = ./firefox.nix;
     "ghostty" = ./ghostty.nix;
+    "jellyfin" = ./jellyfin.nix;
+    "retroarch" = ./retroarch.nix;
   };
 }
