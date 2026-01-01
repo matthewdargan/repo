@@ -1,23 +1,26 @@
 # authd
 
-Session authentication daemon for nginx's `auth_request` directive. Manages session cookies for authenticated access.
+Session authentication daemon for nginx's `auth_request` directive.
 
 ## Usage
 
 ```sh
-authd --auth-user=<user> --auth-password=<pass> [--port=<n>]
+authd [options]
 ```
 
 **Options:**
 
 - `--auth-user=<user>` - Username for authentication (required)
-- `--auth-password=<pass>` - Password for authentication (required)
 - `--port=<n>` - HTTP listen port (default: 8080)
+
+**Environment:**
+
+- `AUTH_PASSWORD` - Password for authentication (required)
 
 **Endpoints:**
 
-- `GET /auth` - Validate session (returns 200 if valid, 401 if not)
-- `POST /login` - Create session (form fields: username, password, redirect)
+- `GET /auth` - Validate session (200 if valid, 401 if not)
+- `POST /login` - Create session (form: username, password, redirect)
 - `POST /logout` - Destroy session
 
 ## Examples
@@ -25,13 +28,13 @@ authd --auth-user=<user> --auth-password=<pass> [--port=<n>]
 Start authd on default port:
 
 ```sh
-authd --auth-user=admin --auth-password=secret
+AUTH_PASSWORD=secret authd --auth-user=admin
 ```
 
 Start on custom port:
 
 ```sh
-authd --auth-user=family --auth-password=pass123 --port=9000
+AUTH_PASSWORD=secret authd --auth-user=family --port=9000
 ```
 
 ## Integration
@@ -59,10 +62,3 @@ location /logout {
     proxy_pass http://localhost:8080/logout;
 }
 ```
-
-## Session Details
-
-- 7-day session duration
-- HttpOnly cookies with SameSite=Lax
-- 64-character cryptographically random session IDs
-- Automatic expiry cleanup

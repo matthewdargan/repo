@@ -79,12 +79,7 @@ in {
       wantedBy = ["multi-user.target"];
       serviceConfig = {
         EnvironmentFile = "/var/lib/authd/secrets";
-        ExecStart = builtins.concatStringsSep " " [
-          "${self.packages.${pkgs.stdenv.hostPlatform.system}.authd}/bin/authd"
-          "--port=8080"
-          "--auth-user=family"
-          "--auth-password=\${AUTH_PASSWORD}"
-        ];
+        ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.authd}/bin/authd --port=8080 --auth-user=family";
         Group = "authd";
         NoNewPrivileges = true;
         PrivateTmp = true;

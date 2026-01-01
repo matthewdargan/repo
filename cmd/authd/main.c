@@ -329,7 +329,6 @@ send_error_response(OS_Handle socket, HTTP_Status status, String8 message)
 	http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), content_length_str);
 
 	String8 response_data = http_response_serialize(scratch.arena, res);
-
 	socket_write_all(socket, response_data);
 
 	scratch_end(scratch);
@@ -401,6 +400,7 @@ handle_login(HTTP_Request *req, OS_Handle client_socket)
 		http_header_add(scratch.arena, &res->headers, str8_lit("Location"), str8_lit("/login"));
 		http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), str8_lit("0"));
 		http_header_add(scratch.arena, &res->headers, str8_lit("Connection"), str8_lit("close"));
+
 		String8 response_data = http_response_serialize(scratch.arena, res);
 		socket_write_all(client_socket, response_data);
 	}
@@ -591,7 +591,17 @@ entry_point(CmdLine *cmd_line)
 	}
 
 	auth_username = cmd_line_string(cmd_line, str8_lit("auth-user"));
-	auth_password = cmd_line_string(cmd_line, str8_lit("auth-password"));
+
+	char *auth_password_cstr = getenv("AUTH_PASSWORD");
+	if(auth_password_cstr != 0)
+	{
+		auth_password = str8_cstring(auth_password_cstr);
+	}
+	else
+	{
+		auth_password = str8_zero();
+	}
+
 	auth_session_duration_us = session_duration_days * 24 * 60 * 60 * 1000000ULL;
 
 	if(auth_username.size > 0 && auth_password.size > 0)
