@@ -1,6 +1,6 @@
 # 9pfs
 
-[9P](https://9fans.github.io/plan9port/man/man9/intro.html) file server that exports local directories over the network. Includes an in-memory `tmp/` namespace for temporary files.
+[9P](https://9fans.github.io/plan9port/man/man9/intro.html) file server that exports local directories over the network.
 
 ## Usage
 
@@ -49,22 +49,4 @@ Serve via Unix socket:
 
 ```sh
 9pfs 'unix!/tmp/9pfs.sock'
-```
-
-## tmp/ namespace
-
-The `tmp/` directory provides an in-memory filesystem at the root. Files written to `tmp/` are stored in RAM and cleared when the server stops.
-
-```sh
-# Start server
-9pfs 'tcp!localhost!5640' &
-
-# Mount
-9mount 'tcp!localhost!5640' ~/n/fs
-
-# Write to RAM
-echo "temporary data" > ~/n/fs/tmp/temp.txt
-
-# Read from RAM
-cat ~/n/fs/tmp/temp.txt
 ```

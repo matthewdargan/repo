@@ -3,66 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>dargs.dev</title>
-    <style>
-        body {
-            font-family: monospace;
-            line-height: 1.6;
-            max-width: 800px;
-            margin: 40px auto;
-            padding: 0 20px;
-            color: #333;
-        }
-
-        h1 {
-            font-size: 1.5rem;
-            font-weight: normal;
-            margin-bottom: 20px;
-        }
-
-        h2 {
-            font-size: 1.2rem;
-            font-weight: normal;
-            margin-top: 40px;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 5px;
-        }
-
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-
-        li {
-            margin: 8px 0;
-        }
-
-        a {
-            color: #0066cc;
-            text-decoration: none;
-        }
-
-        a:hover {
-            text-decoration: underline;
-        }
-
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-        }
-    </style>
+    <meta name="description" content="Matt Dargan - Systems programming in C99">
+    <title>Matt Dargan</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>dargs.dev</h1>
-    <p class="subtitle">Systems programming and infrastructure</p>
+    <header>
+        <h1>Matt Dargan</h1>
+        <div class="subtitle">Senior Software Engineer @ Source Allies</div>
+    </header>
 
-    <h2>Documentation</h2>
-    <ul>
-        <li><a href="/docs/architecture.html">Layered Architecture: Building Code You Can Reason About</a></li>
-        <li><a href="/docs/9p-protocol.html">The 9P Protocol: Network File Systems Done Right</a></li>
-        <li><a href="/docs/9p-server.html">9P Server Implementation</a></li>
-        <li><a href="/docs/media-server.html">Building a Media Server: Simple Tools for Complex Problems</a></li>
-    </ul>
+    <main>
+        <section class="focus">
+            <h2>Current Focus</h2>
+            <p>
+                Building 9P protocol infrastructure for homelab file storage. Complete client/server
+                implementation in C99, currently serving files in production.
+            </p>
+            <p>
+                Next: Authentication server (inspired by Plan 9's
+                <a href="https://9p.io/sys/doc/auth.pdf">factotum</a>) and content-addressable
+                filesystem (inspired by Plan 9's <a href="https://9p.io/sys/doc/venti/venti.pdf">venti</a>).
+                Ground-up implementations incorporating these concepts.
+            </p>
+        </section>
+
+        <h2>Projects</h2>
+        <ul class="projects">
+            <li>
+                <h3><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9pfs">9P File Server</a></h3>
+                <p>
+                    Complete 9P2000 file server in C99. Exports local directories over the network.
+                    Multithreaded with configurable worker pool.
+                </p>
+                <p class="status">Status: Production | <a href="https://github.com/matthewdargan/repo/tree/main/9p">Library</a></p>
+            </li>
+            <li>
+                <h3>Authentication Server</h3>
+                <p>
+                    Centralized credential management for 9P infrastructure. Taking design
+                    concepts from Plan 9's factotum and implementing from scratch.
+                </p>
+                <p class="status">Status: Early development | <a href="https://github.com/matthewdargan/repo/tree/main/cmd/authd">Source</a></p>
+            </li>
+            <li>
+                <h3>Content-Addressable Filesystem</h3>
+                <p>
+                    Direct block management with deduplication and integrity verification.
+                    Taking design concepts from Plan 9's venti and implementing from scratch.
+                </p>
+                <p class="status">Status: Planned</p>
+            </li>
+        </ul>
+
+        <h2>Tools</h2>
+        <ul class="section-list">
+            <li><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9mount">9mount</a> - Mount 9P filesystems</li>
+            <li><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9bind">9bind</a> - Bind mount directories</li>
+            <li><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9umount">9umount</a> - Unmount 9P filesystems</li>
+            <li><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9p">9p</a> - 9P protocol inspection tool</li>
+        </ul>
+
+        <h2>About</h2>
+        <p>
+            I build high-performance systems software in C99. Custom standard library with
+            arena allocators, length-prefixed strings, and explicit types. Zero dependencies.
+        </p>
+        <p>
+            <a href="https://github.com/matthewdargan/repo">Source Code</a> |
+            <a href="mailto:matthewdargan57@gmail.com">Email</a>
+        </p>
+    </main>
 </body>
 </html>
