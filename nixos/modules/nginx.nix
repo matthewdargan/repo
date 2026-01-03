@@ -11,19 +11,17 @@ in {
 
     domain = mkOption {
       type = types.str;
-      description = "Domain name for the site";
+      description = "Base domain name (e.g., 'dargs.dev')";
     };
 
-    authPort = mkOption {
-      type = types.port;
-      default = 8080;
-      description = "Port where authd listens";
-    };
-
-    jellyfinSubdomain = mkOption {
+    filesRoot = mkOption {
       type = types.str;
-      default = "jellyfin";
-      description = "Subdomain for Jellyfin (e.g., 'jellyfin' becomes 'jellyfin.domain.com')";
+      description = "Directory for authenticated files";
+    };
+
+    publicRoot = mkOption {
+      type = types.str;
+      description = "Directory for public files";
     };
 
     jellyfinHost = mkOption {
@@ -36,16 +34,6 @@ in {
       type = types.port;
       default = 8096;
       description = "Jellyfin backend port";
-    };
-
-    publicRoot = mkOption {
-      type = types.str;
-      description = "Directory for public files";
-    };
-
-    privateRoot = mkOption {
-      type = types.str;
-      description = "Directory for private files (requires auth)";
     };
 
     email = mkOption {
@@ -62,84 +50,119 @@ in {
       recommendedTlsSettings = true;
       clientMaxBodySize = "20M";
 
-      virtualHosts.${cfg.domain} = {
-        forceSSL = true;
-        enableACME = true;
+      virtualHosts = {
+        ${cfg.domain} = {
+          forceSSL = true;
+          enableACME = true;
 
-        locations = {
-          "= /auth" = {
-            proxyPass = "http://127.0.0.1:${toString cfg.authPort}";
-            extraConfig = ''
-              internal;
-              proxy_pass_request_body off;
-              proxy_set_header Content-Length "";
-              proxy_set_header X-Original-URI $request_uri;
-              proxy_set_header X-Real-IP $remote_addr;
-            '';
-          };
-
-          "= /login" = {
-            extraConfig = ''
-              if ($request_method = GET) {
-                rewrite ^ /login.html last;
-              }
-              proxy_pass http://127.0.0.1:${toString cfg.authPort};
-              proxy_set_header X-Real-IP $remote_addr;
-            '';
-          };
-
-          "= /logout" = {
-            proxyPass = "http://127.0.0.1:${toString cfg.authPort}";
-          };
-
-          "@auth_error" = {
-            extraConfig = ''
-              return 302 /login?redirect=$request_uri;
-            '';
-          };
-
-          "= /private" = {
-            extraConfig = ''
-              return 301 /private/;
-            '';
-          };
-
-          "/private/" = {
-            alias = "${cfg.privateRoot}/";
-            extraConfig = ''
-              auth_request /auth;
-              error_page 401 = @auth_error;
-              autoindex on;
-            '';
-          };
-
-          "/" = {
+          locations."/" = {
             root = cfg.publicRoot;
             extraConfig = ''
               try_files $uri $uri/ =404;
             '';
           };
         };
-      };
 
-      virtualHosts."${cfg.jellyfinSubdomain}.${cfg.domain}" = {
-        forceSSL = true;
-        enableACME = true;
+        "auth.${cfg.domain}" = {
+          forceSSL = true;
+          enableACME = true;
 
-        locations."/" = {
-          proxyPass = "http://${cfg.jellyfinHost}:${toString cfg.jellyfinPort}";
-          proxyWebsockets = true;
-          extraConfig = ''
-            proxy_buffering off;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-Forwarded-Host $http_host;
-            proxy_set_header Range $http_range;
-            proxy_set_header If-Range $http_if_range;
-            proxy_redirect off;
-          '';
+          locations = {
+            "= /" = {
+              extraConfig = ''
+                return 302 /login;
+              '';
+            };
+
+            "= /validate" = {
+              proxyPass = "http://127.0.0.1:8080/auth";
+              extraConfig = ''
+                internal;
+                proxy_pass_request_body off;
+                proxy_set_header Content-Length "";
+                proxy_set_header X-Original-URI $request_uri;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-Host $http_host;
+              '';
+            };
+
+            "= /login" = {
+              proxyPass = "http://127.0.0.1:8080";
+              extraConfig = ''
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-Host $http_host;
+              '';
+            };
+
+            "= /logout" = {
+              proxyPass = "http://127.0.0.1:8080";
+              extraConfig = ''
+                proxy_set_header X-Forwarded-Host $http_host;
+              '';
+            };
+
+            "/" = {
+              extraConfig = ''
+                return 404;
+              '';
+            };
+          };
+        };
+
+        "files.${cfg.domain}" = {
+          forceSSL = true;
+          enableACME = true;
+
+          locations = {
+            "@auth_error" = {
+              extraConfig = ''
+                return 302 https://auth.${cfg.domain}/login?redirect=https://$http_host$request_uri;
+              '';
+            };
+
+            "/" = {
+              root = cfg.filesRoot;
+              extraConfig = ''
+                auth_request /validate;
+                error_page 401 = @auth_error;
+                autoindex on;
+                try_files $uri $uri/ =404;
+              '';
+            };
+
+            "= /validate" = {
+              proxyPass = "http://127.0.0.1:8080/auth";
+              extraConfig = ''
+                internal;
+                proxy_pass_request_body off;
+                proxy_set_header Content-Length "";
+                proxy_set_header X-Original-URI $request_uri;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-Host $http_host;
+              '';
+            };
+          };
+        };
+
+        "jellyfin.${cfg.domain}" = {
+          forceSSL = true;
+          enableACME = true;
+
+          locations."/" = {
+            proxyPass = "http://${cfg.jellyfinHost}:${toString cfg.jellyfinPort}";
+            proxyWebsockets = true;
+            extraConfig = ''
+              proxy_buffering off;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header X-Forwarded-Host $http_host;
+              proxy_set_header Range $http_range;
+              proxy_set_header If-Range $http_if_range;
+              proxy_redirect off;
+            '';
+          };
         };
       };
     };

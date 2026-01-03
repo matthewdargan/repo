@@ -4,7 +4,7 @@ Systems programming monorepo centered on a custom C99 standard library. Built fo
 
 ## Overview
 
-Custom C99 standard library for systems programming. Layered architecture, unity builds, zero dependencies. [CLAUDE.md](CLAUDE.md) covers project structure and coding standards.
+Custom C99 standard library for systems programming. Layered architecture, unity builds, minimal dependencies. [CLAUDE.md](CLAUDE.md) covers project structure and coding standards.
 
 ## Quick Start
 

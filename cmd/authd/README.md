@@ -5,60 +5,52 @@ Session authentication daemon for nginx's `auth_request` directive.
 ## Usage
 
 ```sh
-authd [options]
+authd --auth-user=<user>
 ```
-
-**Options:**
-
-- `--auth-user=<user>` - Username for authentication (required)
-- `--port=<n>` - HTTP listen port (default: 8080)
 
 **Environment:**
 
-- `AUTH_PASSWORD` - Password for authentication (required)
+- `AUTH_PASSWORD` - Password for authentication
 
 **Endpoints:**
 
 - `GET /auth` - Validate session (200 if valid, 401 if not)
+- `GET /login` - Serve HTML login form
 - `POST /login` - Create session (form: username, password, redirect)
 - `POST /logout` - Destroy session
 
 ## Examples
 
-Start authd on default port:
+Start authd:
 
 ```sh
-AUTH_PASSWORD=secret authd --auth-user=admin
+AUTH_PASSWORD=secret authd --auth-user=family
 ```
 
-Start on custom port:
-
-```sh
-AUTH_PASSWORD=secret authd --auth-user=family --port=9000
-```
-
-## Integration
-
-Designed for nginx's `auth_request` directive. nginx serves HTML/files and proxies auth requests to authd:
+Nginx integration:
 
 ```nginx
-location /private/ {
-    auth_request /auth;
-    # ... serve files
-}
-
-location = /auth {
+# auth.example.com
+location = /validate {
     internal;
-    proxy_pass http://localhost:8080/auth;
+    proxy_pass http://127.0.0.1:8080/auth;
     proxy_pass_request_body off;
     proxy_set_header Content-Length "";
+    proxy_set_header X-Forwarded-Host $http_host;
 }
 
-location /login {
-    proxy_pass http://localhost:8080/login;
+location = /login {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header X-Forwarded-Host $http_host;
 }
 
-location /logout {
-    proxy_pass http://localhost:8080/logout;
+# files.example.com
+location / {
+    auth_request /validate;
+    error_page 401 = @auth_error;
+}
+
+location @auth_error {
+    return 302 https://auth.example.com/login?redirect=https://$http_host$request_uri;
 }
 ```

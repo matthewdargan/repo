@@ -4,7 +4,7 @@ A systems programming monorepo implemented in C99 with Nix/NixOS. Built for Clan
 
 ## Overview
 
-This is a zero-dependency C99 (ISO/IEC 9899:1999) codebase with a custom standard library. The project uses arena allocators, length-prefixed strings, and explicit types to replace unsafe C stdlib conventions. All code and system configurations are managed through Nix/NixOS.
+This is a minimal-dependency C99 (ISO/IEC 9899:1999) codebase with a custom standard library. The project uses arena allocators, length-prefixed strings, and explicit types to replace unsafe C stdlib conventions. All code and system configurations are managed through Nix/NixOS.
 
 ## Architecture
 
@@ -18,7 +18,7 @@ Layers correspond with namespaces. Namespaces are short prefixes (1-3 characters
 - **Unity builds** - Each layer has `inc.h` (includes all layer `.h` files) and `inc.c` (includes all layer `.c` files), which are then included in `main.c`
 - **Layered architecture** - Clear dependencies between layers, no circular dependencies
 - **Namespace conventions** - Short prefixes identify layer ownership (e.g., `str8_`, `OS_`)
-- **Zero dependencies** - Self-contained implementations using only system libraries
+- **Minimal dependencies** - Self-contained implementations using only system libraries
 
 ## Layer Structure
 

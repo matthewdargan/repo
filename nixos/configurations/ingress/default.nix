@@ -51,9 +51,8 @@ in {
     nginx-reverse-proxy = {
       enable = true;
       domain = "dargs.dev";
-      authPort = 8080;
+      filesRoot = "/var/www/n/media";
       publicRoot = "${self.packages.${pkgs.stdenv.hostPlatform.system}.www}";
-      privateRoot = "/var/www/n/media/private";
       email = "matthewdargan57@gmail.com";
     };
     nix-client.enable = true;
@@ -79,7 +78,7 @@ in {
       wantedBy = ["multi-user.target"];
       serviceConfig = {
         EnvironmentFile = "/var/lib/authd/secrets";
-        ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.authd}/bin/authd --port=8080 --auth-user=family";
+        ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.authd}/bin/authd --auth-user=family";
         Group = "authd";
         NoNewPrivileges = true;
         PrivateTmp = true;

@@ -77,6 +77,16 @@ session_create(SessionTable *table, u64 duration_us)
 
 	MutexScope(table->mutex)
 	{
+		for(u64 i = 0; i < table->capacity; i += 1)
+		{
+			Session *s = &table->sessions[i];
+			if(s->session_id.size > 0 && s->expiry_us <= now)
+			{
+				MemoryZeroStruct(s);
+				table->count -= 1;
+			}
+		}
+
 		Session *slot = 0;
 		for(u64 i = 0; i < table->capacity; i += 1)
 		{
@@ -89,12 +99,7 @@ session_create(SessionTable *table, u64 duration_us)
 
 		if(slot == 0)
 		{
-			u64 new_capacity = table->capacity * 2;
-			Session *new_sessions = push_array(table->arena, Session, new_capacity);
-			MemoryCopy(new_sessions, table->sessions, sizeof(Session) * table->capacity);
-			table->sessions = new_sessions;
-			slot = &table->sessions[table->capacity];
-			table->capacity = new_capacity;
+			return str8_zero();
 		}
 
 		session_id = session_generate_id(table->arena);
@@ -107,23 +112,10 @@ session_create(SessionTable *table, u64 duration_us)
 	return session_id;
 }
 
-internal Session *
-session_find(SessionTable *table, String8 session_id)
+internal b32
+session_validate(SessionTable *table, String8 session_id)
 {
-	for(u64 i = 0; i < table->capacity; i += 1)
-	{
-		Session *s = &table->sessions[i];
-		if(s->session_id.size > 0 && str8_match(s->session_id, session_id, 0))
-		{
-			return s;
-		}
-	}
-	return 0;
-}
-
-internal void
-session_cleanup_expired(SessionTable *table)
-{
+	b32 result = 0;
 	u64 now = os_now_microseconds();
 
 	MutexScope(table->mutex)
@@ -131,29 +123,14 @@ session_cleanup_expired(SessionTable *table)
 		for(u64 i = 0; i < table->capacity; i += 1)
 		{
 			Session *s = &table->sessions[i];
-			if(s->session_id.size > 0 && s->expiry_us <= now)
+			if(s->session_id.size > 0 && str8_match(s->session_id, session_id, 0))
 			{
-				MemoryZeroStruct(s);
-				table->count -= 1;
+				if(s->expiry_us > now)
+				{
+					result = 1;
+				}
+				break;
 			}
-		}
-	}
-}
-
-internal b32
-session_validate(SessionTable *table, String8 session_id)
-{
-	session_cleanup_expired(table);
-
-	b32 result = 0;
-	u64 now = os_now_microseconds();
-
-	MutexScope(table->mutex)
-	{
-		Session *s = session_find(table, session_id);
-		if(s != 0 && s->expiry_us > now)
-		{
-			result = 1;
 		}
 	}
 
@@ -165,11 +142,15 @@ session_delete(SessionTable *table, String8 session_id)
 {
 	MutexScope(table->mutex)
 	{
-		Session *s = session_find(table, session_id);
-		if(s != 0)
+		for(u64 i = 0; i < table->capacity; i += 1)
 		{
-			MemoryZeroStruct(s);
-			table->count -= 1;
+			Session *s = &table->sessions[i];
+			if(s->session_id.size > 0 && str8_match(s->session_id, session_id, 0))
+			{
+				MemoryZeroStruct(s);
+				table->count -= 1;
+				break;
+			}
 		}
 	}
 }
@@ -177,22 +158,23 @@ session_delete(SessionTable *table, String8 session_id)
 internal String8
 cookie_parse(String8 cookie_header, String8 name)
 {
-	String8 result = str8_zero();
-
 	for(u64 i = 0; i < cookie_header.size;)
 	{
 		for(; i < cookie_header.size && (cookie_header.str[i] == ' ' || cookie_header.str[i] == '\t'); i += 1)
-			;
+		{
+		}
 
 		u64 name_start = i;
 		for(; i < cookie_header.size && cookie_header.str[i] != '=' && cookie_header.str[i] != ';'; i += 1)
-			;
+		{
+		}
 		u64 name_end = i;
 
 		if(i >= cookie_header.size || cookie_header.str[i] != '=')
 		{
 			for(; i < cookie_header.size && cookie_header.str[i] != ';'; i += 1)
-				;
+			{
+			}
 			if(i < cookie_header.size)
 			{
 				i += 1;
@@ -205,13 +187,13 @@ cookie_parse(String8 cookie_header, String8 name)
 
 		u64 value_start = i;
 		for(; i < cookie_header.size && cookie_header.str[i] != ';'; i += 1)
-			;
+		{
+		}
 		u64 value_end = i;
 
 		if(str8_match(cookie_name, name, 0))
 		{
-			result = str8_range(cookie_header.str + value_start, cookie_header.str + value_end);
-			break;
+			return str8_range(cookie_header.str + value_start, cookie_header.str + value_end);
 		}
 
 		if(i < cookie_header.size)
@@ -220,16 +202,56 @@ cookie_parse(String8 cookie_header, String8 name)
 		}
 	}
 
-	return result;
+	return str8_zero();
 }
 
 internal String8
-cookie_serialize(Arena *arena, String8 name, String8 value, u64 max_age_seconds, b32 is_deletion)
+domain_extract_base(String8 host)
+{
+	u64 dot_count = 0;
+	for(u64 i = 0; i < host.size; i += 1)
+	{
+		if(host.str[i] == '.')
+		{
+			dot_count += 1;
+		}
+	}
+
+	if(dot_count < 2)
+	{
+		return host;
+	}
+
+	u64 dot_pos = 0;
+	for(u64 i = 0; i < host.size; i += 1)
+	{
+		if(host.str[i] == '.')
+		{
+			dot_pos = i;
+			break;
+		}
+	}
+
+	String8 base = str8_skip(host, dot_pos);
+	return base;
+}
+
+internal String8
+cookie_serialize(Arena *arena, String8 name, String8 value, u64 max_age_seconds, b32 is_deletion, String8 domain)
 {
 	String8 result;
-	if(is_deletion)
+	if(is_deletion && domain.size > 0)
+	{
+		result = str8f(arena, "%S=deleted; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Domain=%S", name, domain);
+	}
+	else if(is_deletion)
 	{
 		result = str8f(arena, "%S=deleted; Path=/; HttpOnly; SameSite=Lax; Max-Age=0", name);
+	}
+	else if(domain.size > 0)
+	{
+		result = str8f(arena, "%S=%S; Path=/; HttpOnly; SameSite=Lax; Max-Age=%u; Domain=%S", name, value, max_age_seconds,
+		               domain);
 	}
 	else
 	{
@@ -337,72 +359,172 @@ send_error_response(OS_Handle socket, HTTP_Status status, String8 message)
 internal void
 handle_login(HTTP_Request *req, OS_Handle client_socket)
 {
-	if(req->method != HTTP_Method_POST)
-	{
-		send_error_response(client_socket, HTTP_Status_405_MethodNotAllowed,
-		                    str8_from_http_status(HTTP_Status_405_MethodNotAllowed));
-		return;
-	}
-
 	Temp scratch = scratch_begin(0, 0);
 
-	String8 username = str8_zero();
-	String8 password = str8_zero();
-	String8 redirect_url = str8_lit("/");
-
-	String8List parts = str8_split(scratch.arena, req->body, (u8 *)"&", 1, 0);
-	for(String8Node *n = parts.first; n != 0; n = n->next)
+	if(req->method == HTTP_Method_GET)
 	{
-		String8 part = n->string;
-		u64 eq_pos = str8_find_needle(part, 0, str8_lit("="), 0);
-		if(eq_pos < part.size)
-		{
-			String8 key = str8_prefix(part, eq_pos);
-			String8 value = str8_skip(part, eq_pos + 1);
-			String8 decoded_value = url_decode(scratch.arena, value);
+		String8 redirect = str8_lit("/");
 
-			if(str8_match(key, str8_lit("username"), 0))
+		if(req->query.size > 0)
+		{
+			String8List parts = str8_split(scratch.arena, req->query, (u8 *)"&", 1, 0);
+			for(String8Node *n = parts.first; n != 0; n = n->next)
 			{
-				username = decoded_value;
-			}
-			else if(str8_match(key, str8_lit("password"), 0))
-			{
-				password = decoded_value;
-			}
-			else if(str8_match(key, str8_lit("redirect"), 0))
-			{
-				redirect_url = decoded_value;
+				String8 part = n->string;
+				u64 eq_pos = str8_find_needle(part, 0, str8_lit("="), 0);
+				if(eq_pos < part.size)
+				{
+					String8 key = str8_prefix(part, eq_pos);
+					String8 value = str8_skip(part, eq_pos + 1);
+					if(str8_match(key, str8_lit("redirect"), 0))
+					{
+						redirect = url_decode(scratch.arena, value);
+					}
+				}
 			}
 		}
-	}
 
-	if(str8_match(username, auth_username, 0) && str8_match(password, auth_password, 0))
-	{
-		String8 session_id = session_create(sessions, auth_session_duration_us);
-		u64 max_age = auth_session_duration_us / 1000000;
+		String8 html =
+		    str8f(scratch.arena,
+		          "<!DOCTYPE html>\n"
+		          "<html lang=\"en\">\n"
+		          "<head>\n"
+		          "<meta charset=\"UTF-8\">\n"
+		          "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+		          "<title>Login - Matt Dargan</title>\n"
+		          "<style>\n"
+		          "*{margin:0;padding:0;box-sizing:border-box}\n"
+		          "html{font-size:1rem;background-color:#000;color:#fff;min-width:20rem}\n"
+		          "body{font-family:georgia,times,serif;line-height:1.6;margin:0 auto;max-width:50rem;padding:0 1rem}\n"
+		          "header{color:#878787;padding:1.5rem 0;border-bottom:1px solid #222}\n"
+		          "header h1{font-size:1.5rem;font-weight:normal;color:#ededed}\n"
+		          "header .subtitle{font-size:0.9rem;color:#878787}\n"
+		          "main{padding:2rem 0}\n"
+		          "form{max-width:400px;margin:2rem auto}\n"
+		          "label{display:block;margin-bottom:0.5rem;color:#fff}\n"
+		          "input{width:100%%;padding:0.5rem;margin-bottom:1rem;font-size:1rem;background:#1a1a1a;border:1px solid "
+		          "#333;color:#fff;border-radius:3px}\n"
+		          "button{width:100%%;padding:0.75rem;font-size:1rem;background:#336696;color:#fff;border:none;border-"
+		          "radius:3px;cursor:pointer}\n"
+		          "button:hover{background:#4477aa}\n"
+		          "a{color:#6699cc;text-decoration:none}\n"
+		          "a:hover{text-decoration:underline}\n"
+		          "</style>\n"
+		          "</head>\n"
+		          "<body>\n"
+		          "<header>\n"
+		          "<h1>Matt Dargan</h1>\n"
+		          "<div class=\"subtitle\">Login</div>\n"
+		          "</header>\n"
+		          "<main>\n"
+		          "<form method=\"post\" action=\"/login\">\n"
+		          "<input type=\"hidden\" name=\"redirect\" value=\"%S\">\n"
+		          "<label for=\"username\">Username</label>\n"
+		          "<input type=\"text\" id=\"username\" name=\"username\" required autofocus>\n"
+		          "<label for=\"password\">Password</label>\n"
+		          "<input type=\"password\" id=\"password\" name=\"password\" required>\n"
+		          "<button type=\"submit\">Login</button>\n"
+		          "</form>\n"
+		          "</main>\n"
+		          "</body>\n"
+		          "</html>\n",
+		          redirect);
 
-		HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_302_Found);
-		http_header_add(scratch.arena, &res->headers, str8_lit("Location"), redirect_url);
-		String8 cookie = cookie_serialize(scratch.arena, str8_lit("session"), session_id, max_age, 0);
-		http_header_add(scratch.arena, &res->headers, str8_lit("Set-Cookie"), cookie);
-		http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), str8_lit("0"));
+		HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_200_OK);
+		http_header_add(scratch.arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/html; charset=utf-8"));
+		http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), str8f(scratch.arena, "%u", html.size));
+		res->body = html;
 
 		String8 response_data = http_response_serialize(scratch.arena, res);
 		socket_write_all(client_socket, response_data);
+	}
+	else if(req->method == HTTP_Method_POST)
+	{
+		String8 username = str8_zero();
+		String8 password = str8_zero();
+		String8 redirect_url = str8_lit("/");
 
-		log_infof("authd: user %S logged in, session=%S\n", username, str8_prefix(session_id, 16));
+		String8List parts = str8_split(scratch.arena, req->body, (u8 *)"&", 1, 0);
+		for(String8Node *n = parts.first; n != 0; n = n->next)
+		{
+			String8 part = n->string;
+			u64 eq_pos = str8_find_needle(part, 0, str8_lit("="), 0);
+			if(eq_pos < part.size)
+			{
+				String8 key = str8_prefix(part, eq_pos);
+				String8 value = str8_skip(part, eq_pos + 1);
+				String8 decoded_value = url_decode(scratch.arena, value);
+
+				if(str8_match(key, str8_lit("username"), 0))
+				{
+					username = decoded_value;
+				}
+				else if(str8_match(key, str8_lit("password"), 0))
+				{
+					password = decoded_value;
+				}
+				else if(str8_match(key, str8_lit("redirect"), 0))
+				{
+					redirect_url = decoded_value;
+				}
+			}
+		}
+
+		if(str8_match(username, auth_username, 0) && str8_match(password, auth_password, 0))
+		{
+			String8 session_id = session_create(sessions, auth_session_duration_us);
+			if(session_id.size == 0)
+			{
+				log_infof("authd: login failed for user %S (session table full)\n", username);
+
+				HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_302_Found);
+				http_header_add(scratch.arena, &res->headers, str8_lit("Location"), str8_lit("/login"));
+				http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), str8_lit("0"));
+				http_header_add(scratch.arena, &res->headers, str8_lit("Connection"), str8_lit("close"));
+
+				String8 response_data = http_response_serialize(scratch.arena, res);
+				socket_write_all(client_socket, response_data);
+			}
+			else
+			{
+				u64 max_age = auth_session_duration_us / 1000000;
+
+				String8 forwarded_host = http_header_get(&req->headers, str8_lit("X-Forwarded-Host"));
+				String8 cookie_domain = str8_zero();
+				if(forwarded_host.size > 0)
+				{
+					cookie_domain = domain_extract_base(forwarded_host);
+				}
+
+				HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_302_Found);
+				http_header_add(scratch.arena, &res->headers, str8_lit("Location"), redirect_url);
+				String8 cookie = cookie_serialize(scratch.arena, str8_lit("session"), session_id, max_age, 0, cookie_domain);
+				http_header_add(scratch.arena, &res->headers, str8_lit("Set-Cookie"), cookie);
+				http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), str8_lit("0"));
+
+				String8 response_data = http_response_serialize(scratch.arena, res);
+				socket_write_all(client_socket, response_data);
+
+				log_infof("authd: user %S logged in, session=%S\n", username, str8_prefix(session_id, 16));
+			}
+		}
+		else
+		{
+			log_infof("authd: login failed for user %S\n", username);
+
+			HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_302_Found);
+			http_header_add(scratch.arena, &res->headers, str8_lit("Location"), str8_lit("/login"));
+			http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), str8_lit("0"));
+			http_header_add(scratch.arena, &res->headers, str8_lit("Connection"), str8_lit("close"));
+
+			String8 response_data = http_response_serialize(scratch.arena, res);
+			socket_write_all(client_socket, response_data);
+		}
 	}
 	else
 	{
-		log_infof("authd: login failed for user %S\n", username);
-
-		HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_302_Found);
-		http_header_add(scratch.arena, &res->headers, str8_lit("Location"), str8_lit("/login"));
-		http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), str8_lit("0"));
-		http_header_add(scratch.arena, &res->headers, str8_lit("Connection"), str8_lit("close"));
-
-		String8 response_data = http_response_serialize(scratch.arena, res);
-		socket_write_all(client_socket, response_data);
+		send_error_response(client_socket, HTTP_Status_405_MethodNotAllowed,
+		                    str8_from_http_status(HTTP_Status_405_MethodNotAllowed));
 	}
 
 	scratch_end(scratch);
@@ -421,9 +543,16 @@ handle_logout(HTTP_Request *req, OS_Handle client_socket)
 		log_infof("authd: session %S logged out\n", str8_prefix(session_id, 16));
 	}
 
+	String8 forwarded_host = http_header_get(&req->headers, str8_lit("X-Forwarded-Host"));
+	String8 cookie_domain = str8_zero();
+	if(forwarded_host.size > 0)
+	{
+		cookie_domain = domain_extract_base(forwarded_host);
+	}
+
 	HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_302_Found);
 	http_header_add(scratch.arena, &res->headers, str8_lit("Location"), str8_lit("/"));
-	String8 cookie = cookie_serialize(scratch.arena, str8_lit("session"), str8_zero(), 0, 1);
+	String8 cookie = cookie_serialize(scratch.arena, str8_lit("session"), str8_zero(), 0, 1, cookie_domain);
 	http_header_add(scratch.arena, &res->headers, str8_lit("Set-Cookie"), cookie);
 	http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"), str8_lit("0"));
 
@@ -509,18 +638,17 @@ handle_connection(OS_Handle connection_socket)
 		if(client_addr_storage.ss_family == AF_INET)
 		{
 			struct sockaddr_in *addr_in = (struct sockaddr_in *)&client_addr_storage;
-			u8 *ip_bytes = (u8 *)&addr_in->sin_addr.s_addr;
-			client_ip = str8f(scratch.arena, "%u.%u.%u.%u", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
+			u8 *ip = (u8 *)&addr_in->sin_addr.s_addr;
+			client_ip = str8f(scratch.arena, "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
 			client_port = ntohs(addr_in->sin_port);
 		}
 		else if(client_addr_storage.ss_family == AF_INET6)
 		{
 			struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *)&client_addr_storage;
-			u8 *ip_bytes = addr_in6->sin6_addr.s6_addr;
+			u8 *ip = addr_in6->sin6_addr.s6_addr;
 			client_ip =
-			    str8f(scratch.arena, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x", ip_bytes[0],
-			          ip_bytes[1], ip_bytes[2], ip_bytes[3], ip_bytes[4], ip_bytes[5], ip_bytes[6], ip_bytes[7], ip_bytes[8],
-			          ip_bytes[9], ip_bytes[10], ip_bytes[11], ip_bytes[12], ip_bytes[13], ip_bytes[14], ip_bytes[15]);
+			    str8f(scratch.arena, "%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x", ip[0], ip[1],
+			          ip[2], ip[3], ip[4], ip[5], ip[6], ip[7], ip[8], ip[9], ip[10], ip[11], ip[12], ip[13], ip[14], ip[15]);
 			client_port = ntohs(addr_in6->sin6_port);
 		}
 	}
@@ -575,7 +703,7 @@ internal void
 entry_point(CmdLine *cmd_line)
 {
 	read_only local_persist u64 session_duration_days = 7;
-	read_only local_persist u64 session_table_initial_capacity = 64;
+	read_only local_persist u64 session_table_max_capacity = 4096;
 
 	Temp scratch = scratch_begin(0, 0);
 	Arena *arena = arena_alloc();
@@ -583,13 +711,7 @@ entry_point(CmdLine *cmd_line)
 	log_select(setup_log);
 	log_scope_begin();
 
-	String8 port_str = cmd_line_string(cmd_line, str8_lit("port"));
 	u16 listen_port = 8080;
-	if(port_str.size > 0)
-	{
-		listen_port = (u16)u64_from_str8(port_str, 10);
-	}
-
 	auth_username = cmd_line_string(cmd_line, str8_lit("auth-user"));
 
 	char *auth_password_cstr = getenv("AUTH_PASSWORD");
@@ -606,9 +728,9 @@ entry_point(CmdLine *cmd_line)
 
 	if(auth_username.size > 0 && auth_password.size > 0)
 	{
-		sessions = session_table_alloc(arena, session_table_initial_capacity);
-		log_infof("authd: authentication enabled for user %S (session duration: %u days)\n", auth_username,
-		          session_duration_days);
+		sessions = session_table_alloc(arena, session_table_max_capacity);
+		log_infof("authd: authentication enabled for user %S (session duration: %u days, max sessions: %u)\n",
+		          auth_username, session_duration_days, session_table_max_capacity);
 	}
 	else
 	{
