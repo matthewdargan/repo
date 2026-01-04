@@ -1,5 +1,4 @@
 {
-  inputs,
   pkgs,
   self,
   ...
@@ -25,7 +24,6 @@
 in {
   imports = [
     ./boot.nix
-    inputs.jovian.nixosModules.jovian
     self.nixosModules."9p-health-check"
     self.nixosModules."9p-tools"
     self.nixosModules.fish
@@ -33,18 +31,11 @@ in {
     self.nixosModules.nix-client
     self.nixosModules.nix-config
   ];
-  jovian = {
-    devices.steamdeck.enable = true;
-    steam = {
-      enable = true;
-      desktopSession = "plasma";
-      user = "mpd";
-    };
-  };
   networking = {
     hostName = "steamdeck";
     networkmanager.enable = true;
   };
+  programs.steam.enable = true;
   services = {
     "9p-health-check" = {
       enable = true;
