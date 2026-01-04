@@ -1,0 +1,32 @@
+If:
+  PathMatch: base/.*\.c
+CompileFlags:
+  Add: ["-include", "base/inc.h"]
+---
+If:
+  PathMatch: 9p/.*\.c
+CompileFlags:
+  Add: ["-include", "base/inc.h", "-include", "9p/inc.h"]
+---
+If:
+  PathMatch: http/.*\.c
+CompileFlags:
+  Add: ["-include", "base/inc.h", "-include", "http/inc.h"]
+---
+If:
+  PathMatch: json/.*\.c
+CompileFlags:
+  Add: ["-include", "base/inc.h", "-include", "json/inc.h"]
+---
+CompileFlags:
+  Add: ["-I.", "-D_GNU_SOURCE", "-Wno-undefined-internal"]
+  Remove: ["-fsanitize=address", "-fno-omit-frame-pointer"]
+
+Diagnostics:
+  UnusedIncludes: None
+  MissingIncludes: None
+  ClangTidy:
+    Remove: ["readability-*", "modernize-*", "bugprone-reserved-identifier"]
+
+Index:
+  Background: Build

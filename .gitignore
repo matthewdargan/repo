@@ -1,4 +1,5 @@
+.cache
 .direnv
 .pre-commit-config.yaml
+compile_commands.json
 result
-tags

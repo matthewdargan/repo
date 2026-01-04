@@ -68,7 +68,8 @@ cstring8_length(u8 *c)
 	{
 		u8 *ptr = c;
 		for(; *ptr != 0; ptr += 1)
-			;
+		{
+		}
 		length = (u64)(ptr - c);
 	}
 	return length;
