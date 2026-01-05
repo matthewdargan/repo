@@ -89,6 +89,7 @@ srv_version(ServerRequest9P *request)
 {
 	request->out_msg.max_message_size = request->in_msg.max_message_size;
 	request->out_msg.protocol_version = request->in_msg.protocol_version;
+	request->server->max_message_size = request->in_msg.max_message_size;
 	server9p_respond(request, str8_zero());
 }
 
@@ -233,7 +234,7 @@ srv_open(ServerRequest9P *request)
 	}
 
 	request->out_msg.qid = request->fid->qid;
-	request->out_msg.io_unit_size = P9_IOUNIT_DEFAULT;
+	request->out_msg.io_unit_size = request->server->max_message_size - P9_MESSAGE_HEADER_SIZE;
 	server9p_respond(request, str8_zero());
 }
 
@@ -285,7 +286,7 @@ srv_create(ServerRequest9P *request)
 	}
 
 	request->out_msg.qid = stat.qid;
-	request->out_msg.io_unit_size = P9_IOUNIT_DEFAULT;
+	request->out_msg.io_unit_size = request->server->max_message_size - P9_MESSAGE_HEADER_SIZE;
 	server9p_respond(request, str8_zero());
 }
 

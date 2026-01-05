@@ -9,7 +9,7 @@
       what = "127.0.0.1";
       where = "/var/lib/jellyfin/n/media";
       type = "9p";
-      options = "port=5640";
+      options = "port=5640,msize=1048576";
       requires = ["media-serve.service"];
       after = ["media-serve.service" "network-online.target"];
       wants = ["network-online.target"];
