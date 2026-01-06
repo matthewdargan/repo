@@ -52,7 +52,7 @@ entry_point(CmdLine *cmd_line)
 		                   "options:\n"
 		                   "  port=<port>             TCP port (default: 564)\n"
 		                   "  aname=<path>            Remote path to attach\n"
-		                   "  msize=<bytes>           Maximum 9P message size\n"));
+		                   "  msize=<bytes>           Maximum 9P message size (default: 1048576)\n"));
 	}
 	else
 	{
@@ -62,7 +62,7 @@ entry_point(CmdLine *cmd_line)
 
 		u64 port = 564;
 		String8 aname = str8_zero();
-		u64 msize = 0;
+		u64 msize = MB(1);
 		String8 options_string = str8_zero();
 
 		for(u64 i = 3; i < cmd_line->argc - 1; i += 1)

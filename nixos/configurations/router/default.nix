@@ -8,7 +8,7 @@
       what = "10.0.0.2";
       where = "/var/lib/nix-client/n/nix";
       type = "9p";
-      options = "port=5641,msize=1048576";
+      options = "port=5641";
       after = ["network-online.target"];
       wants = ["network-online.target"];
     }
