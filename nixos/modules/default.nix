@@ -8,5 +8,6 @@ _: {
     "nginx" = ./nginx.nix;
     "nix-client" = ./nix-client.nix;
     "nix-config" = ./nix-config.nix;
+    "yubikey" = ./yubikey.nix;
   };
 }

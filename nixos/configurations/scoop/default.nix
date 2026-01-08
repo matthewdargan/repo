@@ -3,10 +3,11 @@
   self,
   ...
 }: let
+  user = "mpd";
   mounts = [
     {
       what = "nas";
-      where = "/home/mpd/n/media";
+      where = "/home/${user}/n/media";
       type = "9p";
       options = "port=5640";
       after = ["network-online.target"];
@@ -30,6 +31,7 @@ in {
     self.nixosModules.locale
     self.nixosModules.nix-client
     self.nixosModules.nix-config
+    self.nixosModules.yubikey
   ];
   boot.loader = {
     efi.canTouchEfiVariables = true;
@@ -45,7 +47,7 @@ in {
   services = {
     "9p-health-check" = {
       enable = true;
-      mounts = ["/home/mpd/n/media" "/var/lib/nix-client/n/nix"];
+      mounts = ["/home/${user}/n/media" "/var/lib/nix-client/n/nix"];
     };
     desktopManager.plasma6.enable = true;
     displayManager.sddm = {
@@ -81,7 +83,7 @@ in {
       mounts;
   };
   system.stateVersion = "25.05";
-  users.users.mpd = {
+  users.users.${user} = {
     description = "Matthew Dargan";
     extraGroups = [
       "input"
@@ -91,5 +93,9 @@ in {
     ];
     isNormalUser = true;
     shell = pkgs.fish;
+  };
+  yubikey = {
+    enable = true;
+    inherit user;
   };
 }
