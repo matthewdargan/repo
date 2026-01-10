@@ -22,6 +22,8 @@ in {
       self.homeModules.discord
       self.homeModules.firefox
       self.homeModules.ghostty
+      self.homeModules.gpg
+      self.homeModules.jellyfin
       self.homeModules.retroarch
     ];
 
