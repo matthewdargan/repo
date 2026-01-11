@@ -7,7 +7,7 @@
       dontBuild = true;
       installPhase = ''
         mkdir -p $out
-        cp -r * $out/
+        cp -r * .well-known $out/
       '';
     };
   };
