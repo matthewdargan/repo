@@ -7,7 +7,7 @@ hex_from_bytes(Arena *arena, u8 *bytes, u64 len)
 	String8 result = str8_zero();
 	result.size = len * 2;
 	result.str = push_array(arena, u8, result.size);
-	for(u64 i = 0; i < len; i++)
+	for(u64 i = 0; i < len; i += 1)
 	{
 		result.str[i * 2 + 0] = integer_symbols[(bytes[i] >> 4) & 0xF];
 		result.str[i * 2 + 1] = integer_symbols[(bytes[i] >> 0) & 0xF];
@@ -21,7 +21,7 @@ bytes_from_hex(Arena *arena, String8 hex)
 	String8 result = str8_zero();
 	result.size = hex.size / 2;
 	result.str = push_array(arena, u8, result.size);
-	for(u64 i = 0; i < result.size; i++)
+	for(u64 i = 0; i < result.size; i += 1)
 	{
 		u8 hi = hex.str[i * 2 + 0];
 		u8 lo = hex.str[i * 2 + 1];
@@ -94,13 +94,13 @@ auth_keyring_add(Auth_KeyRing *ring, Auth_Key *key)
 	MemoryCopy(dst->credential_id, key->credential_id, key->credential_id_len);
 	dst->public_key_len = key->public_key_len;
 	MemoryCopy(dst->public_key, key->public_key, key->public_key_len);
-	ring->count++;
+	ring->count += 1;
 }
 
 internal Auth_Key *
 auth_keyring_lookup(Auth_KeyRing *ring, String8 user, String8 rp_id)
 {
-	for(u64 i = 0; i < ring->count; i++)
+	for(u64 i = 0; i < ring->count; i += 1)
 	{
 		Auth_Key *key = &ring->keys[i];
 		if(str8_match(key->user, user, 0) && str8_match(key->rp_id, rp_id, 0))
@@ -114,7 +114,7 @@ auth_keyring_lookup(Auth_KeyRing *ring, String8 user, String8 rp_id)
 internal void
 auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 rp_id)
 {
-	for(u64 i = 0; i < ring->count; i++)
+	for(u64 i = 0; i < ring->count; i += 1)
 	{
 		Auth_Key *key = &ring->keys[i];
 		if(str8_match(key->user, user, 0) && str8_match(key->rp_id, rp_id, 0))
@@ -123,7 +123,7 @@ auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 rp_id)
 			{
 				MemoryCopy(&ring->keys[i], &ring->keys[i + 1], (ring->count - i - 1) * sizeof(Auth_Key));
 			}
-			ring->count--;
+			ring->count -= 1;
 			return;
 		}
 	}
@@ -138,7 +138,7 @@ auth_keyring_save(Arena *arena, Auth_KeyRing *ring)
 	Temp scratch = scratch_begin(&arena, 1);
 	String8List list = {0};
 
-	for(u64 i = 0; i < ring->count; i++)
+	for(u64 i = 0; i < ring->count; i += 1)
 	{
 		Auth_Key *key = &ring->keys[i];
 		String8 cred_hex = hex_from_bytes(scratch.arena, key->credential_id, key->credential_id_len);

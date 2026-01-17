@@ -7,11 +7,11 @@
     cmdPackage = import ../flake-parts/cmd-package.nix {inherit lib pkgs;};
   in {
     packages = cmdPackage.mkCmdPackage {
-      pname = "factotum";
+      pname = "9auth";
       description = "Authentication agent for 9P with FIDO2/Yubikey support";
       version = "0.1.0";
-      buildInputs = [];
-      extraLinkFlags = "-lm";
+      buildInputs = [pkgs.libfido2 pkgs.openssl];
+      extraLinkFlags = "-lm -lfido2 -lcrypto";
     };
   };
 }
