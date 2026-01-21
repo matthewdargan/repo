@@ -37,7 +37,8 @@
 
 #define Min(A, B) (((A) < (B)) ? (A) : (B))
 #define Max(A, B) (((A) > (B)) ? (A) : (B))
-#define Clamp(A, X, B) (((X) < (A)) ? (A) : ((X) > (B)) ? (B) : (X))
+#define Clamp(A, X, B) (((X) < (A)) ? (A) : ((X) > (B)) ? (B) \
+                                                        : (X))
 
 ////////////////////////////////
 //~ Type -> Alignment
@@ -73,14 +74,14 @@
 //~ Asserts
 
 #define Trap() __builtin_trap()
-#define AssertAlways(x)                                                                                                \
-	do                                                                                                                   \
-	{                                                                                                                    \
-		if(!(x))                                                                                                           \
-		{                                                                                                                  \
-			Trap();                                                                                                          \
-		}                                                                                                                  \
-	} while(0)
+#define AssertAlways(x) \
+  do                    \
+  {                     \
+    if(!(x))            \
+    {                   \
+      Trap();           \
+    }                   \
+  } while(0)
 #if BUILD_DEBUG
 #define Assert(x) AssertAlways(x)
 #else
@@ -96,10 +97,10 @@
 #define SetNil(nil, p) ((p) = nil)
 
 //- singly-linked, doubly-headed lists (queues)
-#define SLLQueuePush_NZ(nil, f, l, n, next)                                                                            \
-	(CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((l)->next = (n), (l) = (n), SetNil(nil, (n)->next)))
-#define SLLQueuePushFront_NZ(nil, f, l, n, next)                                                                       \
-	(CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((n)->next = (f), (f) = (n)))
+#define SLLQueuePush_NZ(nil, f, l, n, next) \
+  (CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((l)->next = (n), (l) = (n), SetNil(nil, (n)->next)))
+#define SLLQueuePushFront_NZ(nil, f, l, n, next) \
+  (CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((n)->next = (f), (f) = (n)))
 #define SLLQueuePop_NZ(nil, f, l, next) ((f) == (l) ? (SetNil(nil, f), SetNil(nil, l)) : ((f) = (f)->next))
 
 //- singly-linked, singly-headed lists (stacks)
@@ -144,13 +145,13 @@ void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
 #define AlignPow2(x, b) (((x) + (b) - 1) & (~((b) - 1)))
 #define Glue_(A, B) A##B
 #define Glue(A, B) Glue_(A, B)
-#define Swap(T, a, b)                                                                                                  \
-	do                                                                                                                   \
-	{                                                                                                                    \
-		T t__ = a;                                                                                                         \
-		a = b;                                                                                                             \
-		b = t__;                                                                                                           \
-	} while(0)
+#define Swap(T, a, b) \
+  do                  \
+  {                   \
+    T t__ = a;        \
+    a = b;            \
+    b = t__;          \
+  } while(0)
 
 ////////////////////////////////
 //~ Base Types
@@ -176,8 +177,8 @@ typedef double f64;
 typedef struct U64Array U64Array;
 struct U64Array
 {
-	u64 count;
-	u64 *v;
+  u64 count;
+  u64 *v;
 };
 
 ////////////////////////////////
@@ -204,13 +205,13 @@ global s8 min_s8 = (s8)0x80;
 typedef struct DateTime DateTime;
 struct DateTime
 {
-	u16 msec; // [0,999]
-	u16 sec;  // [0,60]
-	u16 min;  // [0,59]
-	u16 hour; // [0,24]
-	u16 day;  // [0,30]
-	u32 mon;
-	u32 year; // 1 = 1 CE, 0 = 1 BC
+  u16 msec; // [0,999]
+  u16 sec;  // [0,60]
+  u16 min;  // [0,59]
+  u16 hour; // [0,24]
+  u16 day;  // [0,30]
+  u32 mon;
+  u32 year; // 1 = 1 CE, 0 = 1 BC
 };
 
 typedef u64 DenseTime;

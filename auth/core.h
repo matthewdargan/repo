@@ -6,13 +6,13 @@
 
 typedef enum
 {
-	Auth_State_None,
-	Auth_State_Started,
-	Auth_State_ChallengeReady,
-	Auth_State_ChallengeSent,
-	Auth_State_SignatureRecv,
-	Auth_State_Done,
-	Auth_State_Error,
+  Auth_State_None,
+  Auth_State_Started,
+  Auth_State_ChallengeReady,
+  Auth_State_ChallengeSent,
+  Auth_State_SignatureRecv,
+  Auth_State_Done,
+  Auth_State_Error,
 } Auth_State;
 
 ////////////////////////////////
@@ -21,19 +21,19 @@ typedef enum
 typedef struct Auth_Conv Auth_Conv;
 struct Auth_Conv
 {
-	Auth_Conv *next;
-	u64 tag;
-	String8 user;
-	String8 server;
-	Auth_State state;
-	u64 start_time;
-	u8 challenge[32];
-	u8 auth_data[256];
-	u64 auth_data_len;
-	u8 signature[256];
-	u64 signature_len;
-	b32 verified;
-	String8 error;
+  Auth_Conv *next;
+  u64 tag;
+  String8 user;
+  String8 server;
+  Auth_State state;
+  u64 start_time;
+  u8 challenge[32];
+  u8 auth_data[256];
+  u64 auth_data_len;
+  u8 signature[256];
+  u64 signature_len;
+  b32 verified;
+  String8 error;
 };
 
 ////////////////////////////////
@@ -42,12 +42,12 @@ struct Auth_Conv
 typedef struct Auth_Key Auth_Key;
 struct Auth_Key
 {
-	String8 user;
-	String8 rp_id;
-	u8 credential_id[256];
-	u64 credential_id_len;
-	u8 public_key[256];
-	u64 public_key_len;
+  String8 user;
+  String8 rp_id;
+  u8 credential_id[256];
+  u64 credential_id_len;
+  u8 public_key[256];
+  u64 public_key_len;
 };
 
 ////////////////////////////////
@@ -56,10 +56,10 @@ struct Auth_Key
 typedef struct Auth_KeyRing Auth_KeyRing;
 struct Auth_KeyRing
 {
-	Arena *arena;
-	Auth_Key *keys;
-	u64 count;
-	u64 capacity;
+  Arena *arena;
+  Auth_Key *keys;
+  u64 count;
+  u64 capacity;
 };
 
 ////////////////////////////////

@@ -13,74 +13,74 @@ global Client9P *auth_client = 0;
 internal void
 fid_release(Server9P *server, ServerFid9P *fid)
 {
-	if(fid != 0)
-	{
-		fid->hash_next = server->fid_free_list;
-		server->fid_free_list = fid;
-	}
+  if(fid != 0)
+  {
+    fid->hash_next = server->fid_free_list;
+    server->fid_free_list = fid;
+  }
 }
 
 internal FidAuxiliary9P *
 fid_aux_alloc(Server9P *server)
 {
-	FidAuxiliary9P *aux = server->fid_aux_free_list;
-	if(aux != 0)
-	{
-		server->fid_aux_free_list = aux->next;
-	}
-	else
-	{
-		aux = push_array_no_zero(server->arena, FidAuxiliary9P, 1);
-	}
-	MemoryZeroStruct(aux);
-	return aux;
+  FidAuxiliary9P *aux = server->fid_aux_free_list;
+  if(aux != 0)
+  {
+    server->fid_aux_free_list = aux->next;
+  }
+  else
+  {
+    aux = push_array_no_zero(server->arena, FidAuxiliary9P, 1);
+  }
+  MemoryZeroStruct(aux);
+  return aux;
 }
 
 internal void
 fid_aux_release(Server9P *server, FidAuxiliary9P *aux)
 {
-	if(aux == 0)
-	{
-		return;
-	}
+  if(aux == 0)
+  {
+    return;
+  }
 
-	if(aux->handle)
-	{
-		fs9p_close(aux->handle);
-		aux->handle = 0;
-	}
-	if(aux->has_dir_iter)
-	{
-		fs9p_closedir(&aux->dir_iter);
-		aux->has_dir_iter = 0;
-	}
+  if(aux->handle)
+  {
+    fs9p_close(aux->handle);
+    aux->handle = 0;
+  }
+  if(aux->has_dir_iter)
+  {
+    fs9p_closedir(&aux->dir_iter);
+    aux->has_dir_iter = 0;
+  }
 
-	aux->next = server->fid_aux_free_list;
-	server->fid_aux_free_list = aux;
+  aux->next = server->fid_aux_free_list;
+  server->fid_aux_free_list = aux;
 }
 
 internal FidAuxiliary9P *
 get_fid_aux(Server9P *server, ServerFid9P *fid)
 {
-	if(fid->auxiliary == 0)
-	{
-		fid->auxiliary = fid_aux_alloc(server);
-	}
-	return (FidAuxiliary9P *)fid->auxiliary;
+  if(fid->auxiliary == 0)
+  {
+    fid->auxiliary = fid_aux_alloc(server);
+  }
+  return (FidAuxiliary9P *)fid->auxiliary;
 }
 
 internal String8
 fid_aux_get_path(FidAuxiliary9P *aux)
 {
-	return str8(aux->path_buffer, aux->path_len);
+  return str8(aux->path_buffer, aux->path_len);
 }
 
 internal void
 fid_aux_set_path(FidAuxiliary9P *aux, String8 path)
 {
-	Assert(path.size <= sizeof(aux->path_buffer));
-	MemoryCopy(aux->path_buffer, path.str, path.size);
-	aux->path_len = path.size;
+  Assert(path.size <= sizeof(aux->path_buffer));
+  MemoryCopy(aux->path_buffer, path.str, path.size);
+  aux->path_len = path.size;
 }
 
 ////////////////////////////////
@@ -89,516 +89,516 @@ fid_aux_set_path(FidAuxiliary9P *aux, String8 path)
 internal void
 srv_version(ServerRequest9P *request)
 {
-	request->out_msg.max_message_size = request->in_msg.max_message_size;
-	request->out_msg.protocol_version = request->in_msg.protocol_version;
-	request->server->max_message_size = request->in_msg.max_message_size;
-	server9p_respond(request, str8_zero());
+  request->out_msg.max_message_size = request->in_msg.max_message_size;
+  request->out_msg.protocol_version = request->in_msg.protocol_version;
+  request->server->max_message_size = request->in_msg.max_message_size;
+  server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_auth(ServerRequest9P *request)
 {
-	if(!require_auth)
-	{
-		server9p_respond(request, str8_lit("authentication not required"));
-		return;
-	}
+  if(!require_auth)
+  {
+    server9p_respond(request, str8_lit("authentication not required"));
+    return;
+  }
 
-	if(auth_client == 0)
-	{
-		Temp scratch = scratch_begin(&request->server->arena, 1);
-		OS_Handle auth_handle =
-		    dial9p_connect(scratch.arena, str8_lit("unix!/var/run/9auth"), str8_lit("unix"), str8_lit("9auth"));
-		if(os_handle_match(auth_handle, os_handle_zero()))
-		{
-			scratch_end(scratch);
-			server9p_respond(request, str8_lit("9auth unavailable"));
-			return;
-		}
+  if(auth_client == 0)
+  {
+    Temp scratch = scratch_begin(&request->server->arena, 1);
+    OS_Handle auth_handle =
+        dial9p_connect(scratch.arena, str8_lit("unix!/var/run/9auth"), str8_lit("unix"), str8_lit("9auth"));
+    if(os_handle_match(auth_handle, os_handle_zero()))
+    {
+      scratch_end(scratch);
+      server9p_respond(request, str8_lit("9auth unavailable"));
+      return;
+    }
 
-		u64 auth_fd = auth_handle.u64[0];
-		auth_client = client9p_init(request->server->arena, auth_fd);
-		if(auth_client == 0)
-		{
-			os_file_close(auth_handle);
-			scratch_end(scratch);
-			server9p_respond(request, str8_lit("9auth connection failed"));
-			return;
-		}
+    u64 auth_fd = auth_handle.u64[0];
+    auth_client = client9p_init(request->server->arena, auth_fd);
+    if(auth_client == 0)
+    {
+      os_file_close(auth_handle);
+      scratch_end(scratch);
+      server9p_respond(request, str8_lit("9auth connection failed"));
+      return;
+    }
 
-		ClientFid9P *auth_root =
-		    client9p_attach(request->server->arena, auth_client, P9_FID_NONE, request->in_msg.user_name, str8_lit("/"));
-		if(auth_root == 0)
-		{
-			scratch_end(scratch);
-			server9p_respond(request, str8_lit("9auth attach failed"));
-			return;
-		}
+    ClientFid9P *auth_root =
+        client9p_attach(request->server->arena, auth_client, P9_FID_NONE, request->in_msg.user_name, str8_lit("/"));
+    if(auth_root == 0)
+    {
+      scratch_end(scratch);
+      server9p_respond(request, str8_lit("9auth attach failed"));
+      return;
+    }
 
-		scratch_end(scratch);
-	}
+    scratch_end(scratch);
+  }
 
-	ClientFid9P *rpc_fid = client9p_fid_walk(request->server->arena, auth_client->root, str8_lit("rpc"));
-	if(rpc_fid == 0)
-	{
-		server9p_respond(request, str8_lit("9auth rpc file not found"));
-		return;
-	}
+  ClientFid9P *rpc_fid = client9p_fid_walk(request->server->arena, auth_client->root, str8_lit("rpc"));
+  if(rpc_fid == 0)
+  {
+    server9p_respond(request, str8_lit("9auth rpc file not found"));
+    return;
+  }
 
-	if(!client9p_fid_open(request->server->arena, rpc_fid, P9_OpenFlag_ReadWrite))
-	{
-		server9p_respond(request, str8_lit("9auth rpc file open failed"));
-		return;
-	}
+  if(!client9p_fid_open(request->server->arena, rpc_fid, P9_OpenFlag_ReadWrite))
+  {
+    server9p_respond(request, str8_lit("9auth rpc file open failed"));
+    return;
+  }
 
-	String8 start_cmd = str8f(request->scratch.arena, "start proto=fido2 role=server user=%S server=%S",
-	                          request->in_msg.user_name, request->in_msg.attach_path);
-	s64 write_result = client9p_fid_pwrite(request->server->arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
-	if(write_result != (s64)start_cmd.size)
-	{
-		server9p_respond(request, str8_lit("9auth start failed"));
-		return;
-	}
+  String8 start_cmd = str8f(request->scratch.arena, "start proto=fido2 role=server user=%S server=%S",
+                            request->in_msg.user_name, request->in_msg.attach_path);
+  s64 write_result = client9p_fid_pwrite(request->server->arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
+  if(write_result != (s64)start_cmd.size)
+  {
+    server9p_respond(request, str8_lit("9auth start failed"));
+    return;
+  }
 
-	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
-	aux->is_auth_fid = 1;
-	aux->auth_verified = 0;
-	aux->auth_user = str8_copy(request->server->arena, request->in_msg.user_name);
-	aux->auth_rpc_fid = rpc_fid;
+  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  aux->is_auth_fid = 1;
+  aux->auth_verified = 0;
+  aux->auth_user = str8_copy(request->server->arena, request->in_msg.user_name);
+  aux->auth_rpc_fid = rpc_fid;
 
-	request->out_msg.auth_qid.type = QidTypeFlag_Auth;
-	request->out_msg.auth_qid.path = request->fid->fid;
-	request->out_msg.auth_qid.version = 0;
+  request->out_msg.auth_qid.type = QidTypeFlag_Auth;
+  request->out_msg.auth_qid.path = request->fid->fid;
+  request->out_msg.auth_qid.version = 0;
 
-	server9p_respond(request, str8_zero());
+  server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_attach(ServerRequest9P *request)
 {
-	if(require_auth)
-	{
-		if(request->in_msg.auth_fid == P9_FID_NONE)
-		{
-			server9p_respond(request, str8_lit("authentication required"));
-			return;
-		}
+  if(require_auth)
+  {
+    if(request->in_msg.auth_fid == P9_FID_NONE)
+    {
+      server9p_respond(request, str8_lit("authentication required"));
+      return;
+    }
 
-		ServerFid9P *auth_fid = server9p_fid_lookup(request->server, request->in_msg.auth_fid);
-		if(auth_fid == 0)
-		{
-			server9p_respond(request, str8_lit("invalid auth fid"));
-			return;
-		}
+    ServerFid9P *auth_fid = server9p_fid_lookup(request->server, request->in_msg.auth_fid);
+    if(auth_fid == 0)
+    {
+      server9p_respond(request, str8_lit("invalid auth fid"));
+      return;
+    }
 
-		FidAuxiliary9P *auth_aux = get_fid_aux(request->server, auth_fid);
-		if(!auth_aux->is_auth_fid)
-		{
-			server9p_respond(request, str8_lit("fid is not auth fid"));
-			return;
-		}
+    FidAuxiliary9P *auth_aux = get_fid_aux(request->server, auth_fid);
+    if(!auth_aux->is_auth_fid)
+    {
+      server9p_respond(request, str8_lit("fid is not auth fid"));
+      return;
+    }
 
-		if(!auth_aux->auth_verified)
-		{
-			server9p_respond(request, str8_lit("authentication incomplete"));
-			return;
-		}
+    if(!auth_aux->auth_verified)
+    {
+      server9p_respond(request, str8_lit("authentication incomplete"));
+      return;
+    }
 
-		if(!str8_match(auth_aux->auth_user, request->in_msg.user_name, 0))
-		{
-			server9p_respond(request, str8_lit("user mismatch"));
-			return;
-		}
-	}
+    if(!str8_match(auth_aux->auth_user, request->in_msg.user_name, 0))
+    {
+      server9p_respond(request, str8_lit("user mismatch"));
+      return;
+    }
+  }
 
-	Dir9P root_stat = fs9p_stat(request->scratch.arena, fs_context, str8_zero());
-	if(root_stat.name.size == 0)
-	{
-		request->fid->qid.path = 0;
-		request->fid->qid.version = 0;
-		request->fid->qid.type = QidTypeFlag_Directory;
-	}
-	else
-	{
-		request->fid->qid = root_stat.qid;
-	}
+  Dir9P root_stat = fs9p_stat(request->scratch.arena, fs_context, str8_zero());
+  if(root_stat.name.size == 0)
+  {
+    request->fid->qid.path = 0;
+    request->fid->qid.version = 0;
+    request->fid->qid.type = QidTypeFlag_Directory;
+  }
+  else
+  {
+    request->fid->qid = root_stat.qid;
+  }
 
-	request->out_msg.qid = request->fid->qid;
-	server9p_respond(request, str8_zero());
+  request->out_msg.qid = request->fid->qid;
+  server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_walk(ServerRequest9P *request)
 {
-	FidAuxiliary9P *from_aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *from_aux = get_fid_aux(request->server, request->fid);
 
-	if(request->in_msg.walk_name_count == 0)
-	{
-		FidAuxiliary9P *new_aux = get_fid_aux(request->server, request->new_fid);
-		fid_aux_set_path(new_aux, fid_aux_get_path(from_aux));
-		request->new_fid->qid = request->fid->qid;
-		request->out_msg.walk_qid_count = 0;
-		server9p_respond(request, str8_zero());
-		return;
-	}
+  if(request->in_msg.walk_name_count == 0)
+  {
+    FidAuxiliary9P *new_aux = get_fid_aux(request->server, request->new_fid);
+    fid_aux_set_path(new_aux, fid_aux_get_path(from_aux));
+    request->new_fid->qid = request->fid->qid;
+    request->out_msg.walk_qid_count = 0;
+    server9p_respond(request, str8_zero());
+    return;
+  }
 
-	String8 current_path = fid_aux_get_path(from_aux);
+  String8 current_path = fid_aux_get_path(from_aux);
 
-	for(u64 i = 0; i < request->in_msg.walk_name_count; i += 1)
-	{
-		String8 name = request->in_msg.walk_names[i];
+  for(u64 i = 0; i < request->in_msg.walk_name_count; i += 1)
+  {
+    String8 name = request->in_msg.walk_names[i];
 
-		if(str8_match(name, str8_lit("."), 0))
-		{
-			if(i == 0)
-			{
-				request->out_msg.walk_qids[i] = request->fid->qid;
-			}
-			else
-			{
-				request->out_msg.walk_qids[i] = request->out_msg.walk_qids[i - 1];
-			}
-			continue;
-		}
+    if(str8_match(name, str8_lit("."), 0))
+    {
+      if(i == 0)
+      {
+        request->out_msg.walk_qids[i] = request->fid->qid;
+      }
+      else
+      {
+        request->out_msg.walk_qids[i] = request->out_msg.walk_qids[i - 1];
+      }
+      continue;
+    }
 
-		PathResolution9P res = fs9p_resolve_path(request->scratch.arena, fs_context, current_path, name);
+    PathResolution9P res = fs9p_resolve_path(request->scratch.arena, fs_context, current_path, name);
 
-		if(!res.valid)
-		{
-			if(i == 0)
-			{
-				if(request->new_fid != request->fid)
-				{
-					ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.new_fid);
-					fid_release(request->server, fid);
-				}
-				server9p_respond(request, res.error);
-				return;
-			}
-			else
-			{
-				request->out_msg.walk_qid_count = i;
-				server9p_respond(request, str8_zero());
-				return;
-			}
-		}
+    if(!res.valid)
+    {
+      if(i == 0)
+      {
+        if(request->new_fid != request->fid)
+        {
+          ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.new_fid);
+          fid_release(request->server, fid);
+        }
+        server9p_respond(request, res.error);
+        return;
+      }
+      else
+      {
+        request->out_msg.walk_qid_count = i;
+        server9p_respond(request, str8_zero());
+        return;
+      }
+    }
 
-		Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, res.absolute_path);
-		if(stat.name.size == 0)
-		{
-			if(i == 0)
-			{
-				if(request->new_fid != request->fid)
-				{
-					ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.new_fid);
-					fid_release(request->server, fid);
-				}
-				server9p_respond(request, str8_lit("file not found"));
-				return;
-			}
-			else
-			{
-				request->out_msg.walk_qid_count = i;
-				server9p_respond(request, str8_zero());
-				return;
-			}
-		}
+    Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, res.absolute_path);
+    if(stat.name.size == 0)
+    {
+      if(i == 0)
+      {
+        if(request->new_fid != request->fid)
+        {
+          ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.new_fid);
+          fid_release(request->server, fid);
+        }
+        server9p_respond(request, str8_lit("file not found"));
+        return;
+      }
+      else
+      {
+        request->out_msg.walk_qid_count = i;
+        server9p_respond(request, str8_zero());
+        return;
+      }
+    }
 
-		request->out_msg.walk_qids[i] = stat.qid;
-		current_path = res.absolute_path;
-	}
+    request->out_msg.walk_qids[i] = stat.qid;
+    current_path = res.absolute_path;
+  }
 
-	FidAuxiliary9P *new_aux = get_fid_aux(request->server, request->new_fid);
-	fid_aux_set_path(new_aux, current_path);
-	request->new_fid->qid = request->out_msg.walk_qids[request->in_msg.walk_name_count - 1];
-	request->out_msg.walk_qid_count = request->in_msg.walk_name_count;
-	server9p_respond(request, str8_zero());
+  FidAuxiliary9P *new_aux = get_fid_aux(request->server, request->new_fid);
+  fid_aux_set_path(new_aux, current_path);
+  request->new_fid->qid = request->out_msg.walk_qids[request->in_msg.walk_name_count - 1];
+  request->out_msg.walk_qid_count = request->in_msg.walk_name_count;
+  server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_open(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
-	u32 access_mode = request->in_msg.open_mode & 3;
-	if(fs_context->readonly && access_mode != P9_OpenFlag_Read)
-	{
-		server9p_respond(request, str8_lit("read-only filesystem"));
-		return;
-	}
+  u32 access_mode = request->in_msg.open_mode & 3;
+  if(fs_context->readonly && access_mode != P9_OpenFlag_Read)
+  {
+    server9p_respond(request, str8_lit("read-only filesystem"));
+    return;
+  }
 
-	FsHandle9P *handle = fs9p_open(request->server->arena, fs_context, fid_aux_get_path(aux), request->in_msg.open_mode);
-	if(handle == 0 || (handle->fd < 0 && !handle->is_directory && handle->tmp_node == 0))
-	{
-		server9p_respond(request, str8_lit("cannot open file"));
-		return;
-	}
+  FsHandle9P *handle = fs9p_open(request->server->arena, fs_context, fid_aux_get_path(aux), request->in_msg.open_mode);
+  if(handle == 0 || (handle->fd < 0 && !handle->is_directory && handle->tmp_node == 0))
+  {
+    server9p_respond(request, str8_lit("cannot open file"));
+    return;
+  }
 
-	aux->handle = handle;
-	aux->open_mode = request->in_msg.open_mode;
+  aux->handle = handle;
+  aux->open_mode = request->in_msg.open_mode;
 
-	if(handle->is_directory)
-	{
-		aux->has_dir_iter = fs9p_opendir(fs_context, fid_aux_get_path(aux), &aux->dir_iter);
-	}
+  if(handle->is_directory)
+  {
+    aux->has_dir_iter = fs9p_opendir(fs_context, fid_aux_get_path(aux), &aux->dir_iter);
+  }
 
-	request->out_msg.qid = request->fid->qid;
-	request->out_msg.io_unit_size = request->server->max_message_size - P9_MESSAGE_HEADER_SIZE;
-	server9p_respond(request, str8_zero());
+  request->out_msg.qid = request->fid->qid;
+  request->out_msg.io_unit_size = request->server->max_message_size - P9_MESSAGE_HEADER_SIZE;
+  server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_create(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
-	if(fs_context->readonly)
-	{
-		server9p_respond(request, str8_lit("read-only filesystem"));
-		return;
-	}
+  if(fs_context->readonly)
+  {
+    server9p_respond(request, str8_lit("read-only filesystem"));
+    return;
+  }
 
-	String8 new_path = fs9p_path_join(request->scratch.arena, fid_aux_get_path(aux), request->in_msg.name);
+  String8 new_path = fs9p_path_join(request->scratch.arena, fid_aux_get_path(aux), request->in_msg.name);
 
-	if(!fs9p_path_is_safe(request->in_msg.name))
-	{
-		server9p_respond(request, str8_lit("unsafe filename"));
-		return;
-	}
+  if(!fs9p_path_is_safe(request->in_msg.name))
+  {
+    server9p_respond(request, str8_lit("unsafe filename"));
+    return;
+  }
 
-	if(!fs9p_create(fs_context, new_path, request->in_msg.permissions, request->in_msg.open_mode))
-	{
-		server9p_respond(request, str8_lit("file already exists"));
-		return;
-	}
+  if(!fs9p_create(fs_context, new_path, request->in_msg.permissions, request->in_msg.open_mode))
+  {
+    server9p_respond(request, str8_lit("file already exists"));
+    return;
+  }
 
-	Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, new_path);
-	if(stat.name.size == 0)
-	{
-		server9p_respond(request, str8_lit("failed to create"));
-		return;
-	}
+  Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, new_path);
+  if(stat.name.size == 0)
+  {
+    server9p_respond(request, str8_lit("failed to create"));
+    return;
+  }
 
-	fid_aux_set_path(aux, new_path);
-	request->fid->qid = stat.qid;
+  fid_aux_set_path(aux, new_path);
+  request->fid->qid = stat.qid;
 
-	FsHandle9P *handle = fs9p_open(request->server->arena, fs_context, new_path, request->in_msg.open_mode);
-	if(handle)
-	{
-		aux->handle = handle;
-		aux->open_mode = request->in_msg.open_mode;
+  FsHandle9P *handle = fs9p_open(request->server->arena, fs_context, new_path, request->in_msg.open_mode);
+  if(handle)
+  {
+    aux->handle = handle;
+    aux->open_mode = request->in_msg.open_mode;
 
-		if(handle->is_directory)
-		{
-			aux->has_dir_iter = fs9p_opendir(fs_context, new_path, &aux->dir_iter);
-		}
-	}
+    if(handle->is_directory)
+    {
+      aux->has_dir_iter = fs9p_opendir(fs_context, new_path, &aux->dir_iter);
+    }
+  }
 
-	request->out_msg.qid = stat.qid;
-	request->out_msg.io_unit_size = request->server->max_message_size - P9_MESSAGE_HEADER_SIZE;
-	server9p_respond(request, str8_zero());
+  request->out_msg.qid = stat.qid;
+  request->out_msg.io_unit_size = request->server->max_message_size - P9_MESSAGE_HEADER_SIZE;
+  server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_read(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
-	if(aux->is_auth_fid)
-	{
-		if(aux->auth_rpc_fid == 0)
-		{
-			server9p_respond(request, str8_lit("auth fid not initialized"));
-			return;
-		}
+  if(aux->is_auth_fid)
+  {
+    if(aux->auth_rpc_fid == 0)
+    {
+      server9p_respond(request, str8_lit("auth fid not initialized"));
+      return;
+    }
 
-		u8 *buffer = push_array(request->scratch.arena, u8, request->in_msg.byte_count);
-		s64 n = client9p_fid_pread(request->scratch.arena, aux->auth_rpc_fid, buffer, request->in_msg.byte_count,
-		                           request->in_msg.file_offset);
-		if(n < 0)
-		{
-			server9p_respond(request, str8_lit("auth read failed"));
-			return;
-		}
+    u8 *buffer = push_array(request->scratch.arena, u8, request->in_msg.byte_count);
+    s64 n = client9p_fid_pread(request->scratch.arena, aux->auth_rpc_fid, buffer, request->in_msg.byte_count,
+                               request->in_msg.file_offset);
+    if(n < 0)
+    {
+      server9p_respond(request, str8_lit("auth read failed"));
+      return;
+    }
 
-		request->out_msg.payload_data = str8(buffer, n);
-		request->out_msg.byte_count = n;
-		server9p_respond(request, str8_zero());
-		return;
-	}
+    request->out_msg.payload_data = str8(buffer, n);
+    request->out_msg.byte_count = n;
+    server9p_respond(request, str8_zero());
+    return;
+  }
 
-	if(request->fid->qid.type & QidTypeFlag_Directory)
-	{
-		if(!aux->has_dir_iter)
-		{
-			aux->has_dir_iter = fs9p_opendir(fs_context, fid_aux_get_path(aux), &aux->dir_iter);
-		}
+  if(request->fid->qid.type & QidTypeFlag_Directory)
+  {
+    if(!aux->has_dir_iter)
+    {
+      aux->has_dir_iter = fs9p_opendir(fs_context, fid_aux_get_path(aux), &aux->dir_iter);
+    }
 
-		if(!aux->has_dir_iter)
-		{
-			server9p_respond(request, str8_lit("cannot read directory"));
-			return;
-		}
+    if(!aux->has_dir_iter)
+    {
+      server9p_respond(request, str8_lit("cannot read directory"));
+      return;
+    }
 
-		String8 dir_data = fs9p_readdir(request->scratch.arena, request->server->arena, fs_context, &aux->dir_iter,
-		                                &aux->cached_dir_entries, request->in_msg.file_offset, request->in_msg.byte_count);
+    String8 dir_data = fs9p_readdir(request->scratch.arena, request->server->arena, fs_context, &aux->dir_iter,
+                                    &aux->cached_dir_entries, request->in_msg.file_offset, request->in_msg.byte_count);
 
-		request->out_msg.payload_data = dir_data;
-		request->out_msg.byte_count = dir_data.size;
-		server9p_respond(request, str8_zero());
-		return;
-	}
+    request->out_msg.payload_data = dir_data;
+    request->out_msg.byte_count = dir_data.size;
+    server9p_respond(request, str8_zero());
+    return;
+  }
 
-	if(aux->handle == 0 || (aux->handle->fd < 0 && aux->handle->tmp_node == 0))
-	{
-		server9p_respond(request, str8_lit("file not open"));
-		return;
-	}
+  if(aux->handle == 0 || (aux->handle->fd < 0 && aux->handle->tmp_node == 0))
+  {
+    server9p_respond(request, str8_lit("file not open"));
+    return;
+  }
 
-	String8 data =
-	    fs9p_read(request->scratch.arena, aux->handle, request->in_msg.file_offset, request->in_msg.byte_count);
+  String8 data =
+      fs9p_read(request->scratch.arena, aux->handle, request->in_msg.file_offset, request->in_msg.byte_count);
 
-	request->out_msg.payload_data = data;
-	request->out_msg.byte_count = data.size;
-	server9p_respond(request, str8_zero());
+  request->out_msg.payload_data = data;
+  request->out_msg.byte_count = data.size;
+  server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_write(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
-	if(aux->is_auth_fid)
-	{
-		if(aux->auth_rpc_fid == 0)
-		{
-			server9p_respond(request, str8_lit("auth fid not initialized"));
-			return;
-		}
+  if(aux->is_auth_fid)
+  {
+    if(aux->auth_rpc_fid == 0)
+    {
+      server9p_respond(request, str8_lit("auth fid not initialized"));
+      return;
+    }
 
-		s64 n = client9p_fid_pwrite(request->scratch.arena, aux->auth_rpc_fid, (void *)request->in_msg.payload_data.str,
-		                            request->in_msg.payload_data.size, request->in_msg.file_offset);
-		if(n != (s64)request->in_msg.payload_data.size)
-		{
-			server9p_respond(request, str8_lit("auth write failed"));
-			return;
-		}
+    s64 n = client9p_fid_pwrite(request->scratch.arena, aux->auth_rpc_fid, (void *)request->in_msg.payload_data.str,
+                                request->in_msg.payload_data.size, request->in_msg.file_offset);
+    if(n != (s64)request->in_msg.payload_data.size)
+    {
+      server9p_respond(request, str8_lit("auth write failed"));
+      return;
+    }
 
-		u8 response[16];
-		s64 response_len = client9p_fid_pread(request->scratch.arena, aux->auth_rpc_fid, response, 16, 0);
-		if(response_len > 0)
-		{
-			String8 response_str = str8(response, response_len);
-			if(str8_match(response_str, str8_lit("done"), 0))
-			{
-				aux->auth_verified = 1;
-			}
-		}
+    u8 response[16];
+    s64 response_len = client9p_fid_pread(request->scratch.arena, aux->auth_rpc_fid, response, 16, 0);
+    if(response_len > 0)
+    {
+      String8 response_str = str8(response, response_len);
+      if(str8_match(response_str, str8_lit("done"), 0))
+      {
+        aux->auth_verified = 1;
+      }
+    }
 
-		request->out_msg.byte_count = n;
-		server9p_respond(request, str8_zero());
-		return;
-	}
+    request->out_msg.byte_count = n;
+    server9p_respond(request, str8_zero());
+    return;
+  }
 
-	if(fs_context->readonly)
-	{
-		server9p_respond(request, str8_lit("read-only filesystem"));
-		return;
-	}
+  if(fs_context->readonly)
+  {
+    server9p_respond(request, str8_lit("read-only filesystem"));
+    return;
+  }
 
-	if(aux->handle == 0 || (aux->handle->fd < 0 && aux->handle->tmp_node == 0))
-	{
-		server9p_respond(request, str8_lit("file not open"));
-		return;
-	}
+  if(aux->handle == 0 || (aux->handle->fd < 0 && aux->handle->tmp_node == 0))
+  {
+    server9p_respond(request, str8_lit("file not open"));
+    return;
+  }
 
-	u64 bytes_written = fs9p_write(aux->handle, request->in_msg.file_offset, request->in_msg.payload_data);
+  u64 bytes_written = fs9p_write(aux->handle, request->in_msg.file_offset, request->in_msg.payload_data);
 
-	request->out_msg.byte_count = bytes_written;
-	server9p_respond(request, str8_zero());
+  request->out_msg.byte_count = bytes_written;
+  server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_stat(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
-	Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, fid_aux_get_path(aux));
-	if(stat.name.size == 0)
-	{
-		server9p_respond(request, str8_lit("cannot stat file"));
-		return;
-	}
+  Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, fid_aux_get_path(aux));
+  if(stat.name.size == 0)
+  {
+    server9p_respond(request, str8_lit("cannot stat file"));
+    return;
+  }
 
-	request->out_msg.stat_data = str8_from_dir9p(request->scratch.arena, stat);
-	server9p_respond(request, str8_zero());
+  request->out_msg.stat_data = str8_from_dir9p(request->scratch.arena, stat);
+  server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_wstat(ServerRequest9P *request)
 {
-	if(fs_context->readonly)
-	{
-		server9p_respond(request, str8_lit("read-only filesystem"));
-		return;
-	}
+  if(fs_context->readonly)
+  {
+    server9p_respond(request, str8_lit("read-only filesystem"));
+    return;
+  }
 
-	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
-	if(request->in_msg.stat_data.size == 0)
-	{
-		server9p_respond(request, str8_lit("invalid stat data"));
-		return;
-	}
+  if(request->in_msg.stat_data.size == 0)
+  {
+    server9p_respond(request, str8_lit("invalid stat data"));
+    return;
+  }
 
-	Dir9P stat = dir9p_from_str8(request->in_msg.stat_data);
+  Dir9P stat = dir9p_from_str8(request->in_msg.stat_data);
 
-	if(!fs9p_wstat(fs_context, fid_aux_get_path(aux), &stat))
-	{
-		server9p_respond(request, str8_lit("wstat failed"));
-		return;
-	}
+  if(!fs9p_wstat(fs_context, fid_aux_get_path(aux), &stat))
+  {
+    server9p_respond(request, str8_lit("wstat failed"));
+    return;
+  }
 
-	if(stat.name.size > 0)
-	{
-		String8 current_basename = fs9p_basename(request->scratch.arena, fid_aux_get_path(aux));
-		if(!str8_match(stat.name, current_basename, 0))
-		{
-			String8 parent_path = fs9p_dirname(request->scratch.arena, fid_aux_get_path(aux));
-			String8 new_path = fs9p_path_join(request->scratch.arena, parent_path, stat.name);
-			fid_aux_set_path(aux, new_path);
-		}
-	}
+  if(stat.name.size > 0)
+  {
+    String8 current_basename = fs9p_basename(request->scratch.arena, fid_aux_get_path(aux));
+    if(!str8_match(stat.name, current_basename, 0))
+    {
+      String8 parent_path = fs9p_dirname(request->scratch.arena, fid_aux_get_path(aux));
+      String8 new_path = fs9p_path_join(request->scratch.arena, parent_path, stat.name);
+      fid_aux_set_path(aux, new_path);
+    }
+  }
 
-	server9p_respond(request, str8_zero());
+  server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_remove(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
-	if(fs_context->readonly)
-	{
-		server9p_respond(request, str8_lit("read-only filesystem"));
-		return;
-	}
+  if(fs_context->readonly)
+  {
+    server9p_respond(request, str8_lit("read-only filesystem"));
+    return;
+  }
 
-	fs9p_remove(fs_context, fid_aux_get_path(aux));
-	fid_aux_release(request->server, aux);
-	ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
-	fid_release(request->server, fid);
-	server9p_respond(request, str8_zero());
+  fs9p_remove(fs_context, fid_aux_get_path(aux));
+  fid_aux_release(request->server, aux);
+  ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
+  fid_release(request->server, fid);
+  server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_clunk(ServerRequest9P *request)
 {
-	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
-	fid_aux_release(request->server, aux);
-	ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
-	fid_release(request->server, fid);
-	server9p_respond(request, str8_zero());
+  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  fid_aux_release(request->server, aux);
+  ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
+  fid_release(request->server, fid);
+  server9p_respond(request, str8_zero());
 }
 
 ////////////////////////////////
@@ -607,94 +607,94 @@ srv_clunk(ServerRequest9P *request)
 internal void
 handle_connection(OS_Handle connection_socket)
 {
-	Temp scratch = scratch_begin(0, 0);
-	Arena *connection_arena = arena_alloc();
-	Log *log = log_alloc();
-	log_select(log);
-	log_scope_begin();
+  Temp scratch = scratch_begin(0, 0);
+  Arena *connection_arena = arena_alloc();
+  Log *log = log_alloc();
+  log_select(log);
+  log_scope_begin();
 
-	u64 connection_fd = connection_socket.u64[0];
-	log_info(str8_lit("9pfs: connection established\n"));
+  u64 connection_fd = connection_socket.u64[0];
+  log_info(str8_lit("9pfs: connection established\n"));
 
-	Server9P *server = server9p_alloc(connection_arena, connection_fd, connection_fd);
-	if(server == 0)
-	{
-		log_error(str8_lit("9pfs: failed to allocate server\n"));
-		os_file_close(connection_socket);
-		arena_release(connection_arena);
-		return;
-	}
+  Server9P *server = server9p_alloc(connection_arena, connection_fd, connection_fd);
+  if(server == 0)
+  {
+    log_error(str8_lit("9pfs: failed to allocate server\n"));
+    os_file_close(connection_socket);
+    arena_release(connection_arena);
+    return;
+  }
 
-	for(;;)
-	{
-		ServerRequest9P *request = server9p_get_request(server);
-		if(request == 0)
-		{
-			break;
-		}
-		if(request->error.size > 0)
-		{
-			server9p_respond(request, request->error);
-			continue;
-		}
+  for(;;)
+  {
+    ServerRequest9P *request = server9p_get_request(server);
+    if(request == 0)
+    {
+      break;
+    }
+    if(request->error.size > 0)
+    {
+      server9p_respond(request, request->error);
+      continue;
+    }
 
-		switch(request->in_msg.type)
-		{
-			case Msg9P_Tversion:
-				srv_version(request);
-				break;
-			case Msg9P_Tauth:
-				srv_auth(request);
-				break;
-			case Msg9P_Tattach:
-				srv_attach(request);
-				break;
-			case Msg9P_Twalk:
-				srv_walk(request);
-				break;
-			case Msg9P_Topen:
-				srv_open(request);
-				break;
-			case Msg9P_Tcreate:
-				srv_create(request);
-				break;
-			case Msg9P_Tread:
-				srv_read(request);
-				break;
-			case Msg9P_Twrite:
-				srv_write(request);
-				break;
-			case Msg9P_Tstat:
-				srv_stat(request);
-				break;
-			case Msg9P_Twstat:
-				srv_wstat(request);
-				break;
-			case Msg9P_Tremove:
-				srv_remove(request);
-				break;
-			case Msg9P_Tclunk:
-				srv_clunk(request);
-				break;
-			default:
-				server9p_respond(request, str8_lit("unsupported operation"));
-				break;
-		}
-	}
+    switch(request->in_msg.type)
+    {
+    case Msg9P_Tversion:
+      srv_version(request);
+      break;
+    case Msg9P_Tauth:
+      srv_auth(request);
+      break;
+    case Msg9P_Tattach:
+      srv_attach(request);
+      break;
+    case Msg9P_Twalk:
+      srv_walk(request);
+      break;
+    case Msg9P_Topen:
+      srv_open(request);
+      break;
+    case Msg9P_Tcreate:
+      srv_create(request);
+      break;
+    case Msg9P_Tread:
+      srv_read(request);
+      break;
+    case Msg9P_Twrite:
+      srv_write(request);
+      break;
+    case Msg9P_Tstat:
+      srv_stat(request);
+      break;
+    case Msg9P_Twstat:
+      srv_wstat(request);
+      break;
+    case Msg9P_Tremove:
+      srv_remove(request);
+      break;
+    case Msg9P_Tclunk:
+      srv_clunk(request);
+      break;
+    default:
+      server9p_respond(request, str8_lit("unsupported operation"));
+      break;
+    }
+  }
 
-	os_file_close(connection_socket);
-	log_info(str8_lit("9pfs: connection closed\n"));
-	log_scope_flush(scratch.arena);
-	log_release(log);
-	arena_release(connection_arena);
-	scratch_end(scratch);
+  os_file_close(connection_socket);
+  log_info(str8_lit("9pfs: connection closed\n"));
+  log_scope_flush(scratch.arena);
+  log_release(log);
+  arena_release(connection_arena);
+  scratch_end(scratch);
 }
 
 internal void
 handle_connection_task(void *params)
 {
-	OS_Handle connection = *(OS_Handle *)params;
-	handle_connection(connection);
+  OS_Handle connection = *(OS_Handle *)params;
+  handle_connection(connection);
 }
 
 ////////////////////////////////
@@ -703,86 +703,86 @@ handle_connection_task(void *params)
 internal void
 entry_point(CmdLine *cmd_line)
 {
-	Arena *arena = arena_alloc();
+  Arena *arena = arena_alloc();
 
-	String8 root_path = cmd_line_string(cmd_line, str8_lit("root"));
-	if(root_path.size == 0)
-	{
-		root_path = str8_lit(".");
-	}
+  String8 root_path = cmd_line_string(cmd_line, str8_lit("root"));
+  if(root_path.size == 0)
+  {
+    root_path = str8_lit(".");
+  }
 
-	String8 address = str8_zero();
-	b32 readonly = cmd_line_has_flag(cmd_line, str8_lit("readonly"));
-	require_auth = cmd_line_has_flag(cmd_line, str8_lit("require-auth"));
+  String8 address = str8_zero();
+  b32 readonly = cmd_line_has_flag(cmd_line, str8_lit("readonly"));
+  require_auth = cmd_line_has_flag(cmd_line, str8_lit("require-auth"));
 
-	u64 worker_count = 0;
-	String8 threads_str = cmd_line_string(cmd_line, str8_lit("threads"));
-	if(threads_str.size > 0)
-	{
-		worker_count = u64_from_str8(threads_str, 10);
-	}
+  u64 worker_count = 0;
+  String8 threads_str = cmd_line_string(cmd_line, str8_lit("threads"));
+  if(threads_str.size > 0)
+  {
+    worker_count = u64_from_str8(threads_str, 10);
+  }
 
-	if(cmd_line->inputs.node_count > 0)
-	{
-		address = cmd_line->inputs.first->string;
-	}
+  if(cmd_line->inputs.node_count > 0)
+  {
+    address = cmd_line->inputs.first->string;
+  }
 
-	if(address.size == 0)
-	{
-		fprintf(stderr, "usage: 9pfs [options] <address>\n"
-		                "options:\n"
-		                "  --root=<path>     Root directory to serve (default: current directory)\n"
-		                "  --readonly        Serve in read-only mode\n"
-		                "  --require-auth    Require authentication via 9auth daemon\n"
-		                "  --threads=<n>     Number of worker threads (default: max(4, cores/4))\n"
-		                "arguments:\n"
-		                "  <address>         Dial string (e.g., tcp!host!port)\n");
-		fflush(stderr);
-	}
-	else
-	{
-		fs_context = fs9p_context_alloc(arena, root_path, str8_zero(), readonly, StorageBackend9P_Disk);
+  if(address.size == 0)
+  {
+    fprintf(stderr, "usage: 9pfs [options] <address>\n"
+                    "options:\n"
+                    "  --root=<path>     Root directory to serve (default: current directory)\n"
+                    "  --readonly        Serve in read-only mode\n"
+                    "  --require-auth    Require authentication via 9auth daemon\n"
+                    "  --threads=<n>     Number of worker threads (default: max(4, cores/4))\n"
+                    "arguments:\n"
+                    "  <address>         Dial string (e.g., tcp!host!port)\n");
+    fflush(stderr);
+  }
+  else
+  {
+    fs_context = fs9p_context_alloc(arena, root_path, str8_zero(), readonly, StorageBackend9P_Disk);
 
-		OS_Handle listen_socket = dial9p_listen(address, str8_lit("tcp"), str8_lit("9pfs"));
-		if(os_handle_match(listen_socket, os_handle_zero()))
-		{
-			fprintf(stderr, "9pfs: failed to listen on address '%.*s'\n", (int)address.size, address.str);
-			fflush(stderr);
-		}
-		else
-		{
-			fprintf(stdout, "9pfs: serving '%.*s' on %.*s%s\n", (int)root_path.size, root_path.str, (int)address.size,
-			        address.str, readonly ? " (read-only)" : "");
-			fflush(stdout);
+    OS_Handle listen_socket = dial9p_listen(address, str8_lit("tcp"), str8_lit("9pfs"));
+    if(os_handle_match(listen_socket, os_handle_zero()))
+    {
+      fprintf(stderr, "9pfs: failed to listen on address '%.*s'\n", (int)address.size, address.str);
+      fflush(stderr);
+    }
+    else
+    {
+      fprintf(stdout, "9pfs: serving '%.*s' on %.*s%s\n", (int)root_path.size, root_path.str, (int)address.size,
+              address.str, readonly ? " (read-only)" : "");
+      fflush(stdout);
 
-			if(worker_count == 0)
-			{
-				u64 logical_cores = os_get_system_info()->logical_processor_count;
-				worker_count = Max(4, logical_cores / 4);
-			}
+      if(worker_count == 0)
+      {
+        u64 logical_cores = os_get_system_info()->logical_processor_count;
+        worker_count = Max(4, logical_cores / 4);
+      }
 
-			worker_pool = wp_pool_alloc(arena, worker_count);
+      worker_pool = wp_pool_alloc(arena, worker_count);
 
-			fprintf(stdout, "9pfs: launched %lu worker threads\n", (unsigned long)worker_count);
-			fflush(stdout);
+      fprintf(stdout, "9pfs: launched %lu worker threads\n", (unsigned long)worker_count);
+      fflush(stdout);
 
-			for(;;)
-			{
-				OS_Handle connection_socket = os_socket_accept(listen_socket);
-				if(os_handle_match(connection_socket, os_handle_zero()))
-				{
-					fprintf(stderr, "9pfs: failed to accept connection\n");
-					fflush(stderr);
-					continue;
-				}
+      for(;;)
+      {
+        OS_Handle connection_socket = os_socket_accept(listen_socket);
+        if(os_handle_match(connection_socket, os_handle_zero()))
+        {
+          fprintf(stderr, "9pfs: failed to accept connection\n");
+          fflush(stderr);
+          continue;
+        }
 
-				fprintf(stdout, "9pfs: accepted connection\n");
-				fflush(stdout);
+        fprintf(stdout, "9pfs: accepted connection\n");
+        fflush(stdout);
 
-				wp_submit(worker_pool, handle_connection_task, &connection_socket, sizeof(connection_socket));
-			}
-		}
-	}
+        wp_submit(worker_pool, handle_connection_task, &connection_socket, sizeof(connection_socket));
+      }
+    }
+  }
 
-	arena_release(arena);
+  arena_release(arena);
 }

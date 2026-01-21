@@ -9,57 +9,57 @@ typedef struct ServerFid9P ServerFid9P;
 typedef struct FidAuxiliary9P FidAuxiliary9P;
 struct ServerFid9P
 {
-	u32 fid;
-	u32 open_mode;
-	Qid qid;
-	String8 user_id;
-	u64 offset;
-	void *auxiliary;
-	Server9P *server;
-	ServerFid9P *hash_next;
+  u32 fid;
+  u32 open_mode;
+  Qid qid;
+  String8 user_id;
+  u64 offset;
+  void *auxiliary;
+  Server9P *server;
+  ServerFid9P *hash_next;
 };
 
 typedef struct ServerRequest9P ServerRequest9P;
 struct ServerRequest9P
 {
-	u32 tag;
-	u32 responded;
-	Message9P in_msg;
-	Message9P out_msg;
-	ServerFid9P *fid;
-	ServerFid9P *new_fid;
-	ServerFid9P *auth_fid;
-	ServerRequest9P *old_request;
-	ServerRequest9P **flush;
-	u32 flush_count;
-	String8 error;
-	u8 *buffer;
-	u8 *read_buffer;
-	void *auxiliary;
-	Server9P *server;
-	ServerRequest9P *hash_next;
-	Temp scratch;
+  u32 tag;
+  u32 responded;
+  Message9P in_msg;
+  Message9P out_msg;
+  ServerFid9P *fid;
+  ServerFid9P *new_fid;
+  ServerFid9P *auth_fid;
+  ServerRequest9P *old_request;
+  ServerRequest9P **flush;
+  u32 flush_count;
+  String8 error;
+  u8 *buffer;
+  u8 *read_buffer;
+  void *auxiliary;
+  Server9P *server;
+  ServerRequest9P *hash_next;
+  Temp scratch;
 };
 
 struct Server9P
 {
-	Arena *arena;
-	u64 input_fd;
-	u64 output_fd;
-	u32 max_message_size;
-	u8 *read_buffer;
-	u8 *write_buffer;
-	ServerFid9P **fid_table;
-	u32 fid_count;
-	u32 max_fid_count;
-	ServerFid9P *fid_free_list;
-	ServerRequest9P **request_table;
-	u32 request_count;
-	u32 max_request_count;
-	u32 next_tag;
-	ServerRequest9P *request_free_list;
-	FidAuxiliary9P *fid_aux_free_list;
-	void *auxiliary;
+  Arena *arena;
+  u64 input_fd;
+  u64 output_fd;
+  u32 max_message_size;
+  u8 *read_buffer;
+  u8 *write_buffer;
+  ServerFid9P **fid_table;
+  u32 fid_count;
+  u32 max_fid_count;
+  ServerFid9P *fid_free_list;
+  ServerRequest9P **request_table;
+  u32 request_count;
+  u32 max_request_count;
+  u32 next_tag;
+  ServerRequest9P *request_free_list;
+  FidAuxiliary9P *fid_aux_free_list;
+  void *auxiliary;
 };
 
 ////////////////////////////////
@@ -68,14 +68,14 @@ struct Server9P
 typedef u32 QidTypeFlags;
 enum
 {
-	QidTypeFlag_Directory = 0x80,
-	QidTypeFlag_Append = 0x40,
-	QidTypeFlag_Exclusive = 0x20,
-	QidTypeFlag_Mount = 0x10,
-	QidTypeFlag_Auth = 0x08,
-	QidTypeFlag_Temporary = 0x04,
-	QidTypeFlag_Symlink = 0x02,
-	QidTypeFlag_File = 0x00,
+  QidTypeFlag_Directory = 0x80,
+  QidTypeFlag_Append = 0x40,
+  QidTypeFlag_Exclusive = 0x20,
+  QidTypeFlag_Mount = 0x10,
+  QidTypeFlag_Auth = 0x08,
+  QidTypeFlag_Temporary = 0x04,
+  QidTypeFlag_Symlink = 0x02,
+  QidTypeFlag_File = 0x00,
 };
 
 ////////////////////////////////

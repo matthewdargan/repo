@@ -24,21 +24,21 @@ read_only global u32 open_mode_table[8] = {0,
 typedef struct Client9P Client9P;
 struct Client9P
 {
-	u64 fd;
-	u32 max_message_size;
-	u32 next_tag;
-	u32 next_fid;
-	struct ClientFid9P *root;
+  u64 fd;
+  u32 max_message_size;
+  u32 next_tag;
+  u32 next_fid;
+  struct ClientFid9P *root;
 };
 
 typedef struct ClientFid9P ClientFid9P;
 struct ClientFid9P
 {
-	u32 fid;
-	u32 mode;
-	Qid qid;
-	u64 offset;
-	Client9P *client;
+  u32 fid;
+  u32 mode;
+  Qid qid;
+  u64 offset;
+  Client9P *client;
 };
 
 ////////////////////////////////

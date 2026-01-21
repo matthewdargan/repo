@@ -6,10 +6,10 @@
 
 typedef enum
 {
-	Auth_RPC_Command_None,
-	Auth_RPC_Command_Start,
-	Auth_RPC_Command_Read,
-	Auth_RPC_Command_Write,
+  Auth_RPC_Command_None,
+  Auth_RPC_Command_Start,
+  Auth_RPC_Command_Read,
+  Auth_RPC_Command_Write,
 } Auth_RPC_Command;
 
 ////////////////////////////////
@@ -18,26 +18,26 @@ typedef enum
 typedef struct Auth_RPC_StartParams Auth_RPC_StartParams;
 struct Auth_RPC_StartParams
 {
-	String8 proto;
-	String8 role;
-	String8 user;
-	String8 server;
+  String8 proto;
+  String8 role;
+  String8 user;
+  String8 server;
 };
 
 typedef struct Auth_RPC_Request Auth_RPC_Request;
 struct Auth_RPC_Request
 {
-	Auth_RPC_Command command;
-	Auth_RPC_StartParams start;
-	String8 write_data;
+  Auth_RPC_Command command;
+  Auth_RPC_StartParams start;
+  String8 write_data;
 };
 
 typedef struct Auth_RPC_Response Auth_RPC_Response;
 struct Auth_RPC_Response
 {
-	b32 success;
-	String8 error;
-	String8 data;
+  b32 success;
+  String8 error;
+  String8 data;
 };
 
 ////////////////////////////////
@@ -46,11 +46,11 @@ struct Auth_RPC_Response
 typedef struct Auth_RPC_State Auth_RPC_State;
 struct Auth_RPC_State
 {
-	Arena *arena;
-	Auth_KeyRing *keyring;
-	Auth_Conv *conv_first;
-	Auth_Conv *conv_last;
-	u64 next_conv_id;
+  Arena *arena;
+  Auth_KeyRing *keyring;
+  Auth_Conv *conv_first;
+  Auth_Conv *conv_last;
+  u64 next_conv_id;
 };
 
 ////////////////////////////////

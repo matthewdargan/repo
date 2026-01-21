@@ -29,9 +29,9 @@ typedef struct timespec timespec;
 typedef struct OS_SystemInfo OS_SystemInfo;
 struct OS_SystemInfo
 {
-	u32 logical_processor_count;
-	u64 page_size;
-	u64 large_page_size;
+  u32 logical_processor_count;
+  u64 page_size;
+  u64 large_page_size;
 };
 
 ////////////////////////////////
@@ -40,11 +40,11 @@ struct OS_SystemInfo
 typedef u32 OS_AccessFlags;
 enum
 {
-	OS_AccessFlag_Read = (1 << 0),
-	OS_AccessFlag_Write = (1 << 1),
-	OS_AccessFlag_Append = (1 << 2),
-	OS_AccessFlag_ShareRead = (1 << 3),
-	OS_AccessFlag_ShareWrite = (1 << 4),
+  OS_AccessFlag_Read = (1 << 0),
+  OS_AccessFlag_Write = (1 << 1),
+  OS_AccessFlag_Append = (1 << 2),
+  OS_AccessFlag_ShareRead = (1 << 3),
+  OS_AccessFlag_ShareWrite = (1 << 4),
 };
 
 ////////////////////////////////
@@ -53,16 +53,16 @@ enum
 typedef u32 OS_FilePropertyFlags;
 enum
 {
-	OS_FilePropertyFlag_Directory = (1 << 0),
+  OS_FilePropertyFlag_Directory = (1 << 0),
 };
 
 typedef struct OS_FileProperties OS_FileProperties;
 struct OS_FileProperties
 {
-	u64 size;
-	DenseTime created;
-	DenseTime modified;
-	OS_FilePropertyFlags flags;
+  u64 size;
+  DenseTime created;
+  DenseTime modified;
+  OS_FilePropertyFlags flags;
 };
 
 ////////////////////////////////
@@ -71,7 +71,7 @@ struct OS_FileProperties
 typedef struct OS_Handle OS_Handle;
 struct OS_Handle
 {
-	u64 u64[1];
+  u64 u64[1];
 };
 
 ////////////////////////////////

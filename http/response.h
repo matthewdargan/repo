@@ -7,11 +7,11 @@
 typedef struct HTTP_Response HTTP_Response;
 struct HTTP_Response
 {
-	u64 status_code;
-	String8 status_text;
-	String8 version;
-	HTTP_HeaderList headers;
-	String8 body;
+  u64 status_code;
+  String8 status_text;
+  String8 version;
+  HTTP_HeaderList headers;
+  String8 body;
 };
 
 internal HTTP_Response *http_response_alloc(Arena *arena, HTTP_Status status);

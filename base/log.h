@@ -6,30 +6,30 @@
 
 typedef enum LogMsgKind
 {
-	LogMsgKind_Info,
-	LogMsgKind_Error,
-	LogMsgKind_COUNT
+  LogMsgKind_Info,
+  LogMsgKind_Error,
+  LogMsgKind_COUNT
 } LogMsgKind;
 
 typedef struct LogScope LogScope;
 struct LogScope
 {
-	LogScope *next;
-	u64 pos;
-	String8List strings[LogMsgKind_COUNT];
+  LogScope *next;
+  u64 pos;
+  String8List strings[LogMsgKind_COUNT];
 };
 
 typedef struct LogScopeResult LogScopeResult;
 struct LogScopeResult
 {
-	String8 strings[LogMsgKind_COUNT];
+  String8 strings[LogMsgKind_COUNT];
 };
 
 typedef struct Log Log;
 struct Log
 {
-	Arena *arena;
-	LogScope *top_scope;
+  Arena *arena;
+  LogScope *top_scope;
 };
 
 ////////////////////////////////

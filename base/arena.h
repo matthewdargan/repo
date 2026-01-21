@@ -10,33 +10,33 @@
 typedef u64 ArenaFlags;
 enum
 {
-	ArenaFlag_NoChain = (1 << 0),
-	ArenaFlag_LargePages = (1 << 1),
+  ArenaFlag_NoChain = (1 << 0),
+  ArenaFlag_LargePages = (1 << 1),
 };
 
 typedef struct ArenaParams ArenaParams;
 struct ArenaParams
 {
-	ArenaFlags flags;
-	u64 reserve_size;
-	u64 commit_size;
-	void *optional_backing_buffer;
+  ArenaFlags flags;
+  u64 reserve_size;
+  u64 commit_size;
+  void *optional_backing_buffer;
 };
 
 typedef struct Arena Arena;
 struct Arena
 {
-	Arena *prev;    // previous arena in chain
-	Arena *current; // current arena in chain
-	ArenaFlags flags;
-	u64 cmt_size;
-	u64 res_size;
-	u64 base_pos;
-	u64 pos;
-	u64 cmt;
-	u64 res;
+  Arena *prev;    // previous arena in chain
+  Arena *current; // current arena in chain
+  ArenaFlags flags;
+  u64 cmt_size;
+  u64 res_size;
+  u64 base_pos;
+  u64 pos;
+  u64 cmt;
+  u64 res;
 #if ARENA_FREE_LIST
-	Arena *free_last;
+  Arena *free_last;
 #endif
 };
 StaticAssert(sizeof(Arena) <= ARENA_HEADER_SIZE, arena_header_size_check);
@@ -44,8 +44,8 @@ StaticAssert(sizeof(Arena) <= ARENA_HEADER_SIZE, arena_header_size_check);
 typedef struct Temp Temp;
 struct Temp
 {
-	Arena *arena;
-	u64 pos;
+  Arena *arena;
+  u64 pos;
 };
 
 ////////////////////////////////

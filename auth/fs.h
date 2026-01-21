@@ -6,11 +6,11 @@
 
 typedef enum
 {
-	Auth_File_None,
-	Auth_File_Root,
-	Auth_File_RPC,
-	Auth_File_Ctl,
-	Auth_File_Log,
+  Auth_File_None,
+  Auth_File_Root,
+  Auth_File_RPC,
+  Auth_File_Ctl,
+  Auth_File_Log,
 } Auth_File_Type;
 
 ////////////////////////////////
@@ -19,12 +19,12 @@ typedef enum
 typedef struct Auth_File_Info Auth_File_Info;
 struct Auth_File_Info
 {
-	Auth_File_Type type;
-	String8 name;
-	u64 qid_path;
-	u32 qid_version;
-	u32 mode;
-	u64 size;
+  Auth_File_Type type;
+  String8 name;
+  u64 qid_path;
+  u32 qid_version;
+  u32 mode;
+  u64 size;
 };
 
 ////////////////////////////////
@@ -33,10 +33,10 @@ struct Auth_File_Info
 typedef struct Auth_FS_State Auth_FS_State;
 struct Auth_FS_State
 {
-	Arena *arena;
-	Auth_RPC_State *rpc_state;
-	String8List log_entries;
-	u64 log_size;
+  Arena *arena;
+  Auth_RPC_State *rpc_state;
+  String8List log_entries;
+  u64 log_size;
 };
 
 ////////////////////////////////

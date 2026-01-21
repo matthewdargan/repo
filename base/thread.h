@@ -17,7 +17,7 @@
 typedef struct Thread Thread;
 struct Thread
 {
-	u64 u64[1];
+  u64 u64[1];
 };
 
 typedef void ThreadEntryPointFunctionType(void *p);
@@ -25,10 +25,10 @@ typedef void ThreadEntryPointFunctionType(void *p);
 typedef struct ThreadState ThreadState;
 struct ThreadState
 {
-	ThreadState *next;
-	pthread_t handle;
-	ThreadEntryPointFunctionType *func;
-	void *ptr;
+  ThreadState *next;
+  pthread_t handle;
+  ThreadEntryPointFunctionType *func;
+  void *ptr;
 };
 
 ////////////////////////////////
@@ -37,13 +37,13 @@ struct ThreadState
 typedef struct Mutex Mutex;
 struct Mutex
 {
-	u64 u64[1];
+  u64 u64[1];
 };
 
 typedef struct Semaphore Semaphore;
 struct Semaphore
 {
-	u64 u64[1];
+  u64 u64[1];
 };
 
 ////////////////////////////////

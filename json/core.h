@@ -6,12 +6,12 @@
 
 typedef enum JSON_ValueKind
 {
-	JSON_ValueKind_Null,
-	JSON_ValueKind_Bool,
-	JSON_ValueKind_Number,
-	JSON_ValueKind_String,
-	JSON_ValueKind_Object,
-	JSON_ValueKind_Array,
+  JSON_ValueKind_Null,
+  JSON_ValueKind_Bool,
+  JSON_ValueKind_Number,
+  JSON_ValueKind_String,
+  JSON_ValueKind_Object,
+  JSON_ValueKind_Array,
 } JSON_ValueKind;
 
 typedef struct JSON_Value JSON_Value;
@@ -19,21 +19,21 @@ typedef struct JSON_Member JSON_Member;
 
 struct JSON_Member
 {
-	JSON_Member *next;
-	String8 name;
-	JSON_Value *value;
+  JSON_Member *next;
+  String8 name;
+  JSON_Value *value;
 };
 
 struct JSON_Value
 {
-	JSON_ValueKind kind;
-	b32 boolean;         // Bool
-	f64 number;          // Number
-	String8 string;      // String
-	JSON_Member *first;  // Object
-	JSON_Member *last;   // Object
-	JSON_Value **values; // Array
-	u64 count;           // Object, Array
+  JSON_ValueKind kind;
+  b32 boolean;         // Bool
+  f64 number;          // Number
+  String8 string;      // String
+  JSON_Member *first;  // Object
+  JSON_Member *last;   // Object
+  JSON_Value **values; // Array
+  u64 count;           // Object, Array
 };
 
 ////////////////////////////////

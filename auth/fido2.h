@@ -14,10 +14,10 @@
 typedef struct Auth_Fido2_RegisterParams Auth_Fido2_RegisterParams;
 struct Auth_Fido2_RegisterParams
 {
-	String8 user;
-	String8 rp_id;
-	String8 rp_name;
-	b32 require_uv;
+  String8 user;
+  String8 rp_id;
+  String8 rp_name;
+  b32 require_uv;
 };
 
 ////////////////////////////////
@@ -26,20 +26,20 @@ struct Auth_Fido2_RegisterParams
 typedef struct Auth_Fido2_AssertParams Auth_Fido2_AssertParams;
 struct Auth_Fido2_AssertParams
 {
-	String8 rp_id;
-	u8 challenge[32];
-	u8 *credential_id;
-	u64 credential_id_len;
-	b32 require_uv;
+  String8 rp_id;
+  u8 challenge[32];
+  u8 *credential_id;
+  u64 credential_id_len;
+  b32 require_uv;
 };
 
 typedef struct Auth_Fido2_Assertion Auth_Fido2_Assertion;
 struct Auth_Fido2_Assertion
 {
-	u8 signature[256];
-	u64 signature_len;
-	u8 auth_data[256];
-	u64 auth_data_len;
+  u8 signature[256];
+  u64 signature_len;
+  u8 auth_data[256];
+  u64 auth_data_len;
 };
 
 ////////////////////////////////
@@ -48,13 +48,13 @@ struct Auth_Fido2_Assertion
 typedef struct Auth_Fido2_VerifyParams Auth_Fido2_VerifyParams;
 struct Auth_Fido2_VerifyParams
 {
-	u8 challenge[32];
-	u8 *auth_data;
-	u64 auth_data_len;
-	u8 *signature;
-	u64 signature_len;
-	u8 *public_key;
-	u64 public_key_len;
+  u8 challenge[32];
+  u8 *auth_data;
+  u64 auth_data_len;
+  u8 *signature;
+  u64 signature_len;
+  u8 *public_key;
+  u64 public_key_len;
 };
 
 ////////////////////////////////
@@ -63,20 +63,20 @@ struct Auth_Fido2_VerifyParams
 typedef struct Auth_Fido2_DeviceInfo Auth_Fido2_DeviceInfo;
 struct Auth_Fido2_DeviceInfo
 {
-	Auth_Fido2_DeviceInfo *next;
-	String8 path;
-	String8 product;
-	String8 manufacturer;
-	u16 vendor_id;
-	u16 product_id;
+  Auth_Fido2_DeviceInfo *next;
+  String8 path;
+  String8 product;
+  String8 manufacturer;
+  u16 vendor_id;
+  u16 product_id;
 };
 
 typedef struct Auth_Fido2_DeviceList Auth_Fido2_DeviceList;
 struct Auth_Fido2_DeviceList
 {
-	Auth_Fido2_DeviceInfo *first;
-	Auth_Fido2_DeviceInfo *last;
-	u64 count;
+  Auth_Fido2_DeviceInfo *first;
+  Auth_Fido2_DeviceInfo *last;
+  u64 count;
 };
 
 ////////////////////////////////

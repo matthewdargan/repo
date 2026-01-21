@@ -7,8 +7,8 @@
 typedef u32 Dial9PProtocol;
 enum
 {
-	Dial9PProtocol_TCP,
-	Dial9PProtocol_Unix,
+  Dial9PProtocol_TCP,
+  Dial9PProtocol_Unix,
 };
 
 ////////////////////////////////
@@ -17,9 +17,9 @@ enum
 typedef struct Dial9PAddress Dial9PAddress;
 struct Dial9PAddress
 {
-	Dial9PProtocol protocol;
-	String8 host;
-	u16 port;
+  Dial9PProtocol protocol;
+  String8 host;
+  u16 port;
 };
 
 ////////////////////////////////

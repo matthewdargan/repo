@@ -12,88 +12,88 @@
 typedef u32 StorageBackend9P;
 enum
 {
-	StorageBackend9P_Disk,
-	StorageBackend9P_ArenaTemp,
+  StorageBackend9P_Disk,
+  StorageBackend9P_ArenaTemp,
 };
 
 typedef struct TempNode9P TempNode9P;
 struct TempNode9P
 {
-	String8 path;
-	String8 name;
-	String8 content;
-	String8 user_id;
-	String8 group_id;
-	Qid qid;
-	u32 mode;
-	u32 access_time;
-	u32 modify_time;
-	b32 is_directory;
-	TempNode9P *first_child;
-	TempNode9P *next_sibling;
-	TempNode9P *parent;
+  String8 path;
+  String8 name;
+  String8 content;
+  String8 user_id;
+  String8 group_id;
+  Qid qid;
+  u32 mode;
+  u32 access_time;
+  u32 modify_time;
+  b32 is_directory;
+  TempNode9P *first_child;
+  TempNode9P *next_sibling;
+  TempNode9P *parent;
 };
 
 typedef struct FsContext9P FsContext9P;
 struct FsContext9P
 {
-	String8 root_path;
-	String8 tmp_path;
-	Arena *tmp_arena;
-	TempNode9P *tmp_root;
-	u64 tmp_qid_count;
-	b32 readonly;
-	u32 uid_offset;
-	u32 gid_offset;
-	StorageBackend9P backend;
+  String8 root_path;
+  String8 tmp_path;
+  Arena *tmp_arena;
+  TempNode9P *tmp_root;
+  u64 tmp_qid_count;
+  b32 readonly;
+  u32 uid_offset;
+  u32 gid_offset;
+  StorageBackend9P backend;
 };
 
 typedef struct FsHandle9P FsHandle9P;
 struct FsHandle9P
 {
-	String8 path;
-	int fd;
-	DIR *dir_handle;
-	u64 dir_position;
-	b32 is_directory;
-	TempNode9P *tmp_node;
-	FsContext9P *ctx;
+  String8 path;
+  int fd;
+  DIR *dir_handle;
+  u64 dir_position;
+  b32 is_directory;
+  TempNode9P *tmp_node;
+  FsContext9P *ctx;
 };
 
 typedef struct PathResolution9P PathResolution9P;
 struct PathResolution9P
 {
-	String8 absolute_path;
-	b32 valid;
-	String8 error;
+  String8 absolute_path;
+  b32 valid;
+  String8 error;
 };
 
 typedef struct DirIterator9P DirIterator9P;
 struct DirIterator9P
 {
-	DIR *dir_handle;
-	u64 position;
-	u64 path_len;
-	TempNode9P *tmp_node;
-	TempNode9P *tmp_current;
-	u8 path_buffer[PATH_MAX];
+  DIR *dir_handle;
+  u64 position;
+  u64 path_len;
+  TempNode9P *tmp_node;
+  TempNode9P *tmp_current;
+  u8 path_buffer[PATH_MAX];
 };
 
 typedef struct FidAuxiliary9P FidAuxiliary9P;
 struct FidAuxiliary9P
 {
-	FidAuxiliary9P *next;
-	u64 path_len;
-	FsHandle9P *handle;
-	b32 has_dir_iter;
-	u32 open_mode;
-	String8 cached_dir_entries;
-	DirIterator9P dir_iter;
-	b32 is_auth_fid;
-	b32 auth_verified;
-	String8 auth_user;
-	ClientFid9P *auth_rpc_fid;
-	u8 path_buffer[PATH_MAX];
+  FidAuxiliary9P *next;
+  u64 path_len;
+  FsHandle9P *handle;
+  b32 has_dir_iter;
+  u32 open_mode;
+  String8 cached_dir_entries;
+  DirIterator9P dir_iter;
+  b32 is_auth_fid;
+  b32 auth_verified;
+  String8 auth_user;
+  ClientFid9P *auth_rpc_fid;
+  u8 path_buffer[PATH_MAX];
 };
 
 ////////////////////////////////

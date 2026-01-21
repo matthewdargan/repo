@@ -30,8 +30,8 @@
 typedef struct Rng1U64 Rng1U64;
 struct Rng1U64
 {
-	u64 min;
-	u64 max;
+  u64 min;
+  u64 max;
 };
 
 ////////////////////////////////

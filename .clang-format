@@ -1,19 +1,22 @@
 BasedOnStyle: LLVM
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: WithoutElse
 BinPackArguments: true
 BinPackParameters: true
-BreakAfterReturnType: TopLevelDefinitions
 BreakBeforeBraces: Allman
-ColumnLimit: 120
-IndentCaseLabels: true
+ColumnLimit: 0
+IndentCaseLabels: false
 IndentWidth: 2
-InsertBraces: true
+InsertBraces: false
 PointerAlignment: Right
 SpaceBeforeParens: Custom
 SpaceBeforeParensOptions:
   AfterControlStatements: false
   AfterForeachMacros: false
-  AfterFunctionDefinitionName: false
   AfterFunctionDeclarationName: false
+  AfterFunctionDefinitionName: false
   AfterIfMacros: false
   AfterOverloadedOperator: false
   AfterPlacementOperator: true
@@ -21,4 +24,4 @@ SpaceBeforeParensOptions:
   AfterRequiresInExpression: false
   BeforeNonEmptyParentheses: false
 TabWidth: 2
-UseTab: ForIndentation
+UseTab: Never
