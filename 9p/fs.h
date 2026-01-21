@@ -89,6 +89,10 @@ struct FidAuxiliary9P
 	u32 open_mode;
 	String8 cached_dir_entries;
 	DirIterator9P dir_iter;
+	b32 is_auth_fid;
+	b32 auth_verified;
+	String8 auth_user;
+	ClientFid9P *auth_rpc_fid;
 	u8 path_buffer[PATH_MAX];
 };
 

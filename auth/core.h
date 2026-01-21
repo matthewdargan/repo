@@ -28,6 +28,8 @@ struct Auth_Conv
 	Auth_State state;
 	u64 start_time;
 	u8 challenge[32];
+	u8 auth_data[256];
+	u64 auth_data_len;
 	u8 signature[256];
 	u64 signature_len;
 	b32 verified;

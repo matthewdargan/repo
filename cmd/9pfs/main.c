@@ -7,6 +7,8 @@
 
 global FsContext9P *fs_context = 0;
 global WP_Pool *worker_pool = 0;
+global b32 require_auth = 0;
+global Client9P *auth_client = 0;
 
 internal void
 fid_release(Server9P *server, ServerFid9P *fid)
@@ -96,12 +98,119 @@ srv_version(ServerRequest9P *request)
 internal void
 srv_auth(ServerRequest9P *request)
 {
-	server9p_respond(request, str8_lit("authentication not required"));
+	if(!require_auth)
+	{
+		server9p_respond(request, str8_lit("authentication not required"));
+		return;
+	}
+
+	if(auth_client == 0)
+	{
+		Temp scratch = scratch_begin(&request->server->arena, 1);
+		OS_Handle auth_handle =
+		    dial9p_connect(scratch.arena, str8_lit("unix!/var/run/9auth"), str8_lit("unix"), str8_lit("9auth"));
+		if(os_handle_match(auth_handle, os_handle_zero()))
+		{
+			scratch_end(scratch);
+			server9p_respond(request, str8_lit("9auth unavailable"));
+			return;
+		}
+
+		u64 auth_fd = auth_handle.u64[0];
+		auth_client = client9p_init(request->server->arena, auth_fd);
+		if(auth_client == 0)
+		{
+			os_file_close(auth_handle);
+			scratch_end(scratch);
+			server9p_respond(request, str8_lit("9auth connection failed"));
+			return;
+		}
+
+		ClientFid9P *auth_root =
+		    client9p_attach(request->server->arena, auth_client, P9_FID_NONE, request->in_msg.user_name, str8_lit("/"));
+		if(auth_root == 0)
+		{
+			scratch_end(scratch);
+			server9p_respond(request, str8_lit("9auth attach failed"));
+			return;
+		}
+
+		scratch_end(scratch);
+	}
+
+	ClientFid9P *rpc_fid = client9p_fid_walk(request->server->arena, auth_client->root, str8_lit("rpc"));
+	if(rpc_fid == 0)
+	{
+		server9p_respond(request, str8_lit("9auth rpc file not found"));
+		return;
+	}
+
+	if(!client9p_fid_open(request->server->arena, rpc_fid, P9_OpenFlag_ReadWrite))
+	{
+		server9p_respond(request, str8_lit("9auth rpc file open failed"));
+		return;
+	}
+
+	String8 start_cmd = str8f(request->scratch.arena, "start proto=fido2 role=server user=%S server=%S",
+	                          request->in_msg.user_name, request->in_msg.attach_path);
+	s64 write_result = client9p_fid_pwrite(request->server->arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
+	if(write_result != (s64)start_cmd.size)
+	{
+		server9p_respond(request, str8_lit("9auth start failed"));
+		return;
+	}
+
+	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+	aux->is_auth_fid = 1;
+	aux->auth_verified = 0;
+	aux->auth_user = str8_copy(request->server->arena, request->in_msg.user_name);
+	aux->auth_rpc_fid = rpc_fid;
+
+	request->out_msg.auth_qid.type = QidTypeFlag_Auth;
+	request->out_msg.auth_qid.path = request->fid->fid;
+	request->out_msg.auth_qid.version = 0;
+
+	server9p_respond(request, str8_zero());
 }
 
 internal void
 srv_attach(ServerRequest9P *request)
 {
+	if(require_auth)
+	{
+		if(request->in_msg.auth_fid == P9_FID_NONE)
+		{
+			server9p_respond(request, str8_lit("authentication required"));
+			return;
+		}
+
+		ServerFid9P *auth_fid = server9p_fid_lookup(request->server, request->in_msg.auth_fid);
+		if(auth_fid == 0)
+		{
+			server9p_respond(request, str8_lit("invalid auth fid"));
+			return;
+		}
+
+		FidAuxiliary9P *auth_aux = get_fid_aux(request->server, auth_fid);
+		if(!auth_aux->is_auth_fid)
+		{
+			server9p_respond(request, str8_lit("fid is not auth fid"));
+			return;
+		}
+
+		if(!auth_aux->auth_verified)
+		{
+			server9p_respond(request, str8_lit("authentication incomplete"));
+			return;
+		}
+
+		if(!str8_match(auth_aux->auth_user, request->in_msg.user_name, 0))
+		{
+			server9p_respond(request, str8_lit("user mismatch"));
+			return;
+		}
+	}
+
 	Dir9P root_stat = fs9p_stat(request->scratch.arena, fs_context, str8_zero());
 	if(root_stat.name.size == 0)
 	{
@@ -295,6 +404,29 @@ srv_read(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
 
+	if(aux->is_auth_fid)
+	{
+		if(aux->auth_rpc_fid == 0)
+		{
+			server9p_respond(request, str8_lit("auth fid not initialized"));
+			return;
+		}
+
+		u8 *buffer = push_array(request->scratch.arena, u8, request->in_msg.byte_count);
+		s64 n = client9p_fid_pread(request->scratch.arena, aux->auth_rpc_fid, buffer, request->in_msg.byte_count,
+		                           request->in_msg.file_offset);
+		if(n < 0)
+		{
+			server9p_respond(request, str8_lit("auth read failed"));
+			return;
+		}
+
+		request->out_msg.payload_data = str8(buffer, n);
+		request->out_msg.byte_count = n;
+		server9p_respond(request, str8_zero());
+		return;
+	}
+
 	if(request->fid->qid.type & QidTypeFlag_Directory)
 	{
 		if(!aux->has_dir_iter)
@@ -335,6 +467,38 @@ internal void
 srv_write(ServerRequest9P *request)
 {
 	FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+
+	if(aux->is_auth_fid)
+	{
+		if(aux->auth_rpc_fid == 0)
+		{
+			server9p_respond(request, str8_lit("auth fid not initialized"));
+			return;
+		}
+
+		s64 n = client9p_fid_pwrite(request->scratch.arena, aux->auth_rpc_fid, (void *)request->in_msg.payload_data.str,
+		                            request->in_msg.payload_data.size, request->in_msg.file_offset);
+		if(n != (s64)request->in_msg.payload_data.size)
+		{
+			server9p_respond(request, str8_lit("auth write failed"));
+			return;
+		}
+
+		u8 response[16];
+		s64 response_len = client9p_fid_pread(request->scratch.arena, aux->auth_rpc_fid, response, 16, 0);
+		if(response_len > 0)
+		{
+			String8 response_str = str8(response, response_len);
+			if(str8_match(response_str, str8_lit("done"), 0))
+			{
+				aux->auth_verified = 1;
+			}
+		}
+
+		request->out_msg.byte_count = n;
+		server9p_respond(request, str8_zero());
+		return;
+	}
 
 	if(fs_context->readonly)
 	{
@@ -549,6 +713,7 @@ entry_point(CmdLine *cmd_line)
 
 	String8 address = str8_zero();
 	b32 readonly = cmd_line_has_flag(cmd_line, str8_lit("readonly"));
+	require_auth = cmd_line_has_flag(cmd_line, str8_lit("require-auth"));
 
 	u64 worker_count = 0;
 	String8 threads_str = cmd_line_string(cmd_line, str8_lit("threads"));
@@ -568,6 +733,7 @@ entry_point(CmdLine *cmd_line)
 		                "options:\n"
 		                "  --root=<path>     Root directory to serve (default: current directory)\n"
 		                "  --readonly        Serve in read-only mode\n"
+		                "  --require-auth    Require authentication via 9auth daemon\n"
 		                "  --threads=<n>     Number of worker threads (default: max(4, cores/4))\n"
 		                "arguments:\n"
 		                "  <address>         Dial string (e.g., tcp!host!port)\n");

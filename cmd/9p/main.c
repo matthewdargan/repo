@@ -33,7 +33,7 @@ client9p_connect(Arena *arena, String8 address, String8 aname)
 	}
 
 	u64 fd = socket.u64[0];
-	Client9P *client = client9p_mount(arena, fd, aname);
+	Client9P *client = client9p_mount(arena, fd, aname, 0);
 	if(client == 0)
 	{
 		os_file_close(socket);

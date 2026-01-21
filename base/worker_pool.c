@@ -97,7 +97,7 @@ wp_pool_alloc(Arena *arena, u64 worker_count)
 	WP_Pool *pool = push_array(arena, WP_Pool, 1);
 	pool->arena = arena_alloc();
 	pool->mutex = mutex_alloc();
-	pool->semaphore = semaphore_alloc(0, 1024, str8_zero());
+	pool->semaphore = semaphore_alloc(0, str8_zero());
 	pool->workers = push_array(arena, WP_Worker, worker_count);
 	pool->worker_count = worker_count;
 	pool->is_live = 1;

@@ -13,13 +13,6 @@
 // clang-format on
 
 ////////////////////////////////
-//~ Third Party Includes
-
-#define STB_SPRINTF_DECORATE(name) base_##name
-#define STB_SPRINTF_STATIC
-#include "stb_sprintf.h"
-
-////////////////////////////////
 //~ Codebase Keywords
 
 #define internal static

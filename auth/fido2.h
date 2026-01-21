@@ -90,4 +90,4 @@ internal b32 auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *par
                                       Auth_Fido2_Assertion *out_assertion, String8 *out_error);
 internal b32 auth_fido2_verify_signature(Auth_Fido2_VerifyParams *params, String8 *out_error);
 
-#endif
+#endif // AUTH_FIDO2_H

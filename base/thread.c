@@ -156,9 +156,8 @@ mutex_drop(Mutex mutex)
 
 //- cross-process semaphores
 internal Semaphore
-semaphore_alloc(u32 initial_count, u32 max_count, String8 name)
+semaphore_alloc(u32 initial_count, String8 name)
 {
-	(void)max_count;
 	Semaphore result = {0};
 	if(name.size > 0)
 	{

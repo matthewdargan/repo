@@ -45,10 +45,12 @@ struct ClientFid9P
 //~ Client Connection
 
 internal Client9P *client9p_init(Arena *arena, u64 fd);
-internal Client9P *client9p_mount(Arena *arena, u64 fd, String8 attach_path);
-internal void client9p_unmount(Arena *arena, Client9P *client);
-internal b32 client9p_version(Arena *arena, Client9P *client, u32 max_message_size);
 internal ClientFid9P *client9p_auth(Arena *arena, Client9P *client, String8 user_name, String8 attach_path);
+internal Client9P *client9p_mount(Arena *arena, u64 fd, String8 attach_path, b32 use_auth);
+internal void client9p_unmount(Arena *arena, Client9P *client);
+internal Message9P client9p_rpc(Arena *arena, Client9P *client, Message9P tx);
+internal b32 client9p_version(Arena *arena, Client9P *client, u32 max_message_size);
+internal ClientFid9P *client9p_tauth(Arena *arena, Client9P *client, String8 user_name, String8 attach_path);
 internal ClientFid9P *client9p_attach(Arena *arena, Client9P *client, u32 auth_fid, String8 user_name,
                                       String8 attach_path);
 internal ClientFid9P *client9p_create(Arena *arena, Client9P *client, String8 name, u32 mode, u32 permissions);
@@ -57,7 +59,6 @@ internal ClientFid9P *client9p_open(Arena *arena, Client9P *client, String8 name
 internal Dir9P client9p_stat(Arena *arena, Client9P *client, String8 name);
 internal b32 client9p_wstat(Arena *arena, Client9P *client, String8 name, Dir9P dir);
 internal b32 client9p_access(Arena *arena, Client9P *client, String8 name, u32 mode);
-internal Message9P client9p_rpc(Arena *arena, Client9P *client, Message9P tx);
 
 ////////////////////////////////
 //~ Fid Operations

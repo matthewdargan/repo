@@ -65,7 +65,7 @@ session_generate_id(Arena *arena)
 		buffer[i * 2 + 1] = hex_table[byte & 0xF];
 	}
 
-	String8 session_id = {buffer, 64};
+	String8 session_id = str8(buffer, 64);
 	return session_id;
 }
 
@@ -293,7 +293,7 @@ url_decode(Arena *arena, String8 encoded)
 		}
 	}
 
-	String8 result = {buffer, write_pos};
+	String8 result = str8(buffer, write_pos);
 	return result;
 }
 

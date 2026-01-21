@@ -29,8 +29,120 @@ get_user_name(Arena *arena)
 	return str8_copy(arena, name);
 }
 
+internal ClientFid9P *
+client9p_auth(Arena *arena, Client9P *server_client, String8 user, String8 attach_path)
+{
+	Temp scratch = scratch_begin(&arena, 1);
+
+	OS_Handle auth_handle =
+	    dial9p_connect(scratch.arena, str8_lit("unix!/var/run/9auth"), str8_lit("unix"), str8_lit("9auth"));
+	if(os_handle_match(auth_handle, os_handle_zero()))
+	{
+		scratch_end(scratch);
+		return 0;
+	}
+
+	u64 auth_fd = auth_handle.u64[0];
+	Client9P *auth_client = client9p_init(arena, auth_fd);
+	if(auth_client == 0)
+	{
+		os_file_close(auth_handle);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	ClientFid9P *auth_root = client9p_attach(arena, auth_client, P9_FID_NONE, user, str8_lit("/"));
+	if(auth_root == 0)
+	{
+		os_file_close(auth_handle);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	ClientFid9P *rpc_fid = client9p_fid_walk(arena, auth_root, str8_lit("rpc"));
+	if(rpc_fid == 0)
+	{
+		os_file_close(auth_handle);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	if(!client9p_fid_open(arena, rpc_fid, P9_OpenFlag_ReadWrite))
+	{
+		os_file_close(auth_handle);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	ClientFid9P *server_auth_fid = client9p_tauth(arena, server_client, user, attach_path);
+	if(server_auth_fid == 0)
+	{
+		os_file_close(auth_handle);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	String8 start_cmd = str8f(scratch.arena, "start proto=fido2 role=client user=%S server=%S", user, attach_path);
+	s64 write_result = client9p_fid_pwrite(arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
+	if(write_result != (s64)start_cmd.size)
+	{
+		os_file_close(auth_handle);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	u8 challenge[32];
+	s64 challenge_len = client9p_fid_pread(arena, server_auth_fid, challenge, 32, 0);
+	if(challenge_len != 32)
+	{
+		os_file_close(auth_handle);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	write_result = client9p_fid_pwrite(arena, rpc_fid, challenge, 32, 0);
+	if(write_result != 32)
+	{
+		os_file_close(auth_handle);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	u8 auth_response[512];
+	s64 auth_response_len = client9p_fid_pread(arena, rpc_fid, auth_response, 512, 0);
+	if(auth_response_len <= 0)
+	{
+		os_file_close(auth_handle);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	write_result = client9p_fid_pwrite(arena, server_auth_fid, auth_response, auth_response_len, 0);
+	if(write_result != auth_response_len)
+	{
+		os_file_close(auth_handle);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	u8 done_response[16];
+	s64 done_len = client9p_fid_pread(arena, server_auth_fid, done_response, 16, 0);
+	if(done_len <= 0)
+	{
+		os_file_close(auth_handle);
+		scratch_end(scratch);
+		return 0;
+	}
+
+	client9p_fid_close(arena, rpc_fid);
+	os_file_close(auth_handle);
+	scratch_end(scratch);
+
+	return server_auth_fid;
+}
+
 internal Client9P *
-client9p_mount(Arena *arena, u64 fd, String8 attach_path)
+client9p_mount(Arena *arena, u64 fd, String8 attach_path, b32 use_auth)
 {
 	Client9P *client = client9p_init(arena, fd);
 	if(client == 0)
@@ -38,7 +150,23 @@ client9p_mount(Arena *arena, u64 fd, String8 attach_path)
 		return 0;
 	}
 	String8 user = get_user_name(arena);
-	ClientFid9P *fid = client9p_attach(arena, client, P9_FID_NONE, user, attach_path);
+
+	u32 auth_fid_num = P9_FID_NONE;
+	if(use_auth)
+	{
+		ClientFid9P *auth_fid = client9p_auth(arena, client, user, attach_path);
+		if(auth_fid != 0)
+		{
+			auth_fid_num = auth_fid->fid;
+		}
+		else
+		{
+			client9p_unmount(arena, client);
+			return 0;
+		}
+	}
+
+	ClientFid9P *fid = client9p_attach(arena, client, auth_fid_num, user, attach_path);
 	if(fid == 0)
 	{
 		client9p_unmount(arena, client);
@@ -128,7 +256,7 @@ client9p_version(Arena *arena, Client9P *client, u32 max_message_size)
 }
 
 internal ClientFid9P *
-client9p_auth(Arena *arena, Client9P *client, String8 user_name, String8 attach_path)
+client9p_tauth(Arena *arena, Client9P *client, String8 user_name, String8 attach_path)
 {
 	ClientFid9P *auth_fid_result = push_array(arena, ClientFid9P, 1);
 	auth_fid_result->fid = client->next_fid;
@@ -557,7 +685,7 @@ client9p_fid_read_dirs(Arena *arena, ClientFid9P *fid)
 		total_bytes_read += bytes_read;
 		buffer_space_left -= bytes_read;
 	}
-	String8 buffer = {buf, (u64)total_bytes_read};
+	String8 buffer = str8(buf, total_bytes_read);
 	result = client9p_dir_list_from_str8(arena, buffer);
 	return result;
 }

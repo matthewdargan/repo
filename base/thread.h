@@ -67,7 +67,7 @@ internal void mutex_take(Mutex mutex);
 internal void mutex_drop(Mutex mutex);
 
 //- cross-process semaphores
-internal Semaphore semaphore_alloc(u32 initial_count, u32 max_count, String8 name);
+internal Semaphore semaphore_alloc(u32 initial_count, String8 name);
 internal void semaphore_release(Semaphore semaphore);
 internal b32 semaphore_take(Semaphore semaphore, u64 timeout_us);
 internal void semaphore_drop(Semaphore semaphore);
