@@ -8,7 +8,6 @@
     ./9p.nix
     ./9umount.nix
     ./authd.nix
-    ./compile-commands.nix
     ./installer-image.nix
     ./mount-9p.nix
     ./neovim.nix
