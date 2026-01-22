@@ -147,7 +147,7 @@ auth_keyring_save(Arena *arena, Auth_KeyRing *ring)
     str8_list_push(scratch.arena, &list, line);
   }
 
-  String8 result = str8_list_join(arena, &list, 0);
+  String8 result = str8_list_join(arena, list, 0);
   scratch_end(scratch);
   return result;
 }

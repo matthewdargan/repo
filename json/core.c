@@ -480,5 +480,5 @@ json_serialize(Arena *arena, JSON_Value *value)
 {
   String8List list = {0};
   json_serialize_value(arena, &list, value);
-  return str8_list_join(arena, &list, 0);
+  return str8_list_join(arena, list, 0);
 }

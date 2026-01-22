@@ -71,33 +71,33 @@ auth_rpc_parse(Arena *arena, String8 command_line)
 }
 
 internal Auth_RPC_Response
-auth_rpc_handle_start(Arena *arena, Auth_RPC_State *state, Auth_Conv **out_conv, Auth_RPC_StartParams *params)
+auth_rpc_handle_start(Arena *arena, Auth_RPC_State *state, Auth_Conv **out_conv, Auth_RPC_StartParams params)
 {
   Auth_RPC_Response response = {0};
 
-  if(!str8_match(params->proto, str8_lit("fido2"), 0))
+  if(!str8_match(params.proto, str8_lit("fido2"), 0))
   {
     response.error = str8_lit("unsupported protocol");
     return response;
   }
-  if(!str8_match(params->role, str8_lit("client"), 0) && !str8_match(params->role, str8_lit("server"), 0))
+  if(!str8_match(params.role, str8_lit("client"), 0) && !str8_match(params.role, str8_lit("server"), 0))
   {
     response.error = str8_lit("invalid role");
     return response;
   }
-  if(params->user.size == 0)
+  if(params.user.size == 0)
   {
     response.error = str8_lit("user required");
     return response;
   }
 
-  Auth_Conv *conv = auth_conv_alloc(arena, state->next_conv_id, params->user, params->server);
+  Auth_Conv *conv = auth_conv_alloc(arena, state->next_conv_id, params.user, params.server);
   state->next_conv_id += 1;
   SLLQueuePush(state->conv_first, state->conv_last, conv);
 
-  if(str8_match(params->role, str8_lit("server"), 0))
+  if(str8_match(params.role, str8_lit("server"), 0))
   {
-    Auth_Key *key = auth_keyring_lookup(state->keyring, params->user, params->server);
+    Auth_Key *key = auth_keyring_lookup(state->keyring, params.user, params.server);
     if(key == 0)
     {
       response.error = str8_lit("no credential found");
@@ -153,7 +153,7 @@ auth_rpc_handle_read(Arena *arena, Auth_Conv *conv)
       // [auth_data_len:4][auth_data][signature]
       u64 total_len = 4 + conv->auth_data_len + conv->signature_len;
       u8 *buffer = push_array(arena, u8, total_len);
-      *(u32 *)buffer = (u32)conv->auth_data_len;
+      write_u32(buffer, (u32)conv->auth_data_len);
       MemoryCopy(buffer + 4, conv->auth_data, conv->auth_data_len);
       MemoryCopy(buffer + 4 + conv->auth_data_len, conv->signature, conv->signature_len);
       response.success = 1;
@@ -252,7 +252,7 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
       return response;
     }
 
-    u32 auth_data_len = *(u32 *)data.str;
+    u32 auth_data_len = read_u32(data.str);
     if(auth_data_len > 256 || auth_data_len + 4 > data.size)
     {
       response.error = str8_lit("invalid auth_data length");
@@ -317,16 +317,16 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
 }
 
 internal Auth_RPC_Response
-auth_rpc_execute(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Auth_RPC_Request *request)
+auth_rpc_execute(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Auth_RPC_Request request)
 {
   Auth_RPC_Response response = {0};
 
-  switch(request->command)
+  switch(request.command)
   {
   case Auth_RPC_Command_Start:
   {
     Auth_Conv *new_conv = 0;
-    response = auth_rpc_handle_start(arena, state, &new_conv, &request->start);
+    response = auth_rpc_handle_start(arena, state, &new_conv, request.start);
   }
   break;
 
@@ -338,7 +338,7 @@ auth_rpc_execute(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Auth_RPC_
 
   case Auth_RPC_Command_Write:
   {
-    response = auth_rpc_handle_write(arena, state, conv, request->write_data);
+    response = auth_rpc_handle_write(arena, state, conv, request.write_data);
   }
   break;
 

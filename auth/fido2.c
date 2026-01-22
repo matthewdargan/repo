@@ -77,7 +77,7 @@ auth_fido2_enumerate_devices(Arena *arena)
 }
 
 internal b32
-auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams *params, Auth_Key *out_key, String8 *out_error)
+auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, Auth_Key *out_key, String8 *out_error)
 {
   fido_dev_t *dev = NULL;
   fido_cred_t *cred = NULL;
@@ -135,8 +135,8 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams *params, 
     return 0;
   }
 
-  String8 rp_id_copy = str8_copy(temp.arena, params->rp_id);
-  String8 rp_name_copy = str8_copy(temp.arena, params->rp_name);
+  String8 rp_id_copy = str8_copy(temp.arena, params.rp_id);
+  String8 rp_name_copy = str8_copy(temp.arena, params.rp_name);
   char *rp_id_cstr = (char *)rp_id_copy.str;
   char *rp_name_cstr = (char *)rp_name_copy.str;
 
@@ -151,11 +151,11 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams *params, 
     return 0;
   }
 
-  String8 user_copy = str8_copy(temp.arena, params->user);
+  String8 user_copy = str8_copy(temp.arena, params.user);
   char *user_name_cstr = (char *)user_copy.str;
 
-  const u8 *user_id = params->user.str;
-  size_t user_id_len = params->user.size;
+  const u8 *user_id = params.user.str;
+  size_t user_id_len = params.user.size;
 
   r = fido_cred_set_user(cred, user_id, user_id_len, user_name_cstr, NULL, NULL);
   temp_end(temp);
@@ -188,7 +188,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams *params, 
     return 0;
   }
 
-  if(params->require_uv)
+  if(params.require_uv)
   {
     r = fido_cred_set_uv(cred, FIDO_OPT_TRUE);
     if(r != FIDO_OK)
@@ -245,8 +245,8 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams *params, 
     return 0;
   }
 
-  out_key->user = str8_copy(arena, params->user);
-  out_key->rp_id = str8_copy(arena, params->rp_id);
+  out_key->user = str8_copy(arena, params.user);
+  out_key->rp_id = str8_copy(arena, params.rp_id);
 
   MemoryCopy(out_key->credential_id, cred_id, cred_id_len);
   out_key->credential_id_len = cred_id_len;

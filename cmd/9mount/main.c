@@ -152,7 +152,7 @@ entry_point(CmdLine *cmd_line)
 
           StringJoin join = {0};
           join.sep = str8_lit(",");
-          String8 option_string = str8_list_join(scratch.arena, &mount_options, &join);
+          String8 option_string = str8_list_join(scratch.arena, mount_options, &join);
           String8 device_address_copy = str8_copy(scratch.arena, device_address);
 
           if(dry_run)

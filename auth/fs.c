@@ -96,7 +96,7 @@ auth_fs_read(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Con
     Auth_RPC_Request request = {0};
     request.command = Auth_RPC_Command_Read;
 
-    Auth_RPC_Response response = auth_rpc_execute(arena, fs->rpc_state, conv, &request);
+    Auth_RPC_Response response = auth_rpc_execute(arena, fs->rpc_state, conv, request);
 
     if(response.success)
     {
@@ -120,7 +120,7 @@ auth_fs_read(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Con
 
   case Auth_File_Log:
   {
-    String8 log_content = str8_list_join(arena, &fs->log_entries, 0);
+    String8 log_content = str8_list_join(arena, fs->log_entries, 0);
     if(offset < log_content.size)
     {
       u64 remaining = log_content.size - offset;
@@ -151,7 +151,7 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
     if(request.command == Auth_RPC_Command_Start)
     {
       Auth_Conv *new_conv = 0;
-      Auth_RPC_Response response = auth_rpc_handle_start(arena, fs->rpc_state, &new_conv, &request.start);
+      Auth_RPC_Response response = auth_rpc_handle_start(arena, fs->rpc_state, &new_conv, request.start);
 
       if(response.success)
       {
@@ -167,12 +167,12 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
     {
       request.write_data = data;
 
-      Auth_RPC_Response response = auth_rpc_execute(arena, fs->rpc_state, *conv, &request);
+      Auth_RPC_Response response = auth_rpc_execute(arena, fs->rpc_state, *conv, request);
       success = response.success;
     }
     else
     {
-      Auth_RPC_Response response = auth_rpc_execute(arena, fs->rpc_state, *conv, &request);
+      Auth_RPC_Response response = auth_rpc_execute(arena, fs->rpc_state, *conv, request);
       success = response.success;
     }
   }

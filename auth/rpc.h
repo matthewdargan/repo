@@ -58,7 +58,9 @@ struct Auth_RPC_State
 
 internal Auth_RPC_State *auth_rpc_state_alloc(Arena *arena, Auth_KeyRing *keyring);
 internal Auth_RPC_Request auth_rpc_parse(Arena *arena, String8 command_line);
+internal Auth_RPC_Response auth_rpc_handle_start(Arena *arena, Auth_RPC_State *state, Auth_Conv **out_conv,
+                                                 Auth_RPC_StartParams params);
 internal Auth_RPC_Response auth_rpc_execute(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv,
-                                            Auth_RPC_Request *request);
+                                            Auth_RPC_Request request);
 
 #endif // AUTH_RPC_H

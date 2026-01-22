@@ -57,7 +57,7 @@ cmd_line_insert_opt(Arena *arena, CmdLine *cmd_line, String8 string, String8List
     join.pre = str8_lit("");
     join.sep = str8_lit(",");
     join.post = str8_lit("");
-    var->value_string = str8_list_join(arena, &var->value_strings, &join);
+    var->value_string = str8_list_join(arena, var->value_strings, &join);
     *slot = var;
     cmd_line_push_opt(&cmd_line->options, var);
   }

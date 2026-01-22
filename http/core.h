@@ -81,7 +81,7 @@ struct HTTP_HeaderList
 internal HTTP_Method http_method_from_str8(String8 string);
 internal String8 str8_from_http_status(HTTP_Status status);
 
-internal String8 http_header_get(HTTP_HeaderList *list, String8 name);
+internal String8 http_header_get(HTTP_HeaderList list, String8 name);
 internal void http_header_add(Arena *arena, HTTP_HeaderList *list, String8 name, String8 value);
 
 #endif // HTTP_CORE_H

@@ -305,12 +305,12 @@ internal String8Node *str8_list_pushf(Arena *arena, String8List *list, char *fmt
 
 internal String8List str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count,
                                 StringSplitFlags flags);
-internal String8 str8_list_join(Arena *arena, String8List *list, StringJoin *optional_params);
+internal String8 str8_list_join(Arena *arena, String8List list, StringJoin *optional_params);
 
 ////////////////////////////////
 //~ String Arrays
 
-internal String8Array str8_array_from_list(Arena *arena, String8List *list);
+internal String8Array str8_array_from_list(Arena *arena, String8List list);
 internal String8Array str8_array_reserve(Arena *arena, u64 count);
 
 ////////////////////////////////

@@ -195,7 +195,7 @@ srv_read(ServerRequest9P *request)
       str8_list_push(request->scratch.arena, &dir_bytes_list, dir_bytes);
     }
 
-    String8 all_dir_data = str8_list_join(request->scratch.arena, &dir_bytes_list, 0);
+    String8 all_dir_data = str8_list_join(request->scratch.arena, dir_bytes_list, 0);
 
     String8 result = str8_zero();
     if(offset < all_dir_data.size)
@@ -490,7 +490,7 @@ entry_point(CmdLine *cmd_line)
       str8_list_push(arena, &input_chunks, chunk);
     }
 
-    String8 input = str8_list_join(arena, &input_chunks, 0);
+    String8 input = str8_list_join(arena, input_chunks, 0);
     if(input.size == 0)
     {
       log_error(str8_lit("No data provided on stdin\n"));
@@ -567,7 +567,6 @@ entry_point(CmdLine *cmd_line)
     params.user = user;
     params.rp_id = rp_id;
     params.rp_name = rp_name;
-    params.require_uv = 0;
 
     Auth_Key new_key = {0};
     String8 error = str8_zero();
@@ -575,7 +574,7 @@ entry_point(CmdLine *cmd_line)
     log_info(str8_lit("9auth: touch yubikey\n"));
     log_scope_flush(arena);
 
-    if(auth_fido2_register_credential(arena, &params, &new_key, &error))
+    if(auth_fido2_register_credential(arena, params, &new_key, &error))
     {
       String8 keys_path = str8_lit("/var/lib/9auth/keys");
       String8 existing = os_data_from_file_path(arena, keys_path);

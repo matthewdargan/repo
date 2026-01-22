@@ -30,5 +30,5 @@ http_response_serialize(Arena *arena, HTTP_Response *res)
     str8_list_push(arena, &list, res->body);
   }
 
-  return str8_list_join(arena, &list, 0);
+  return str8_list_join(arena, list, 0);
 }

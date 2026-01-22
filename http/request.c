@@ -77,7 +77,7 @@ http_request_parse(Arena *arena, String8 data)
   if(header_end + 4 < remainder.size)
   {
     String8 body_data = str8_skip(remainder, header_end + 4);
-    String8 content_length = http_header_get(&req->headers, str8_lit("Content-Length"));
+    String8 content_length = http_header_get(req->headers, str8_lit("Content-Length"));
     if(content_length.size > 0)
     {
       u64 length = u64_from_str8(content_length, 10);

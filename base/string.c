@@ -689,7 +689,7 @@ str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count, 
 }
 
 internal String8
-str8_list_join(Arena *arena, String8List *list, StringJoin *optional_params)
+str8_list_join(Arena *arena, String8List list, StringJoin *optional_params)
 {
   StringJoin join = {0};
   if(optional_params != 0)
@@ -697,16 +697,16 @@ str8_list_join(Arena *arena, String8List *list, StringJoin *optional_params)
     MemoryCopyStruct(&join, optional_params);
   }
   u64 sep_count = 0;
-  if(list->node_count > 0)
+  if(list.node_count > 0)
   {
-    sep_count = list->node_count - 1;
+    sep_count = list.node_count - 1;
   }
   String8 result;
-  result.size = join.pre.size + join.post.size + sep_count * join.sep.size + list->total_size;
+  result.size = join.pre.size + join.post.size + sep_count * join.sep.size + list.total_size;
   u8 *ptr = result.str = push_array_no_zero(arena, u8, result.size + 1);
   MemoryCopy(ptr, join.pre.str, join.pre.size);
   ptr += join.pre.size;
-  for(String8Node *node = list->first; node != 0; node = node->next)
+  for(String8Node *node = list.first; node != 0; node = node->next)
   {
     MemoryCopy(ptr, node->string.str, node->string.size);
     ptr += node->string.size;
@@ -726,13 +726,13 @@ str8_list_join(Arena *arena, String8List *list, StringJoin *optional_params)
 //~ String Arrays
 
 internal String8Array
-str8_array_from_list(Arena *arena, String8List *list)
+str8_array_from_list(Arena *arena, String8List list)
 {
   String8Array array;
-  array.count = list->node_count;
+  array.count = list.node_count;
   array.v = push_array_no_zero(arena, String8, array.count);
   u64 i = 0;
-  for(String8Node *node = list->first; node != 0; node = node->next)
+  for(String8Node *node = list.first; node != 0; node = node->next)
   {
     array.v[i] = node->string;
     i += 1;
@@ -890,7 +890,7 @@ indented_from_string(Arena *arena, String8 string)
       break;
     }
   }
-  String8 result = str8_list_join(arena, &indented_strings, 0);
+  String8 result = str8_list_join(arena, indented_strings, 0);
   scratch_end(scratch);
   return result;
 }

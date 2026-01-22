@@ -160,14 +160,14 @@ str8_from_http_status(HTTP_Status status)
 }
 
 internal String8
-http_header_get(HTTP_HeaderList *list, String8 name)
+http_header_get(HTTP_HeaderList list, String8 name)
 {
   String8 result = str8_zero();
-  for(u64 i = 0; i < list->count; i += 1)
+  for(u64 i = 0; i < list.count; i += 1)
   {
-    if(str8_match(list->headers[i].name, name, StringMatchFlag_CaseInsensitive))
+    if(str8_match(list.headers[i].name, name, StringMatchFlag_CaseInsensitive))
     {
-      result = list->headers[i].value;
+      result = list.headers[i].value;
       break;
     }
   }

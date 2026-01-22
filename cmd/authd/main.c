@@ -319,7 +319,7 @@ url_decode(Arena *arena, String8 encoded)
 internal b32
 auth_validate_request(HTTP_Request *req)
 {
-  String8 cookie_header = http_header_get(&req->headers, str8_lit("Cookie"));
+  String8 cookie_header = http_header_get(req->headers, str8_lit("Cookie"));
   String8 session_id = cookie_parse(cookie_header, str8_lit("session"));
   if(session_id.size == 0 || sessions == 0)
   {
@@ -508,7 +508,7 @@ handle_login(HTTP_Request *req, OS_Handle client_socket)
       {
         u64 max_age = auth_session_duration_us / 1000000;
 
-        String8 forwarded_host = http_header_get(&req->headers, str8_lit("X-Forwarded-Host"));
+        String8 forwarded_host = http_header_get(req->headers, str8_lit("X-Forwarded-Host"));
         String8 cookie_domain = str8_zero();
         if(forwarded_host.size > 0)
         {
@@ -554,7 +554,7 @@ handle_logout(HTTP_Request *req, OS_Handle client_socket)
 {
   Temp scratch = scratch_begin(0, 0);
 
-  String8 cookie_header = http_header_get(&req->headers, str8_lit("Cookie"));
+  String8 cookie_header = http_header_get(req->headers, str8_lit("Cookie"));
   String8 session_id = cookie_parse(cookie_header, str8_lit("session"));
   if(session_id.size > 0 && sessions != 0)
   {
@@ -562,7 +562,7 @@ handle_logout(HTTP_Request *req, OS_Handle client_socket)
     log_infof("authd: session %S logged out\n", str8_prefix(session_id, 16));
   }
 
-  String8 forwarded_host = http_header_get(&req->headers, str8_lit("X-Forwarded-Host"));
+  String8 forwarded_host = http_header_get(req->headers, str8_lit("X-Forwarded-Host"));
   String8 cookie_domain = str8_zero();
   if(forwarded_host.size > 0)
   {
