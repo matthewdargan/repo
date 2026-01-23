@@ -4,13 +4,11 @@
 ////////////////////////////////
 //~ Includes
 
-// clang-format off
 #include <stdio.h>
 #include <stdarg.h>
 #include <math.h>
 #include <string.h>
 #include <stdint.h>
-// clang-format on
 
 ////////////////////////////////
 //~ Codebase Keywords

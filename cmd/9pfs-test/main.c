@@ -1,25 +1,10 @@
-// clang-format off
 #include "base/inc.h"
 #include "9p/inc.h"
 #include "base/inc.c"
 #include "9p/inc.c"
-// clang-format on
 
 ////////////////////////////////
-//~ Test Functions
-
-internal b32
-test_version(Client9P *client)
-{
-  return client != 0 && client->max_message_size > 0;
-}
-
-internal b32
-test_stat_root(Arena *arena, Client9P *client)
-{
-  Dir9P dir = client9p_stat(arena, client, str8_zero());
-  return dir.name.size > 0 || dir.qid.type == QidTypeFlag_Directory;
-}
+//~ Helper Functions
 
 internal b32
 test_create_file(Arena *arena, Client9P *client, String8 name)
@@ -188,6 +173,103 @@ internal b32
 test_remove(Arena *arena, Client9P *client, String8 name)
 {
   return client9p_remove(arena, client, name) != 0;
+}
+
+////////////////////////////////
+//~ Test Functions
+
+internal b32
+test_version(Arena *arena, Client9P *client)
+{
+  (void)arena;
+  return client != 0 && client->max_message_size > 0;
+}
+
+internal b32
+test_stat_root(Arena *arena, Client9P *client)
+{
+  Dir9P dir = client9p_stat(arena, client, str8_zero());
+  return dir.name.size > 0 || dir.qid.type == QidTypeFlag_Directory;
+}
+
+internal b32
+test_basic_file(Arena *arena, Client9P *client)
+{
+  return test_create_file(arena, client, str8_lit("test_file"));
+}
+
+internal b32
+test_basic_write_read(Arena *arena, Client9P *client)
+{
+  String8 test_data = str8_lit("hello, 9pfs!");
+  return test_write_read(arena, client, str8_lit("test_file"), test_data);
+}
+
+internal b32
+test_basic_stat(Arena *arena, Client9P *client)
+{
+  String8 test_data = str8_lit("hello, 9pfs!");
+  return test_stat_file(arena, client, str8_lit("test_file"), test_data.size);
+}
+
+internal b32
+test_chmod_test_file(Arena *arena, Client9P *client)
+{
+  return test_wstat_chmod(arena, client, str8_lit("test_file"), 0644);
+}
+
+internal b32
+test_truncate_test_file(Arena *arena, Client9P *client)
+{
+  return test_wstat_truncate(arena, client, str8_lit("test_file"), 5);
+}
+
+internal b32
+test_rename_test_file(Arena *arena, Client9P *client)
+{
+  return test_wstat_rename(arena, client, str8_lit("test_file"), str8_lit("test_file_renamed"));
+}
+
+internal b32
+test_basic_directory(Arena *arena, Client9P *client)
+{
+  return test_create_directory(arena, client, str8_lit("test_dir"));
+}
+
+internal b32
+test_basic_readdir(Arena *arena, Client9P *client)
+{
+  return test_readdir(arena, client, str8_lit("test_dir"));
+}
+
+internal b32
+test_basic_walk(Arena *arena, Client9P *client)
+{
+  return test_walk(arena, client, str8_lit("test_dir"));
+}
+
+internal b32
+test_nested_file(Arena *arena, Client9P *client)
+{
+  return test_create_file(arena, client, str8_lit("test_dir/nested_file"));
+}
+
+internal b32
+test_remove_renamed_file(Arena *arena, Client9P *client)
+{
+  return test_remove(arena, client, str8_lit("test_file_renamed"));
+}
+
+internal b32
+test_remove_nested_file(Arena *arena, Client9P *client)
+{
+  return test_remove(arena, client, str8_lit("test_dir/nested_file"));
+}
+
+internal b32
+test_remove_test_dir(Arena *arena, Client9P *client)
+{
+  return test_remove(arena, client, str8_lit("test_dir"));
 }
 
 internal b32
@@ -585,6 +667,13 @@ test_create_existing(Arena *arena, Client9P *client)
 ////////////////////////////////
 //~ Test Runner
 
+typedef struct TestCase TestCase;
+struct TestCase
+{
+  String8 name;
+  b32 (*func)(Arena *, Client9P *);
+};
+
 internal void
 run_tests(Arena *arena, String8 address)
 {
@@ -604,415 +693,66 @@ run_tests(Arena *arena, String8 address)
     return;
   }
 
+  TestCase tests[] = {
+      {str8_lit("version"), test_version},
+      {str8_lit("stat_root"), test_stat_root},
+      {str8_lit("create_file"), test_basic_file},
+      {str8_lit("write_read"), test_basic_write_read},
+      {str8_lit("stat_file"), test_basic_stat},
+      {str8_lit("wstat_chmod"), test_chmod_test_file},
+      {str8_lit("wstat_truncate"), test_truncate_test_file},
+      {str8_lit("wstat_rename"), test_rename_test_file},
+      {str8_lit("create_directory"), test_basic_directory},
+      {str8_lit("readdir"), test_basic_readdir},
+      {str8_lit("walk"), test_basic_walk},
+      {str8_lit("create_nested_file"), test_nested_file},
+      {str8_lit("remove_file"), test_remove_renamed_file},
+      {str8_lit("remove_nested_file"), test_remove_nested_file},
+      {str8_lit("remove_directory"), test_remove_test_dir},
+      {str8_lit("empty_file"), test_empty_file},
+      {str8_lit("large_file"), test_large_file},
+      {str8_lit("partial_read"), test_partial_read},
+      {str8_lit("seek_read"), test_seek_read},
+      {str8_lit("partial_write"), test_partial_write},
+      {str8_lit("stat_nonexistent"), test_stat_nonexistent},
+      {str8_lit("open_nonexistent"), test_open_nonexistent},
+      {str8_lit("path_traversal"), test_path_traversal},
+      {str8_lit("long_filename"), test_long_filename},
+      {str8_lit("special_chars"), test_special_chars},
+      {str8_lit("deep_nesting"), test_deep_nesting},
+      {str8_lit("many_files"), test_many_files},
+      {str8_lit("readdir_many"), test_readdir_many},
+      {str8_lit("readdir_long_names"), test_readdir_long_names},
+      {str8_lit("multiple_fids"), test_multiple_fids},
+      {str8_lit("walk_partial"), test_walk_partial},
+      {str8_lit("walk_multiple"), test_walk_multiple},
+      {str8_lit("permissions"), test_permissions},
+      {str8_lit("qid_consistency"), test_qid_consistency},
+      {str8_lit("truncate_grow"), test_truncate_grow},
+      {str8_lit("remove_nonexistent"), test_remove_nonexistent},
+      {str8_lit("create_existing"), test_create_existing},
+  };
+
+  u64 test_count = ArrayCount(tests);
   u64 passed = 0;
   u64 failed = 0;
 
-  if(test_version(client))
+  for(u64 i = 0; i < test_count; i += 1)
   {
-    log_info(str8_lit("PASS: version\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: version\n"));
-    failed += 1;
-  }
+    Temp scratch = scratch_begin(&arena, 1);
+    b32 result = tests[i].func(scratch.arena, client);
+    scratch_end(scratch);
 
-  if(test_stat_root(arena, client))
-  {
-    log_info(str8_lit("PASS: stat_root\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: stat_root\n"));
-    failed += 1;
-  }
-
-  if(test_create_file(arena, client, str8_lit("test_file")))
-  {
-    log_info(str8_lit("PASS: create_file\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: create_file\n"));
-    failed += 1;
-  }
-
-  String8 test_data = str8_lit("hello, 9pfs!");
-  if(test_write_read(arena, client, str8_lit("test_file"), test_data))
-  {
-    log_info(str8_lit("PASS: write_read\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: write_read\n"));
-    failed += 1;
-  }
-
-  if(test_stat_file(arena, client, str8_lit("test_file"), test_data.size))
-  {
-    log_info(str8_lit("PASS: stat_file\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: stat_file\n"));
-    failed += 1;
-  }
-
-  if(test_wstat_chmod(arena, client, str8_lit("test_file"), 0644))
-  {
-    log_info(str8_lit("PASS: wstat_chmod\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: wstat_chmod\n"));
-    failed += 1;
-  }
-
-  if(test_wstat_truncate(arena, client, str8_lit("test_file"), 5))
-  {
-    log_info(str8_lit("PASS: wstat_truncate\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: wstat_truncate\n"));
-    failed += 1;
-  }
-
-  if(test_wstat_rename(arena, client, str8_lit("test_file"), str8_lit("test_file_renamed")))
-  {
-    log_info(str8_lit("PASS: wstat_rename\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: wstat_rename\n"));
-    failed += 1;
-  }
-
-  if(test_create_directory(arena, client, str8_lit("test_dir")))
-  {
-    log_info(str8_lit("PASS: create_directory\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: create_directory\n"));
-    failed += 1;
-  }
-
-  if(test_readdir(arena, client, str8_lit("test_dir")))
-  {
-    log_info(str8_lit("PASS: readdir\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: readdir\n"));
-    failed += 1;
-  }
-
-  if(test_walk(arena, client, str8_lit("test_dir")))
-  {
-    log_info(str8_lit("PASS: walk\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: walk\n"));
-    failed += 1;
-  }
-
-  if(test_create_file(arena, client, str8_lit("test_dir/nested_file")))
-  {
-    log_info(str8_lit("PASS: create_nested_file\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: create_nested_file\n"));
-    failed += 1;
-  }
-
-  if(test_remove(arena, client, str8_lit("test_file_renamed")))
-  {
-    log_info(str8_lit("PASS: remove_file\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: remove_file\n"));
-    failed += 1;
-  }
-
-  if(test_remove(arena, client, str8_lit("test_dir/nested_file")))
-  {
-    log_info(str8_lit("PASS: remove_nested_file\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: remove_nested_file\n"));
-    failed += 1;
-  }
-
-  if(test_remove(arena, client, str8_lit("test_dir")))
-  {
-    log_info(str8_lit("PASS: remove_directory\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: remove_directory\n"));
-    failed += 1;
-  }
-
-  if(test_empty_file(arena, client))
-  {
-    log_info(str8_lit("PASS: empty_file\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: empty_file\n"));
-    failed += 1;
-  }
-
-  if(test_large_file(arena, client))
-  {
-    log_info(str8_lit("PASS: large_file\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: large_file\n"));
-    failed += 1;
-  }
-
-  if(test_partial_read(arena, client))
-  {
-    log_info(str8_lit("PASS: partial_read\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: partial_read\n"));
-    failed += 1;
-  }
-
-  if(test_seek_read(arena, client))
-  {
-    log_info(str8_lit("PASS: seek_read\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: seek_read\n"));
-    failed += 1;
-  }
-
-  if(test_partial_write(arena, client))
-  {
-    log_info(str8_lit("PASS: partial_write\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: partial_write\n"));
-    failed += 1;
-  }
-
-  if(test_stat_nonexistent(arena, client))
-  {
-    log_info(str8_lit("PASS: stat_nonexistent\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: stat_nonexistent\n"));
-    failed += 1;
-  }
-
-  if(test_open_nonexistent(arena, client))
-  {
-    log_info(str8_lit("PASS: open_nonexistent\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: open_nonexistent\n"));
-    failed += 1;
-  }
-
-  if(test_path_traversal(arena, client))
-  {
-    log_info(str8_lit("PASS: path_traversal\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: path_traversal\n"));
-    failed += 1;
-  }
-
-  if(test_long_filename(arena, client))
-  {
-    log_info(str8_lit("PASS: long_filename\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: long_filename\n"));
-    failed += 1;
-  }
-
-  if(test_special_chars(arena, client))
-  {
-    log_info(str8_lit("PASS: special_chars\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: special_chars\n"));
-    failed += 1;
-  }
-
-  if(test_deep_nesting(arena, client))
-  {
-    log_info(str8_lit("PASS: deep_nesting\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: deep_nesting\n"));
-    failed += 1;
-  }
-
-  if(test_many_files(arena, client))
-  {
-    log_info(str8_lit("PASS: many_files\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: many_files\n"));
-    failed += 1;
-  }
-
-  if(test_readdir_many(arena, client))
-  {
-    log_info(str8_lit("PASS: readdir_many\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: readdir_many\n"));
-    failed += 1;
-  }
-
-  if(test_readdir_long_names(arena, client))
-  {
-    log_info(str8_lit("PASS: readdir_long_names\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: readdir_long_names\n"));
-    failed += 1;
-  }
-
-  if(test_multiple_fids(arena, client))
-  {
-    log_info(str8_lit("PASS: multiple_fids\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: multiple_fids\n"));
-    failed += 1;
-  }
-
-  if(test_walk_partial(arena, client))
-  {
-    log_info(str8_lit("PASS: walk_partial\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: walk_partial\n"));
-    failed += 1;
-  }
-
-  if(test_walk_multiple(arena, client))
-  {
-    log_info(str8_lit("PASS: walk_multiple\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: walk_multiple\n"));
-    failed += 1;
-  }
-
-  if(test_permissions(arena, client))
-  {
-    log_info(str8_lit("PASS: permissions\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: permissions\n"));
-    failed += 1;
-  }
-
-  if(test_qid_consistency(arena, client))
-  {
-    log_info(str8_lit("PASS: qid_consistency\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: qid_consistency\n"));
-    failed += 1;
-  }
-
-  if(test_truncate_grow(arena, client))
-  {
-    log_info(str8_lit("PASS: truncate_grow\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: truncate_grow\n"));
-    failed += 1;
-  }
-
-  if(test_remove_nonexistent(arena, client))
-  {
-    log_info(str8_lit("PASS: remove_nonexistent\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: remove_nonexistent\n"));
-    failed += 1;
-  }
-
-  if(test_create_existing(arena, client))
-  {
-    log_info(str8_lit("PASS: create_existing\n"));
-    passed += 1;
-  }
-  else
-  {
-    log_error(str8_lit("FAIL: create_existing\n"));
-    failed += 1;
+    if(result)
+    {
+      log_infof("PASS: %S\n", tests[i].name);
+      passed += 1;
+    }
+    else
+    {
+      log_errorf("FAIL: %S\n", tests[i].name);
+      failed += 1;
+    }
   }
 
   client9p_unmount(arena, client);

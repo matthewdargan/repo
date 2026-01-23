@@ -1,9 +1,7 @@
-// clang-format off
 #include "base/inc.h"
 #include "9p/inc.h"
 #include "base/inc.c"
 #include "9p/inc.c"
-// clang-format on
 
 global FsContext9P *fs_context = 0;
 global WP_Pool *worker_pool = 0;

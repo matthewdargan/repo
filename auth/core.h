@@ -72,7 +72,7 @@ internal b32 auth_conv_is_expired(Auth_Conv *conv, u64 current_time, u64 timeout
 //~ Key Ring Functions
 
 internal Auth_KeyRing auth_keyring_alloc(Arena *arena, u64 capacity);
-internal void auth_keyring_add(Auth_KeyRing *ring, Auth_Key *key);
+internal b32 auth_keyring_add(Auth_KeyRing *ring, Auth_Key *key, String8 *out_error);
 internal Auth_Key *auth_keyring_lookup(Auth_KeyRing *ring, String8 user, String8 rp_id);
 internal void auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 rp_id);
 
@@ -81,5 +81,11 @@ internal void auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 rp_i
 
 internal String8 auth_keyring_save(Arena *arena, Auth_KeyRing *ring);
 internal b32 auth_keyring_load(Arena *arena, Auth_KeyRing *ring, String8 data);
+
+////////////////////////////////
+//~ Security Validation
+
+internal b32 auth_validate_credential_format(Auth_Key *key, String8 *out_error);
+internal b32 auth_validate_identifier(String8 str, String8 name, String8 *out_error);
 
 #endif // AUTH_CORE_H

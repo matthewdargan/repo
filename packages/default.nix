@@ -1,6 +1,7 @@
 {
   imports = [
     ./9auth.nix
+    ./9auth-test.nix
     ./9bind.nix
     ./9mount.nix
     ./9pfs.nix

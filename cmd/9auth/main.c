@@ -1,11 +1,9 @@
-// clang-format off
 #include "base/inc.h"
 #include "9p/inc.h"
 #include "auth/inc.h"
 #include "base/inc.c"
 #include "9p/inc.c"
 #include "auth/inc.c"
-// clang-format on
 
 ////////////////////////////////
 //~ Globals
@@ -440,7 +438,7 @@ entry_point(CmdLine *cmd_line)
     String8 data = os_data_from_file_path(arena, keys_path);
     if(data.size == 0)
     {
-      log_error(str8_lit("No credentials found\n"));
+      log_error(str8_lit("9auth: no credentials found\n"));
       log_scope_flush(arena);
       log_release(log);
       return;
@@ -449,7 +447,7 @@ entry_point(CmdLine *cmd_line)
     Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
     if(!auth_keyring_load(arena, &ring, data))
     {
-      log_error(str8_lit("Failed to load credentials\n"));
+      log_error(str8_lit("9auth: failed to load credentials\n"));
       log_scope_flush(arena);
       log_release(log);
       return;
@@ -458,14 +456,21 @@ entry_point(CmdLine *cmd_line)
     Auth_Key *key = auth_keyring_lookup(&ring, user, rp_id);
     if(key == 0)
     {
-      log_errorf("No credential found for user='%S' rp_id='%S'\n", user, rp_id);
+      log_errorf("9auth: no credential found for user='%S' rp_id='%S'\n", user, rp_id);
       log_scope_flush(arena);
       log_release(log);
       return;
     }
 
     Auth_KeyRing export_ring = auth_keyring_alloc(arena, 1);
-    auth_keyring_add(&export_ring, key);
+    String8 add_error = str8_zero();
+    if(!auth_keyring_add(&export_ring, key, &add_error))
+    {
+      log_errorf("9auth: failed to add credential: %S\n", add_error);
+      log_scope_flush(arena);
+      log_release(log);
+      return;
+    }
 
     String8 exported = auth_keyring_save(arena, &export_ring);
     fwrite(exported.str, 1, exported.size, stdout);
@@ -493,7 +498,7 @@ entry_point(CmdLine *cmd_line)
     String8 input = str8_list_join(arena, input_chunks, 0);
     if(input.size == 0)
     {
-      log_error(str8_lit("No data provided on stdin\n"));
+      log_error(str8_lit("9auth: no data provided on stdin\n"));
       log_scope_flush(arena);
       log_release(log);
       return;
@@ -502,7 +507,7 @@ entry_point(CmdLine *cmd_line)
     Auth_KeyRing import_ring = auth_keyring_alloc(arena, 0);
     if(!auth_keyring_load(arena, &import_ring, input))
     {
-      log_error(str8_lit("Failed to parse imported data\n"));
+      log_error(str8_lit("9auth: failed to parse imported data\n"));
       log_scope_flush(arena);
       log_release(log);
       return;
@@ -510,7 +515,7 @@ entry_point(CmdLine *cmd_line)
 
     if(import_ring.count == 0)
     {
-      log_error(str8_lit("No credentials in imported data\n"));
+      log_error(str8_lit("9auth: no credentials in imported data\n"));
       log_scope_flush(arena);
       log_release(log);
       return;
@@ -533,7 +538,12 @@ entry_point(CmdLine *cmd_line)
       {
         auth_keyring_remove(&ring, key->user, key->rp_id);
       }
-      auth_keyring_add(&ring, key);
+      String8 add_error = str8_zero();
+      if(!auth_keyring_add(&ring, key, &add_error))
+      {
+        log_errorf("9auth: failed to import credential for user='%S': %S\n", key->user, add_error);
+        continue;
+      }
     }
 
     String8 saved = auth_keyring_save(arena, &ring);
@@ -585,11 +595,17 @@ entry_point(CmdLine *cmd_line)
         auth_keyring_load(arena, &ring, existing);
       }
 
-      auth_keyring_add(&ring, &new_key);
-      String8 saved = auth_keyring_save(arena, &ring);
-      os_write_data_to_file_path(keys_path, saved);
-
-      log_info(str8_lit("9auth: registered credential\n"));
+      String8 add_error = str8_zero();
+      if(!auth_keyring_add(&ring, &new_key, &add_error))
+      {
+        log_errorf("9auth: failed to add credential: %S\n", add_error);
+      }
+      else
+      {
+        String8 saved = auth_keyring_save(arena, &ring);
+        os_write_data_to_file_path(keys_path, saved);
+        log_info(str8_lit("9auth: registered credential\n"));
+      }
     }
     else
     {
@@ -629,6 +645,21 @@ entry_point(CmdLine *cmd_line)
   }
 
   String8 keys_path = str8_lit("/var/lib/9auth/keys");
+  {
+    struct stat st;
+    if(stat((char *)keys_path.str, &st) == 0)
+    {
+      mode_t mode = st.st_mode & 0777;
+      if(mode != 0600)
+      {
+        log_errorf("9auth: security error: key file has insecure permissions %o (expected 0600)\n", mode);
+        log_scope_flush(arena);
+        log_release(log);
+        return;
+      }
+    }
+  }
+
   String8 data = os_data_from_file_path(arena, keys_path);
   Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
 

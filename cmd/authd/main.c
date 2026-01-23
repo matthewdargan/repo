@@ -1,9 +1,7 @@
-// clang-format off
 #include "base/inc.h"
 #include "http/inc.h"
 #include "base/inc.c"
 #include "http/inc.c"
-// clang-format on
 
 ////////////////////////////////
 //~ Globals & Configuration

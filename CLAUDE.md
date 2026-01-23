@@ -90,9 +90,9 @@ When writing code, always use base layer abstractions:
 
 ## Development Environment
 
-Development environment uses `direnv` with `.envrc`. Run `direnv allow` to load the development shell automatically when entering the repository. Development tools (clang, gdb, valgrind, clang-format, pre-commit hooks) are automatically on PATH.
+Development environment uses `direnv` with `.envrc`. Run `direnv allow` to load the development shell automatically when entering the repository. Development tools (clang, gdb, valgrind, pre-commit hooks) are automatically on PATH.
 
-Pre-commit hooks run automatically on commit and enforce clang-format and linting checks.
+Pre-commit hooks run automatically on commit and enforce linting checks.
 
 ## Building and Running
 

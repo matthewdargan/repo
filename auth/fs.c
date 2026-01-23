@@ -13,9 +13,11 @@ auth_fs_alloc(Arena *arena, Auth_RPC_State *rpc_state)
 internal void
 auth_fs_log(Auth_FS_State *fs, String8 entry)
 {
-  String8 entry_copy = str8_copy(fs->arena, entry);
-  str8_list_push(fs->arena, &fs->log_entries, entry_copy);
-  fs->log_size += entry_copy.size;
+  u64 timestamp = os_now_microseconds();
+  String8 timestamped_entry = str8f(fs->arena, "[%llu] %S", timestamp, entry);
+
+  str8_list_push(fs->arena, &fs->log_entries, timestamped_entry);
+  fs->log_size += timestamped_entry.size;
 }
 
 internal Auth_File_Info
@@ -158,8 +160,25 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
         *conv = new_conv;
         success = 1;
 
-        String8 log_entry = str8f(arena, "start: user=%S server=%S proto=%S role=%S\n", request.start.user,
-                                  request.start.server, request.start.proto, request.start.role);
+        String8 log_entry = str8f(arena, "start: user=%S server=%S proto=%S role=%S state=%d\n", request.start.user,
+                                  request.start.server, request.start.proto, request.start.role, new_conv->state);
+        auth_fs_log(fs, log_entry);
+      }
+      else
+      {
+        String8 log_entry = str8f(arena, "start_failed: user=%S server=%S error=%S\n", request.start.user,
+                                  request.start.server, response.error);
+        auth_fs_log(fs, log_entry);
+      }
+    }
+    else if(request.command == Auth_RPC_Command_Read)
+    {
+      Auth_RPC_Response response = auth_rpc_execute(arena, fs->rpc_state, *conv, request);
+      success = response.success;
+
+      if(*conv != 0 && (*conv)->state == Auth_State_ChallengeSent)
+      {
+        String8 log_entry = str8f(arena, "challenge_sent: user=%S\n", (*conv)->user);
         auth_fs_log(fs, log_entry);
       }
     }
@@ -169,6 +188,20 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
 
       Auth_RPC_Response response = auth_rpc_execute(arena, fs->rpc_state, *conv, request);
       success = response.success;
+
+      if(*conv != 0)
+      {
+        if(response.success && (*conv)->state == Auth_State_Done)
+        {
+          String8 log_entry = str8f(arena, "auth_complete: user=%S verified=%d\n", (*conv)->user, (*conv)->verified);
+          auth_fs_log(fs, log_entry);
+        }
+        else if(!response.success)
+        {
+          String8 log_entry = str8f(arena, "auth_failed: user=%S error=%S\n", (*conv)->user, response.error);
+          auth_fs_log(fs, log_entry);
+        }
+      }
     }
     else
     {

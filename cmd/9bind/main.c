@@ -1,9 +1,7 @@
 #include <sys/mount.h>
 
-// clang-format off
 #include "base/inc.h"
 #include "base/inc.c"
-// clang-format on
 
 ////////////////////////////////
 //~ Entry Point

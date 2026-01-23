@@ -4,7 +4,6 @@
 ////////////////////////////////
 //~ Base Includes
 
-// clang-format off
 #include "context_cracking.h"
 #include "core.h"
 #include "arena.h"
@@ -17,6 +16,5 @@
 #include "os.h"
 #include "log.h"
 #include "entry_point.h"
-// clang-format on
 
 #endif // INC_H

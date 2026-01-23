@@ -75,9 +75,19 @@ auth_keyring_alloc(Arena *arena, u64 capacity)
   return ring;
 }
 
-internal void
-auth_keyring_add(Auth_KeyRing *ring, Auth_Key *key)
+internal b32
+auth_keyring_add(Auth_KeyRing *ring, Auth_Key *key, String8 *out_error)
 {
+  String8 error = str8_zero();
+  if(!auth_validate_credential_format(key, &error))
+  {
+    if(out_error != 0)
+    {
+      *out_error = error;
+    }
+    return 0;
+  }
+
   if(ring->count >= ring->capacity)
   {
     u64 new_cap = ring->capacity * 2;
@@ -95,6 +105,8 @@ auth_keyring_add(Auth_KeyRing *ring, Auth_Key *key)
   dst->public_key_len = key->public_key_len;
   MemoryCopy(dst->public_key, key->public_key, key->public_key_len);
   ring->count += 1;
+
+  return 1;
 }
 
 internal Auth_Key *
@@ -195,9 +207,81 @@ auth_keyring_load(Arena *arena, Auth_KeyRing *ring, String8 data)
     key.public_key_len = pub_bytes.size;
     MemoryCopy(key.public_key, pub_bytes.str, pub_bytes.size);
 
-    auth_keyring_add(ring, &key);
+    if(!auth_keyring_add(ring, &key, 0))
+    {
+      scratch_end(scratch);
+      return 0;
+    }
   }
 
   scratch_end(scratch);
+  return 1;
+}
+
+////////////////////////////////
+//~ Security Validation
+
+internal b32
+auth_validate_identifier(String8 str, String8 name, String8 *out_error)
+{
+  if(str.size == 0)
+  {
+    *out_error = str8_lit("identifier cannot be empty");
+    return 0;
+  }
+
+  if(str.size > 256)
+  {
+    *out_error = str8_lit("identifier too long (max 256 chars)");
+    return 0;
+  }
+
+  for(u64 i = 0; i < str.size; i += 1)
+  {
+    u8 c = str.str[i];
+    if(c < 0x20 || c == 0x7F)
+    {
+      *out_error = str8_lit("identifier contains invalid characters");
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
+internal b32
+auth_validate_credential_format(Auth_Key *key, String8 *out_error)
+{
+  if(!auth_validate_identifier(key->user, str8_lit("user"), out_error))
+  {
+    return 0;
+  }
+  if(!auth_validate_identifier(key->rp_id, str8_lit("rp_id"), out_error))
+  {
+    return 0;
+  }
+
+  if(key->credential_id_len < 16)
+  {
+    *out_error = str8_lit("credential_id too short (min 16 bytes)");
+    return 0;
+  }
+  if(key->credential_id_len > 256)
+  {
+    *out_error = str8_lit("credential_id too long (max 256 bytes)");
+    return 0;
+  }
+
+  if(key->public_key_len < 32)
+  {
+    *out_error = str8_lit("public_key too short (min 32 bytes)");
+    return 0;
+  }
+  if(key->public_key_len > 256)
+  {
+    *out_error = str8_lit("public_key too long (max 256 bytes)");
+    return 0;
+  }
+
   return 1;
 }

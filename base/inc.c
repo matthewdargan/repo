@@ -1,7 +1,6 @@
 ////////////////////////////////
 //~ Base Includes
 
-// clang-format off
 #include "core.c"
 #include "arena.c"
 #include "math.c"
@@ -13,4 +12,3 @@
 #include "os.c"
 #include "log.c"
 #include "entry_point.c"
-// clang-format on
