@@ -6,7 +6,7 @@
 global FsContext9P *fs_context = 0;
 global WP_Pool *worker_pool = 0;
 global b32 require_auth = 0;
-global Client9P *auth_client = 0;
+global String8 auth_server_addr = {0};
 
 internal void
 fid_release(Server9P *server, ServerFid9P *fid)
@@ -102,50 +102,38 @@ srv_auth(ServerRequest9P *request)
     return;
   }
 
-  if(auth_client == 0)
+  String8 auth_addr = auth_server_addr.size > 0 ? auth_server_addr : str8_lit("unix!/var/run/9auth");
+  OS_Handle auth_handle = dial9p_connect(request->server->arena, auth_addr, str8_lit("unix"), str8_lit("9auth"));
+  if(os_handle_match(auth_handle, os_handle_zero()))
   {
-    Temp scratch = scratch_begin(&request->server->arena, 1);
-    OS_Handle auth_handle =
-        dial9p_connect(scratch.arena, str8_lit("unix!/var/run/9auth"), str8_lit("unix"), str8_lit("9auth"));
-    if(os_handle_match(auth_handle, os_handle_zero()))
-    {
-      scratch_end(scratch);
-      server9p_respond(request, str8_lit("9auth unavailable"));
-      return;
-    }
-
-    u64 auth_fd = auth_handle.u64[0];
-    auth_client = client9p_init(request->server->arena, auth_fd);
-    if(auth_client == 0)
-    {
-      os_file_close(auth_handle);
-      scratch_end(scratch);
-      server9p_respond(request, str8_lit("9auth connection failed"));
-      return;
-    }
-
-    ClientFid9P *auth_root =
-        client9p_attach(request->server->arena, auth_client, P9_FID_NONE, request->in_msg.user_name, str8_lit("/"));
-    if(auth_root == 0)
-    {
-      scratch_end(scratch);
-      server9p_respond(request, str8_lit("9auth attach failed"));
-      return;
-    }
-
-    scratch_end(scratch);
-  }
-
-  ClientFid9P *rpc_fid = client9p_fid_walk(request->server->arena, auth_client->root, str8_lit("rpc"));
-  if(rpc_fid == 0)
-  {
-    server9p_respond(request, str8_lit("9auth rpc file not found"));
+    server9p_respond(request, str8_lit("9auth unavailable"));
     return;
   }
 
-  if(!client9p_fid_open(request->server->arena, rpc_fid, P9_OpenFlag_ReadWrite))
+  u64 auth_fd = auth_handle.u64[0];
+  Client9P *auth_client = client9p_init(request->server->arena, auth_fd);
+  if(auth_client == 0)
   {
-    server9p_respond(request, str8_lit("9auth rpc file open failed"));
+    os_file_close(auth_handle);
+    server9p_respond(request, str8_lit("9auth connection failed"));
+    return;
+  }
+
+  ClientFid9P *auth_root =
+      client9p_attach(request->server->arena, auth_client, P9_FID_NONE, request->in_msg.user_name, str8_lit("/"));
+  if(auth_root == 0)
+  {
+    server9p_respond(request, str8_lit("9auth attach failed"));
+    return;
+  }
+
+  auth_client->root = auth_root;
+
+  String8 rpc_path = str8_lit("rpc");
+  ClientFid9P *rpc_fid = client9p_open(request->server->arena, auth_client, rpc_path, OS_AccessFlag_Read | OS_AccessFlag_Write);
+  if(rpc_fid == 0)
+  {
+    server9p_respond(request, str8_lit("9auth rpc file not found"));
     return;
   }
 
@@ -410,8 +398,19 @@ srv_read(ServerRequest9P *request)
       return;
     }
 
+    if(aux->auth_response_ready)
+    {
+      u8 *buffer = push_array(request->scratch.arena, u8, aux->auth_response_len);
+      MemoryCopy(buffer, aux->auth_response_buffer, aux->auth_response_len);
+      request->out_msg.payload_data = str8(buffer, aux->auth_response_len);
+      request->out_msg.byte_count = aux->auth_response_len;
+      aux->auth_response_ready = 0;
+      server9p_respond(request, str8_zero());
+      return;
+    }
+
     u8 *buffer = push_array(request->scratch.arena, u8, request->in_msg.byte_count);
-    s64 n = client9p_fid_pread(request->scratch.arena, aux->auth_rpc_fid, buffer, request->in_msg.byte_count,
+    s64 n = client9p_fid_pread(request->server->arena, aux->auth_rpc_fid, buffer, request->in_msg.byte_count,
                                request->in_msg.file_offset);
     if(n < 0)
     {
@@ -474,7 +473,7 @@ srv_write(ServerRequest9P *request)
       return;
     }
 
-    s64 n = client9p_fid_pwrite(request->scratch.arena, aux->auth_rpc_fid, (void *)request->in_msg.payload_data.str,
+    s64 n = client9p_fid_pwrite(request->server->arena, aux->auth_rpc_fid, (void *)request->in_msg.payload_data.str,
                                 request->in_msg.payload_data.size, request->in_msg.file_offset);
     if(n != (s64)request->in_msg.payload_data.size)
     {
@@ -482,11 +481,13 @@ srv_write(ServerRequest9P *request)
       return;
     }
 
-    u8 response[16];
-    s64 response_len = client9p_fid_pread(request->scratch.arena, aux->auth_rpc_fid, response, 16, 0);
+    s64 response_len = client9p_fid_pread(request->server->arena, aux->auth_rpc_fid, aux->auth_response_buffer,
+                                           sizeof(aux->auth_response_buffer), 0);
     if(response_len > 0)
     {
-      String8 response_str = str8(response, response_len);
+      aux->auth_response_len = response_len;
+      aux->auth_response_ready = 1;
+      String8 response_str = str8(aux->auth_response_buffer, response_len);
       if(str8_match(response_str, str8_lit("done"), 0))
       {
         aux->auth_verified = 1;
@@ -712,6 +713,7 @@ entry_point(CmdLine *cmd_line)
   String8 address = str8_zero();
   b32 readonly = cmd_line_has_flag(cmd_line, str8_lit("readonly"));
   require_auth = cmd_line_has_flag(cmd_line, str8_lit("require-auth"));
+  auth_server_addr = cmd_line_string(cmd_line, str8_lit("auth-server"));
 
   u64 worker_count = 0;
   String8 threads_str = cmd_line_string(cmd_line, str8_lit("threads"));
@@ -729,12 +731,13 @@ entry_point(CmdLine *cmd_line)
   {
     fprintf(stderr, "usage: 9pfs [options] <address>\n"
                     "options:\n"
-                    "  --root=<path>     Root directory to serve (default: current directory)\n"
-                    "  --readonly        Serve in read-only mode\n"
-                    "  --require-auth    Require authentication via 9auth daemon\n"
-                    "  --threads=<n>     Number of worker threads (default: max(4, cores/4))\n"
+                    "  --root=<path>        Root directory to serve (default: current directory)\n"
+                    "  --readonly           Serve in read-only mode\n"
+                    "  --require-auth       Require authentication via 9auth daemon\n"
+                    "  --auth-server=<addr> Auth server address (default: unix!/var/run/9auth)\n"
+                    "  --threads=<n>        Number of worker threads (default: max(4, cores/4))\n"
                     "arguments:\n"
-                    "  <address>         Dial string (e.g., tcp!host!port)\n");
+                    "  <address>            Dial string (e.g., tcp!host!port)\n");
     fflush(stderr);
   }
   else

@@ -111,6 +111,19 @@ server9p_get_request(Server9P *server)
   request->scratch = scratch;
   switch(f.type)
   {
+  case Msg9P_Tauth:
+  {
+    request->fid = server9p_fid_alloc(server, f.auth_fid);
+    if(request->fid == 0)
+    {
+      request->error = str8_lit("duplicate fid");
+    }
+    else
+    {
+      request->fid->user_id = str8_copy(server->arena, f.user_name);
+    }
+  }
+  break;
   case Msg9P_Tattach:
   {
     request->fid = server9p_fid_alloc(server, f.fid);

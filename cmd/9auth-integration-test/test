@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Manual integration test runner for 9auth end-to-end testing
+# Requires physical FIDO2 hardware (Yubikey)
+#
+# This test cannot run in Nix sandbox due to USB device access requirements.
+# Run this script directly to test with real FIDO2 hardware.
+
+set -e
+
+echo "Building packages..."
+nix build .#9auth-debug .#9pfs-debug .#9auth-integration-test-debug
+
+# Create temporary test directory
+testdir=$(mktemp -d)
+trap "rm -rf $testdir" EXIT
+
+mkdir -p "$testdir/var/lib/9auth"
+mkdir -p "$testdir/var/run"
+mkdir -p "$testdir/fs-root"
+
+# Create test files to verify authenticated access
+echo "Test file 1" > "$testdir/fs-root/test1.txt"
+echo "Test file 2" > "$testdir/fs-root/test2.txt"
+mkdir -p "$testdir/fs-root/subdir"
+echo "Nested file" > "$testdir/fs-root/subdir/nested.txt"
+
+export HOME="$testdir"
+auth_socket="$testdir/var/run/9auth"
+auth_keys="$testdir/var/lib/9auth/keys"
+fs_socket="$testdir/var/run/9pfs"
+
+echo "Starting 9auth daemon at $auth_socket..."
+./result/bin/9auth --socket-path="$auth_socket" --keys-path="$auth_keys" &
+auth_pid=$!
+trap "kill $auth_pid 2>/dev/null || true; rm -rf $testdir" EXIT
+sleep 2
+
+echo "Starting 9pfs server at $fs_socket (auth required)..."
+./result-1/bin/9pfs --root="$testdir/fs-root" --require-auth --auth-server=unix!"$auth_socket" unix!"$fs_socket" &
+fs_pid=$!
+trap "kill $fs_pid $auth_pid 2>/dev/null || true; rm -rf $testdir" EXIT
+sleep 2
+
+# Run the integration test
+./result-2/bin/9auth-integration-test unix!"$auth_socket" unix!"$fs_socket"
+
+exit_code=$?
+
+kill $fs_pid $auth_pid 2>/dev/null || true
+wait $fs_pid $auth_pid 2>/dev/null || true
+
+exit $exit_code

@@ -265,9 +265,6 @@ internal b32
 auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fido2_Assertion *out_assertion,
                          String8 *out_error)
 {
-  fido_dev_t *dev = NULL;
-  fido_assert_t *assert = NULL;
-
   fido_init(0);
 
   Auth_Fido2_DeviceList devices = auth_fido2_enumerate_devices(arena);
@@ -279,7 +276,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
 
   Auth_Fido2_DeviceInfo *device = devices.first;
 
-  dev = fido_dev_new();
+  fido_dev_t *dev = fido_dev_new();
   if(dev == NULL)
   {
     *out_error = str8_lit("Failed to allocate FIDO2 device");
@@ -300,7 +297,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
     return 0;
   }
 
-  assert = fido_assert_new();
+  fido_assert_t *assert = fido_assert_new();
   if(assert == NULL)
   {
     *out_error = str8_lit("Failed to allocate assertion");
@@ -405,16 +402,22 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
 }
 
 internal b32
-auth_fido2_verify_signature(Auth_Fido2_VerifyParams *params, String8 *out_error)
+auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, String8 *out_error)
 {
-  es256_pk_t *pk = NULL;
-  EVP_PKEY *pkey = NULL;
-  EVP_PKEY_CTX *pctx = NULL;
+  fido_init(0);
 
-  pk = es256_pk_new();
+  fido_assert_t *assert = fido_assert_new();
+  if(assert == NULL)
+  {
+    *out_error = str8_lit("Failed to allocate assert");
+    return 0;
+  }
+
+  es256_pk_t *pk = es256_pk_new();
   if(pk == NULL)
   {
     *out_error = str8_lit("Failed to allocate public key");
+    fido_assert_free(&assert);
     return 0;
   }
 
@@ -423,63 +426,71 @@ auth_fido2_verify_signature(Auth_Fido2_VerifyParams *params, String8 *out_error)
   {
     *out_error = str8_lit("Failed to parse public key");
     es256_pk_free(&pk);
+    fido_assert_free(&assert);
     return 0;
   }
 
-  pkey = es256_pk_to_EVP_PKEY(pk);
-  if(pkey == NULL)
+  Temp temp = scratch_begin(&arena, 1);
+  String8 rp_id_copy = str8_copy(temp.arena, params->rp_id);
+  char *rp_id_cstr = (char *)rp_id_copy.str;
+  r = fido_assert_set_rp(assert, rp_id_cstr);
+  scratch_end(temp);
+  if(r != FIDO_OK)
   {
-    *out_error = str8_lit("Failed to convert ES256 key to EVP_PKEY");
+    *out_error = str8_lit("Failed to set RP ID");
     es256_pk_free(&pk);
+    fido_assert_free(&assert);
     return 0;
   }
 
-  u8 hash_input[256 + 32];
-  if(params->auth_data_len + 32 > sizeof(hash_input))
+  r = fido_assert_set_clientdata_hash(assert, params->challenge, 32);
+  if(r != FIDO_OK)
   {
-    *out_error = str8_lit("Authenticator data too large");
-    EVP_PKEY_free(pkey);
+    *out_error = str8_lit("Failed to set clientdata hash");
     es256_pk_free(&pk);
+    fido_assert_free(&assert);
     return 0;
   }
 
-  MemoryCopy(hash_input, params->auth_data, params->auth_data_len);
-  MemoryCopy(hash_input + params->auth_data_len, params->challenge, 32);
-
-  u8 hash[32];
-  SHA256(hash_input, params->auth_data_len + 32, hash);
-
-  pctx = EVP_PKEY_CTX_new(pkey, NULL);
-  if(pctx == NULL)
+  r = fido_assert_set_count(assert, 1);
+  if(r != FIDO_OK)
   {
-    *out_error = str8_lit("Failed to create verification context");
-    EVP_PKEY_free(pkey);
+    *out_error = str8_lit("Failed to set count");
     es256_pk_free(&pk);
+    fido_assert_free(&assert);
     return 0;
   }
 
-  if(EVP_PKEY_verify_init(pctx) <= 0)
+  r = fido_assert_set_authdata(assert, 0, params->auth_data, params->auth_data_len);
+  if(r != FIDO_OK)
   {
-    *out_error = str8_lit("Failed to initialize verification");
-    EVP_PKEY_CTX_free(pctx);
-    EVP_PKEY_free(pkey);
+    *out_error = str8_lit("Failed to set authdata");
     es256_pk_free(&pk);
+    fido_assert_free(&assert);
     return 0;
   }
 
-  int verify_result = EVP_PKEY_verify(pctx, params->signature, params->signature_len, hash, 32);
-  if(verify_result != 1)
+  r = fido_assert_set_sig(assert, 0, params->signature, params->signature_len);
+  if(r != FIDO_OK)
+  {
+    *out_error = str8_lit("Failed to set signature");
+    es256_pk_free(&pk);
+    fido_assert_free(&assert);
+    return 0;
+  }
+
+  r = fido_assert_verify(assert, 0, COSE_ES256, pk);
+
+  if(r != FIDO_OK)
   {
     *out_error = str8_lit("Signature verification failed");
-    EVP_PKEY_CTX_free(pctx);
-    EVP_PKEY_free(pkey);
     es256_pk_free(&pk);
+    fido_assert_free(&assert);
     return 0;
   }
 
-  EVP_PKEY_CTX_free(pctx);
-  EVP_PKEY_free(pkey);
   es256_pk_free(&pk);
+  fido_assert_free(&assert);
 
   return 1;
 }

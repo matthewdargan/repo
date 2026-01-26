@@ -2,11 +2,13 @@
 //~ Filesystem Operations
 
 internal Auth_FS_State *
-auth_fs_alloc(Arena *arena, Auth_RPC_State *rpc_state)
+auth_fs_alloc(Arena *arena, Auth_RPC_State *rpc_state, String8 keys_path)
 {
   Auth_FS_State *fs = push_array(arena, Auth_FS_State, 1);
   fs->arena = arena;
   fs->rpc_state = rpc_state;
+  fs->keys_path = str8_copy(arena, keys_path);
+  fs->mutex = mutex_alloc();
   return fs;
 }
 
@@ -16,8 +18,11 @@ auth_fs_log(Auth_FS_State *fs, String8 entry)
   u64 timestamp = os_now_microseconds();
   String8 timestamped_entry = str8f(fs->arena, "[%llu] %S", timestamp, entry);
 
-  str8_list_push(fs->arena, &fs->log_entries, timestamped_entry);
-  fs->log_size += timestamped_entry.size;
+  MutexScope(fs->mutex)
+  {
+    str8_list_push(fs->arena, &fs->log_entries, timestamped_entry);
+    fs->log_size += timestamped_entry.size;
+  }
 }
 
 internal Auth_File_Info
@@ -59,7 +64,10 @@ auth_fs_lookup(Auth_FS_State *fs, String8 path)
     info.name = str8_lit("log");
     info.qid_path = 3;
     info.mode = 0400;
-    info.size = fs->log_size;
+    MutexScope(fs->mutex)
+    {
+      info.size = fs->log_size;
+    }
   }
 
   return info;
@@ -122,7 +130,11 @@ auth_fs_read(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Con
 
   case Auth_File_Log:
   {
-    String8 log_content = str8_list_join(arena, fs->log_entries, 0);
+    String8 log_content = str8_zero();
+    MutexScope(fs->mutex)
+    {
+      log_content = str8_list_join(arena, fs->log_entries, 0);
+    }
     if(offset < log_content.size)
     {
       u64 remaining = log_content.size - offset;
@@ -153,7 +165,7 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
     if(request.command == Auth_RPC_Command_Start)
     {
       Auth_Conv *new_conv = 0;
-      Auth_RPC_Response response = auth_rpc_handle_start(arena, fs->rpc_state, &new_conv, request.start);
+      Auth_RPC_Response response = auth_rpc_handle_start(fs->rpc_state, &new_conv, request.start);
 
       if(response.success)
       {
@@ -207,6 +219,86 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
     {
       Auth_RPC_Response response = auth_rpc_execute(arena, fs->rpc_state, *conv, request);
       success = response.success;
+    }
+  }
+  break;
+
+  case Auth_File_Ctl:
+  {
+    String8 trimmed = str8_skip_chop_whitespace(data);
+    String8List parts = str8_split(arena, trimmed, (u8 *)" ", 1, 0);
+    if(parts.node_count == 0)
+    {
+      break;
+    }
+
+    String8 command = parts.first->string;
+    if(str8_match(command, str8_lit("register"), 0))
+    {
+      String8 user = str8_zero();
+      String8 rp_id = str8_zero();
+      String8 rp_name = str8_zero();
+
+      for(String8Node *node = parts.first->next; node != 0; node = node->next)
+      {
+        String8 param = node->string;
+        String8List kv = str8_split(arena, param, (u8 *)"=", 1, 0);
+        if(kv.node_count != 2)
+        {
+          continue;
+        }
+
+        String8 key = kv.first->string;
+        String8 value = kv.first->next->string;
+
+        if(str8_match(key, str8_lit("user"), 0))
+        {
+          user = value;
+        }
+        else if(str8_match(key, str8_lit("rp_id"), 0))
+        {
+          rp_id = value;
+        }
+        else if(str8_match(key, str8_lit("rp_name"), 0))
+        {
+          rp_name = value;
+        }
+      }
+
+      if(user.size == 0 || rp_id.size == 0 || rp_name.size == 0)
+      {
+        String8 log_entry = str8_lit("register_failed: missing required parameters\n");
+        auth_fs_log(fs, log_entry);
+        break;
+      }
+
+      Auth_Fido2_RegisterParams reg_params = {0};
+      reg_params.rp_id = rp_id;
+      reg_params.rp_name = rp_name;
+      reg_params.user = user;
+
+      Auth_Key new_key = {0};
+      String8 error = str8_zero();
+      if(!auth_fido2_register_credential(arena, reg_params, &new_key, &error))
+      {
+        String8 log_entry = str8f(arena, "register_failed: user=%S rp_id=%S error=%S\n", user, rp_id, error);
+        auth_fs_log(fs, log_entry);
+        break;
+      }
+
+      if(!auth_keyring_add(fs->rpc_state->keyring, &new_key, &error))
+      {
+        String8 log_entry = str8f(arena, "register_failed: user=%S rp_id=%S error=%S\n", user, rp_id, error);
+        auth_fs_log(fs, log_entry);
+        break;
+      }
+
+      String8 saved = auth_keyring_save(arena, fs->rpc_state->keyring);
+      os_write_data_to_file_path(fs->keys_path, saved);
+
+      String8 log_entry = str8f(arena, "register_success: user=%S rp_id=%S\n", user, rp_id);
+      auth_fs_log(fs, log_entry);
+      success = 1;
     }
   }
   break;

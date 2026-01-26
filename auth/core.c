@@ -222,7 +222,7 @@ auth_keyring_load(Arena *arena, Auth_KeyRing *ring, String8 data)
 //~ Security Validation
 
 internal b32
-auth_validate_identifier(String8 str, String8 name, String8 *out_error)
+auth_validate_identifier(String8 str, String8 *out_error)
 {
   if(str.size == 0)
   {
@@ -252,11 +252,11 @@ auth_validate_identifier(String8 str, String8 name, String8 *out_error)
 internal b32
 auth_validate_credential_format(Auth_Key *key, String8 *out_error)
 {
-  if(!auth_validate_identifier(key->user, str8_lit("user"), out_error))
+  if(!auth_validate_identifier(key->user, out_error))
   {
     return 0;
   }
-  if(!auth_validate_identifier(key->rp_id, str8_lit("rp_id"), out_error))
+  if(!auth_validate_identifier(key->rp_id, out_error))
   {
     return 0;
   }
