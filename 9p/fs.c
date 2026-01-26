@@ -8,6 +8,7 @@ fs9p_context_alloc(Arena *arena, String8 root_path, String8 tmp_path, b32 readon
   ctx->root_path = str8_copy(arena, root_path);
   ctx->tmp_path = str8_copy(arena, tmp_path);
   ctx->tmp_arena = arena_alloc();
+  ctx->tmp_mutex = mutex_alloc();
   ctx->readonly = readonly;
   ctx->tmp_qid_count = 1;
   ctx->backend = backend;
@@ -396,14 +397,17 @@ fs9p_open(Arena *arena, FsContext9P *ctx, String8 path, u32 mode)
 
   if(ctx->backend == StorageBackend9P_ArenaTemp)
   {
-    TempNode9P *node = temp9p_open(ctx, path);
-    if(node != 0)
+    MutexScope(ctx->tmp_mutex)
     {
-      handle->tmp_node = node;
-      handle->is_directory = node->is_directory;
-      if(mode & P9_OpenFlag_Truncate && !node->is_directory)
+      TempNode9P *node = temp9p_open(ctx, path);
+      if(node != 0)
       {
-        node->content.size = 0;
+        handle->tmp_node = node;
+        handle->is_directory = node->is_directory;
+        if(mode & P9_OpenFlag_Truncate && !node->is_directory)
+        {
+          node->content.size = 0;
+        }
       }
     }
     return handle;
@@ -469,7 +473,12 @@ fs9p_read(Arena *arena, FsHandle9P *handle, u64 offset, u64 count)
 {
   if(handle->tmp_node != 0)
   {
-    return temp9p_read(arena, handle->tmp_node, offset, count);
+    String8 result = str8_zero();
+    MutexScope(handle->ctx->tmp_mutex)
+    {
+      result = temp9p_read(arena, handle->tmp_node, offset, count);
+    }
+    return result;
   }
 
   if(handle->fd < 0)
@@ -497,7 +506,12 @@ fs9p_write(FsHandle9P *handle, u64 offset, String8 data)
 {
   if(handle->tmp_node != 0 && handle->ctx != 0)
   {
-    return temp9p_write(handle->ctx->tmp_arena, handle->tmp_node, offset, data);
+    u64 result = 0;
+    MutexScope(handle->ctx->tmp_mutex)
+    {
+      result = temp9p_write(handle->ctx->tmp_arena, handle->tmp_node, offset, data);
+    }
+    return result;
   }
 
   if(handle->fd < 0)
@@ -524,7 +538,12 @@ fs9p_create(FsContext9P *ctx, String8 path, u32 permissions, u32 mode)
 {
   if(ctx->backend == StorageBackend9P_ArenaTemp)
   {
-    return temp9p_create(ctx->tmp_arena, ctx, path, permissions);
+    b32 result = 0;
+    MutexScope(ctx->tmp_mutex)
+    {
+      result = temp9p_create(ctx->tmp_arena, ctx, path, permissions);
+    }
+    return result;
   }
 
   Temp scratch = scratch_begin(0, 0);
@@ -573,7 +592,10 @@ fs9p_remove(FsContext9P *ctx, String8 path)
 {
   if(ctx->backend == StorageBackend9P_ArenaTemp)
   {
-    temp9p_remove(ctx, path);
+    MutexScope(ctx->tmp_mutex)
+    {
+      temp9p_remove(ctx, path);
+    }
     return;
   }
 
@@ -597,8 +619,13 @@ fs9p_stat(Arena *arena, FsContext9P *ctx, String8 path)
 {
   if(ctx->backend == StorageBackend9P_ArenaTemp)
   {
-    TempNode9P *node = temp9p_node_lookup(ctx->tmp_root, path);
-    return temp9p_stat(arena, node);
+    Dir9P result = {0};
+    MutexScope(ctx->tmp_mutex)
+    {
+      TempNode9P *node = temp9p_node_lookup(ctx->tmp_root, path);
+      result = temp9p_stat(arena, node);
+    }
+    return result;
   }
 
   Dir9P dir = dir9p_zero();
@@ -634,8 +661,11 @@ fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir)
 {
   if(ctx->backend == StorageBackend9P_ArenaTemp)
   {
-    TempNode9P *node = temp9p_node_lookup(ctx->tmp_root, path);
-    temp9p_wstat(ctx->tmp_arena, node, dir);
+    MutexScope(ctx->tmp_mutex)
+    {
+      TempNode9P *node = temp9p_node_lookup(ctx->tmp_root, path);
+      temp9p_wstat(ctx->tmp_arena, node, dir);
+    }
     return 1;
   }
 
@@ -799,11 +829,14 @@ fs9p_opendir(FsContext9P *ctx, String8 path, DirIterator9P *iter)
 
   if(ctx->backend == StorageBackend9P_ArenaTemp)
   {
-    TempNode9P *node = temp9p_node_lookup(ctx->tmp_root, path);
-    if(node != 0 && node->is_directory)
+    MutexScope(ctx->tmp_mutex)
     {
-      iter->tmp_node = node;
-      iter->tmp_current = node->first_child;
+      TempNode9P *node = temp9p_node_lookup(ctx->tmp_root, path);
+      if(node != 0 && node->is_directory)
+      {
+        iter->tmp_node = node;
+        iter->tmp_current = node->first_child;
+      }
     }
     return 1;
   }
@@ -825,7 +858,12 @@ fs9p_readdir(Arena *result_arena, Arena *cache_arena, FsContext9P *ctx, DirItera
 {
   if(iter->tmp_node != 0)
   {
-    return temp9p_readdir(result_arena, iter->tmp_node, &iter->tmp_current, offset, count);
+    String8 result = str8_zero();
+    MutexScope(ctx->tmp_mutex)
+    {
+      result = temp9p_readdir(result_arena, iter->tmp_node, &iter->tmp_current, offset, count);
+    }
+    return result;
   }
 
   if(iter->dir_handle == 0)

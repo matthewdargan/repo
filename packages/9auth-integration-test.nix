@@ -7,11 +7,10 @@
     cmdPackage = import ../flake-parts/cmd-package.nix {inherit lib pkgs;};
   in {
     packages = cmdPackage.mkCmdPackage {
-      pname = "9auth";
-      description = "Authentication agent for 9P with FIDO2/Yubikey support";
+      pname = "9auth-integration-test";
+      description = "9auth integration test suite";
       version = "0.1.0";
       buildInputs = [pkgs.libfido2];
-      extraLinkFlags = "-lm -lfido2";
     };
   };
 }

@@ -39,6 +39,7 @@ struct FsContext9P
 {
   String8 root_path;
   String8 tmp_path;
+  Mutex tmp_mutex;
   Arena *tmp_arena;
   TempNode9P *tmp_root;
   u64 tmp_qid_count;
@@ -93,6 +94,9 @@ struct FidAuxiliary9P
   b32 auth_verified;
   String8 auth_user;
   ClientFid9P *auth_rpc_fid;
+  u8 auth_response_buffer[16];
+  u64 auth_response_len;
+  b32 auth_response_ready;
   u8 path_buffer[PATH_MAX];
 };
 

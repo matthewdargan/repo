@@ -7,6 +7,7 @@ auth_rpc_state_alloc(Arena *arena, Auth_KeyRing *keyring)
   Auth_RPC_State *state = push_array(arena, Auth_RPC_State, 1);
   state->arena = arena;
   state->keyring = keyring;
+  state->mutex = mutex_alloc();
   state->next_conv_id = 1;
   return state;
 }
@@ -66,12 +67,16 @@ auth_rpc_parse(Arena *arena, String8 command_line)
   {
     request.command = Auth_RPC_Command_Read;
   }
+  else
+  {
+    request.command = Auth_RPC_Command_Write;
+  }
 
   return request;
 }
 
 internal Auth_RPC_Response
-auth_rpc_handle_start(Arena *arena, Auth_RPC_State *state, Auth_Conv **out_conv, Auth_RPC_StartParams params)
+auth_rpc_handle_start(Auth_RPC_State *state, Auth_Conv **out_conv, Auth_RPC_StartParams params)
 {
   Auth_RPC_Response response = {0};
 
@@ -91,9 +96,14 @@ auth_rpc_handle_start(Arena *arena, Auth_RPC_State *state, Auth_Conv **out_conv,
     return response;
   }
 
-  Auth_Conv *conv = auth_conv_alloc(arena, state->next_conv_id, params.user, params.server);
-  state->next_conv_id += 1;
-  SLLQueuePush(state->conv_first, state->conv_last, conv);
+  Auth_Conv *conv = 0;
+  MutexScope(state->mutex)
+  {
+    conv = auth_conv_alloc(state->arena, state->next_conv_id, params.user, params.server);
+    conv->role = str8_copy(state->arena, params.role);
+    state->next_conv_id += 1;
+    SLLQueuePush(state->conv_first, state->conv_last, conv);
+  }
 
   if(str8_match(params.role, str8_lit("server"), 0))
   {
@@ -121,7 +131,6 @@ auth_rpc_handle_start(Arena *arena, Auth_RPC_State *state, Auth_Conv **out_conv,
 
   *out_conv = conv;
   response.success = 1;
-  response.data = str8_lit("ok");
   return response;
 }
 
@@ -148,7 +157,7 @@ auth_rpc_handle_read(Arena *arena, Auth_Conv *conv)
 
   case Auth_State_Done:
   {
-    if(conv->auth_data_len > 0 && conv->signature_len > 0)
+    if(str8_match(conv->role, str8_lit("client"), 0) && conv->auth_data_len > 0 && conv->signature_len > 0)
     {
       // [auth_data_len:4][auth_data][signature]
       u64 total_len = 4 + conv->auth_data_len + conv->signature_len;
@@ -239,7 +248,6 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
     conv->verified = 1;
 
     response.success = 1;
-    response.data = str8_lit("ok");
   }
   break;
 
@@ -281,6 +289,7 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
     }
 
     Auth_Fido2_VerifyParams verify_params = {0};
+    verify_params.rp_id = key->rp_id;
     MemoryCopy(verify_params.challenge, conv->challenge, 32);
     verify_params.auth_data = conv->auth_data;
     verify_params.auth_data_len = conv->auth_data_len;
@@ -290,7 +299,7 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
     verify_params.public_key_len = key->public_key_len;
 
     String8 error = str8_zero();
-    if(!auth_fido2_verify_signature(&verify_params, &error))
+    if(!auth_fido2_verify_signature(arena, &verify_params, &error))
     {
       response.error = error;
       conv->state = Auth_State_Error;
@@ -302,7 +311,6 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
     conv->verified = 1;
 
     response.success = 1;
-    response.data = str8_lit("ok");
   }
   break;
 
@@ -326,7 +334,7 @@ auth_rpc_execute(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Auth_RPC_
   case Auth_RPC_Command_Start:
   {
     Auth_Conv *new_conv = 0;
-    response = auth_rpc_handle_start(arena, state, &new_conv, request.start);
+    response = auth_rpc_handle_start(state, &new_conv, request.start);
   }
   break;
 

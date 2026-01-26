@@ -6,7 +6,6 @@
 
 #include <fido.h>
 #include <fido/es256.h>
-#include <openssl/sha.h>
 
 ////////////////////////////////
 //~ Registration
@@ -48,6 +47,7 @@ struct Auth_Fido2_Assertion
 typedef struct Auth_Fido2_VerifyParams Auth_Fido2_VerifyParams;
 struct Auth_Fido2_VerifyParams
 {
+  String8 rp_id;
   u8 challenge[32];
   u8 *auth_data;
   u64 auth_data_len;
@@ -88,6 +88,6 @@ internal b32 auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterPar
                                             String8 *out_error);
 internal b32 auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params,
                                       Auth_Fido2_Assertion *out_assertion, String8 *out_error);
-internal b32 auth_fido2_verify_signature(Auth_Fido2_VerifyParams *params, String8 *out_error);
+internal b32 auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, String8 *out_error);
 
 #endif // AUTH_FIDO2_H

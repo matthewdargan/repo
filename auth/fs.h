@@ -35,6 +35,8 @@ struct Auth_FS_State
 {
   Arena *arena;
   Auth_RPC_State *rpc_state;
+  String8 keys_path;
+  Mutex mutex;
   String8List log_entries;
   u64 log_size;
 };
@@ -42,7 +44,7 @@ struct Auth_FS_State
 ////////////////////////////////
 //~ Filesystem Operations
 
-internal Auth_FS_State *auth_fs_alloc(Arena *arena, Auth_RPC_State *rpc_state);
+internal Auth_FS_State *auth_fs_alloc(Arena *arena, Auth_RPC_State *rpc_state, String8 keys_path);
 internal void auth_fs_log(Auth_FS_State *fs, String8 entry);
 
 internal Auth_File_Info auth_fs_lookup(Auth_FS_State *fs, String8 path);

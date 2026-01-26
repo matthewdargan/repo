@@ -1,6 +1,19 @@
 ////////////////////////////////
 //~ Client Connection
 
+internal String8
+get_user_name(Arena *arena)
+{
+  uid_t uid = getuid();
+  struct passwd *pw = getpwuid(uid);
+  if(pw == 0)
+  {
+    return str8_lit("none");
+  }
+  String8 name = str8_cstring(pw->pw_name);
+  return str8_copy(arena, name);
+}
+
 internal Client9P *
 client9p_init(Arena *arena, u64 fd)
 {
@@ -16,26 +29,13 @@ client9p_init(Arena *arena, u64 fd)
   return client;
 }
 
-internal String8
-get_user_name(Arena *arena)
-{
-  uid_t uid = getuid();
-  struct passwd *pw = getpwuid(uid);
-  if(pw == 0)
-  {
-    return str8_lit("none");
-  }
-  String8 name = str8_cstring(pw->pw_name);
-  return str8_copy(arena, name);
-}
-
 internal ClientFid9P *
-client9p_auth(Arena *arena, Client9P *server_client, String8 user, String8 attach_path)
+client9p_auth(Arena *arena, Client9P *server_client, String8 auth_server, String8 user_name, String8 attach_path)
 {
   Temp scratch = scratch_begin(&arena, 1);
 
-  OS_Handle auth_handle =
-      dial9p_connect(scratch.arena, str8_lit("unix!/var/run/9auth"), str8_lit("unix"), str8_lit("9auth"));
+  String8 auth_addr = auth_server.size > 0 ? auth_server : str8_lit("unix!/var/run/9auth");
+  OS_Handle auth_handle = dial9p_connect(scratch.arena, auth_addr, str8_lit("unix"), str8_lit("9auth"));
   if(os_handle_match(auth_handle, os_handle_zero()))
   {
     scratch_end(scratch);
@@ -51,7 +51,7 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 user, String8 attac
     return 0;
   }
 
-  ClientFid9P *auth_root = client9p_attach(arena, auth_client, P9_FID_NONE, user, str8_lit("/"));
+  ClientFid9P *auth_root = client9p_attach(arena, auth_client, P9_FID_NONE, user_name, str8_lit("/"));
   if(auth_root == 0)
   {
     os_file_close(auth_handle);
@@ -74,7 +74,7 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 user, String8 attac
     return 0;
   }
 
-  ClientFid9P *server_auth_fid = client9p_tauth(arena, server_client, user, attach_path);
+  ClientFid9P *server_auth_fid = client9p_tauth(arena, server_client, user_name, attach_path);
   if(server_auth_fid == 0)
   {
     os_file_close(auth_handle);
@@ -82,7 +82,7 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 user, String8 attac
     return 0;
   }
 
-  String8 start_cmd = str8f(scratch.arena, "start proto=fido2 role=client user=%S server=%S", user, attach_path);
+  String8 start_cmd = str8f(scratch.arena, "start proto=fido2 role=client user=%S server=%S", user_name, attach_path);
   s64 write_result = client9p_fid_pwrite(arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
   if(write_result != (s64)start_cmd.size)
   {
@@ -142,7 +142,7 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 user, String8 attac
 }
 
 internal Client9P *
-client9p_mount(Arena *arena, u64 fd, String8 attach_path, b32 use_auth)
+client9p_mount(Arena *arena, u64 fd, String8 auth_server, String8 attach_path, b32 use_auth)
 {
   Client9P *client = client9p_init(arena, fd);
   if(client == 0)
@@ -154,7 +154,7 @@ client9p_mount(Arena *arena, u64 fd, String8 attach_path, b32 use_auth)
   u32 auth_fid_num = P9_FID_NONE;
   if(use_auth)
   {
-    ClientFid9P *auth_fid = client9p_auth(arena, client, user, attach_path);
+    ClientFid9P *auth_fid = client9p_auth(arena, client, auth_server, user, attach_path);
     if(auth_fid != 0)
     {
       auth_fid_num = auth_fid->fid;

@@ -25,6 +25,7 @@ struct Auth_Conv
   u64 tag;
   String8 user;
   String8 server;
+  String8 role;
   Auth_State state;
   u64 start_time;
   u8 challenge[32];
@@ -86,6 +87,6 @@ internal b32 auth_keyring_load(Arena *arena, Auth_KeyRing *ring, String8 data);
 //~ Security Validation
 
 internal b32 auth_validate_credential_format(Auth_Key *key, String8 *out_error);
-internal b32 auth_validate_identifier(String8 str, String8 name, String8 *out_error);
+internal b32 auth_validate_identifier(String8 str, String8 *out_error);
 
 #endif // AUTH_CORE_H

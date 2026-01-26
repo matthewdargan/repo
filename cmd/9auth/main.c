@@ -9,6 +9,7 @@
 //~ Globals
 
 global Auth_FS_State *auth_fs_state = 0;
+global WP_Pool *worker_pool = 0;
 
 ////////////////////////////////
 //~ Fid Auxiliary
@@ -405,6 +406,13 @@ handle_connection(OS_Handle connection_socket)
   scratch_end(scratch);
 }
 
+internal void
+handle_connection_task(void *params)
+{
+  OS_Handle connection = *(OS_Handle *)params;
+  handle_connection(connection);
+}
+
 ////////////////////////////////
 //~ Entry Point
 
@@ -412,14 +420,31 @@ internal void
 entry_point(CmdLine *cmd_line)
 {
   Arena *arena = arena_alloc();
-  Log *log = log_alloc();
-  log_select(log);
-  log_scope_begin();
 
   b32 add_credential = cmd_line_has_flag(cmd_line, str8_lit("a"));
   b32 list_credentials = cmd_line_has_flag(cmd_line, str8_lit("l"));
   b32 export_credential = cmd_line_has_flag(cmd_line, str8_lit("export"));
   b32 import_credential = cmd_line_has_flag(cmd_line, str8_lit("import"));
+
+  String8 socket_path = cmd_line_string(cmd_line, str8_lit("socket-path"));
+  if(socket_path.size == 0)
+  {
+    socket_path = str8_lit("/var/run/9auth");
+  }
+  String8 socket_addr = str8f(arena, "unix!%S", socket_path);
+
+  String8 keys_path = cmd_line_string(cmd_line, str8_lit("keys-path"));
+  if(keys_path.size == 0)
+  {
+    keys_path = str8_lit("/var/lib/9auth/keys");
+  }
+
+  u64 worker_count = 0;
+  String8 threads_str = cmd_line_string(cmd_line, str8_lit("threads"));
+  if(threads_str.size > 0)
+  {
+    worker_count = u64_from_str8(threads_str, 10);
+  }
 
   if(export_credential)
   {
@@ -428,37 +453,33 @@ entry_point(CmdLine *cmd_line)
 
     if(user.size == 0 || rp_id.size == 0)
     {
-      log_error(str8_lit("usage: 9auth --export --user=<user> --rp_id=<rp_id>\n"));
-      log_scope_flush(arena);
-      log_release(log);
+      fprintf(stderr, "usage: 9auth --export --user=<user> --rp_id=<rp_id>\n");
+      fflush(stderr);
       return;
     }
 
-    String8 keys_path = str8_lit("/var/lib/9auth/keys");
     String8 data = os_data_from_file_path(arena, keys_path);
     if(data.size == 0)
     {
-      log_error(str8_lit("9auth: no credentials found\n"));
-      log_scope_flush(arena);
-      log_release(log);
+      fprintf(stderr, "9auth: no credentials found\n");
+      fflush(stderr);
       return;
     }
 
     Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
     if(!auth_keyring_load(arena, &ring, data))
     {
-      log_error(str8_lit("9auth: failed to load credentials\n"));
-      log_scope_flush(arena);
-      log_release(log);
+      fprintf(stderr, "9auth: failed to load credentials\n");
+      fflush(stderr);
       return;
     }
 
     Auth_Key *key = auth_keyring_lookup(&ring, user, rp_id);
     if(key == 0)
     {
-      log_errorf("9auth: no credential found for user='%S' rp_id='%S'\n", user, rp_id);
-      log_scope_flush(arena);
-      log_release(log);
+      fprintf(stderr, "9auth: no credential found for user='%.*s' rp_id='%.*s'\n",
+              (int)user.size, user.str, (int)rp_id.size, rp_id.str);
+      fflush(stderr);
       return;
     }
 
@@ -466,9 +487,8 @@ entry_point(CmdLine *cmd_line)
     String8 add_error = str8_zero();
     if(!auth_keyring_add(&export_ring, key, &add_error))
     {
-      log_errorf("9auth: failed to add credential: %S\n", add_error);
-      log_scope_flush(arena);
-      log_release(log);
+      fprintf(stderr, "9auth: failed to add credential: %.*s\n", (int)add_error.size, add_error.str);
+      fflush(stderr);
       return;
     }
 
@@ -476,8 +496,6 @@ entry_point(CmdLine *cmd_line)
     fwrite(exported.str, 1, exported.size, stdout);
     fflush(stdout);
 
-    log_scope_flush(arena);
-    log_release(log);
     return;
   }
   else if(import_credential)
@@ -498,30 +516,26 @@ entry_point(CmdLine *cmd_line)
     String8 input = str8_list_join(arena, input_chunks, 0);
     if(input.size == 0)
     {
-      log_error(str8_lit("9auth: no data provided on stdin\n"));
-      log_scope_flush(arena);
-      log_release(log);
+      fprintf(stderr, "9auth: no data provided on stdin\n");
+      fflush(stderr);
       return;
     }
 
     Auth_KeyRing import_ring = auth_keyring_alloc(arena, 0);
     if(!auth_keyring_load(arena, &import_ring, input))
     {
-      log_error(str8_lit("9auth: failed to parse imported data\n"));
-      log_scope_flush(arena);
-      log_release(log);
+      fprintf(stderr, "9auth: failed to parse imported data\n");
+      fflush(stderr);
       return;
     }
 
     if(import_ring.count == 0)
     {
-      log_error(str8_lit("9auth: no credentials in imported data\n"));
-      log_scope_flush(arena);
-      log_release(log);
+      fprintf(stderr, "9auth: no credentials in imported data\n");
+      fflush(stderr);
       return;
     }
 
-    String8 keys_path = str8_lit("/var/lib/9auth/keys");
     String8 existing = os_data_from_file_path(arena, keys_path);
     Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
 
@@ -541,7 +555,9 @@ entry_point(CmdLine *cmd_line)
       String8 add_error = str8_zero();
       if(!auth_keyring_add(&ring, key, &add_error))
       {
-        log_errorf("9auth: failed to import credential for user='%S': %S\n", key->user, add_error);
+        fprintf(stderr, "9auth: failed to import credential for user='%.*s': %.*s\n",
+                (int)key->user.size, key->user.str, (int)add_error.size, add_error.str);
+        fflush(stderr);
         continue;
       }
     }
@@ -549,9 +565,8 @@ entry_point(CmdLine *cmd_line)
     String8 saved = auth_keyring_save(arena, &ring);
     os_write_data_to_file_path(keys_path, saved);
 
-    log_infof("9auth: imported %llu credentials\n", import_ring.count);
-    log_scope_flush(arena);
-    log_release(log);
+    fprintf(stdout, "9auth: imported %lu credentials\n", import_ring.count);
+    fflush(stdout);
     return;
   }
   else if(add_credential)
@@ -562,9 +577,8 @@ entry_point(CmdLine *cmd_line)
 
     if(user.size == 0 || rp_id.size == 0)
     {
-      log_error(str8_lit("usage: 9auth -a --user=<user> --rp_id=<rp_id> [--rp_name=<name>]\n"));
-      log_scope_flush(arena);
-      log_release(log);
+      fprintf(stderr, "usage: 9auth -a --user=<user> --rp_id=<rp_id> [--rp_name=<name>]\n");
+      fflush(stderr);
       return;
     }
 
@@ -581,12 +595,11 @@ entry_point(CmdLine *cmd_line)
     Auth_Key new_key = {0};
     String8 error = str8_zero();
 
-    log_info(str8_lit("9auth: touch yubikey\n"));
-    log_scope_flush(arena);
+    fprintf(stdout, "9auth: touch FIDO2 token\n");
+    fflush(stdout);
 
     if(auth_fido2_register_credential(arena, params, &new_key, &error))
     {
-      String8 keys_path = str8_lit("/var/lib/9auth/keys");
       String8 existing = os_data_from_file_path(arena, keys_path);
       Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
 
@@ -598,65 +611,63 @@ entry_point(CmdLine *cmd_line)
       String8 add_error = str8_zero();
       if(!auth_keyring_add(&ring, &new_key, &add_error))
       {
-        log_errorf("9auth: failed to add credential: %S\n", add_error);
+        fprintf(stderr, "9auth: failed to add credential: %.*s\n", (int)add_error.size, add_error.str);
+        fflush(stderr);
       }
       else
       {
         String8 saved = auth_keyring_save(arena, &ring);
         os_write_data_to_file_path(keys_path, saved);
-        log_info(str8_lit("9auth: registered credential\n"));
+        fprintf(stdout, "9auth: registered credential\n");
+        fflush(stdout);
       }
     }
     else
     {
-      log_errorf("9auth: registration failed: %S\n", error);
+      fprintf(stderr, "9auth: registration failed: %.*s\n", (int)error.size, error.str);
+      fflush(stderr);
     }
 
-    log_scope_flush(arena);
-    log_release(log);
     return;
   }
   else if(list_credentials)
   {
-    String8 keys_path = str8_lit("/var/lib/9auth/keys");
     String8 data = os_data_from_file_path(arena, keys_path);
     Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
 
     if(data.size == 0)
     {
-      log_info(str8_lit("9auth: no credentials\n"));
+      fprintf(stdout, "9auth: no credentials\n");
+      fflush(stdout);
     }
     else if(auth_keyring_load(arena, &ring, data))
     {
       for(u64 i = 0; i < ring.count; i += 1)
       {
         Auth_Key *key = &ring.keys[i];
-        log_infof("9auth: user=%S rp_id=%S\n", key->user, key->rp_id);
+        fprintf(stdout, "9auth: user=%.*s rp_id=%.*s\n",
+                (int)key->user.size, key->user.str, (int)key->rp_id.size, key->rp_id.str);
       }
+      fflush(stdout);
     }
     else
     {
-      log_error(str8_lit("9auth: failed to load credentials\n"));
+      fprintf(stderr, "9auth: failed to load credentials\n");
+      fflush(stderr);
     }
 
-    log_scope_flush(arena);
-    log_release(log);
     return;
   }
 
-  String8 keys_path = str8_lit("/var/lib/9auth/keys");
+  struct stat st;
+  if(stat((char *)keys_path.str, &st) == 0)
   {
-    struct stat st;
-    if(stat((char *)keys_path.str, &st) == 0)
+    mode_t mode = st.st_mode & 0777;
+    if(mode != 0600)
     {
-      mode_t mode = st.st_mode & 0777;
-      if(mode != 0600)
-      {
-        log_errorf("9auth: security error: key file has insecure permissions %o (expected 0600)\n", mode);
-        log_scope_flush(arena);
-        log_release(log);
-        return;
-      }
+      fprintf(stderr, "9auth: security error: key file has insecure permissions %o (expected 0600)\n", mode);
+      fflush(stderr);
+      return;
     }
   }
 
@@ -667,38 +678,50 @@ entry_point(CmdLine *cmd_line)
   {
     if(!auth_keyring_load(arena, &ring, data))
     {
-      log_error(str8_lit("9auth: failed to load keyring\n"));
-      log_scope_flush(arena);
-      log_release(log);
+      fprintf(stderr, "9auth: failed to load keyring\n");
+      fflush(stderr);
       return;
     }
   }
 
   Auth_RPC_State *rpc_state = auth_rpc_state_alloc(arena, &ring);
-  auth_fs_state = auth_fs_alloc(arena, rpc_state);
+  auth_fs_state = auth_fs_alloc(arena, rpc_state, keys_path);
 
-  String8 socket_path = str8_lit("unix!/var/run/9auth");
-  OS_Handle listen_socket = dial9p_listen(socket_path, str8_lit("unix"), str8_lit("9auth"));
+  OS_Handle listen_socket = dial9p_listen(socket_addr, str8_lit("unix"), str8_lit("9auth"));
 
   if(os_handle_match(listen_socket, os_handle_zero()))
   {
-    log_error(str8_lit("9auth: failed to create socket at /var/run/9auth\n"));
-    log_scope_flush(arena);
-    log_release(log);
+    fprintf(stderr, "9auth: failed to create socket at %.*s\n", (int)socket_path.size, socket_path.str);
+    fflush(stderr);
     return;
   }
 
-  log_info(str8_lit("9auth: daemon started on /var/run/9auth\n"));
-  log_scope_flush(arena);
+  if(worker_count == 0)
+  {
+    u64 logical_cores = os_get_system_info()->logical_processor_count;
+    worker_count = Max(4, logical_cores / 4);
+  }
+
+  worker_pool = wp_pool_alloc(arena, worker_count);
+
+  fprintf(stdout, "9auth: daemon started on %.*s\n", (int)socket_path.size, socket_path.str);
+  fprintf(stdout, "9auth: launched %lu worker threads\n", worker_count);
+  fflush(stdout);
 
   for(;;)
   {
     OS_Handle connection_socket = os_socket_accept(listen_socket);
     if(os_handle_match(connection_socket, os_handle_zero()))
     {
+      fprintf(stderr, "9auth: failed to accept connection\n");
+      fflush(stderr);
       continue;
     }
-    handle_connection(connection_socket);
+
+    fprintf(stdout, "9auth: accepted connection\n");
+    fflush(stdout);
+
+    wp_submit(worker_pool, handle_connection_task, &connection_socket, sizeof(connection_socket));
   }
 
   arena_release(arena);

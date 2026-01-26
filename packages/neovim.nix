@@ -43,6 +43,7 @@
           }
         ];
         opts = {
+          expandtab = true;
           number = true;
           relativenumber = true;
           scrolloff = 8;

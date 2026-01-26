@@ -685,7 +685,7 @@ run_tests(Arena *arena, String8 address)
   }
 
   u64 fd = socket.u64[0];
-  Client9P *client = client9p_mount(arena, fd, str8_zero(), 0);
+  Client9P *client = client9p_mount(arena, fd, str8_zero(), str8_zero(), 0);
   if(client == 0)
   {
     os_file_close(socket);
