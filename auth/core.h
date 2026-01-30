@@ -26,6 +26,7 @@ struct Auth_Conv
   String8 user;
   String8 server;
   String8 role;
+  String8 proto;
   Auth_State state;
   u64 start_time;
   u8 challenge[32];
@@ -38,17 +39,31 @@ struct Auth_Conv
 };
 
 ////////////////////////////////
-//~ Key (FIDO2 Credential)
+//~ Key Type
+
+typedef enum
+{
+  Auth_Key_Type_FIDO2,
+  Auth_Key_Type_Ed25519,
+} Auth_Key_Type;
+
+////////////////////////////////
+//~ Key (Multi-Protocol Credential)
 
 typedef struct Auth_Key Auth_Key;
 struct Auth_Key
 {
+  Auth_Key_Type type;
   String8 user;
   String8 rp_id;
+  // FIDO2
   u8 credential_id[256];
   u64 credential_id_len;
   u8 public_key[256];
   u64 public_key_len;
+  // Ed25519
+  u8 ed25519_public_key[32];
+  u8 ed25519_private_key[32];
 };
 
 ////////////////////////////////

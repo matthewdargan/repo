@@ -8,9 +8,10 @@
   in {
     packages = cmdPackage.mkCmdPackage {
       pname = "9auth-integration-test";
-      description = "9auth integration test suite";
+      description = "9auth integration test suite (Ed25519 + FIDO2)";
       version = "0.1.0";
-      buildInputs = [pkgs.libfido2];
+      buildInputs = [pkgs.libfido2 pkgs.openssl];
+      extraLinkFlags = "-lm -lfido2 -lcrypto";
     };
   };
 }

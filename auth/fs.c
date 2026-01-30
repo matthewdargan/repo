@@ -300,6 +300,79 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
       auth_fs_log(fs, log_entry);
       success = 1;
     }
+    else if(str8_match(command, str8_lit("keygen"), 0))
+    {
+      String8 user = str8_zero();
+      String8 server = str8_zero();
+      String8 proto = str8_zero();
+
+      for(String8Node *node = parts.first->next; node != 0; node = node->next)
+      {
+        String8 param = node->string;
+        String8List kv = str8_split(arena, param, (u8 *)"=", 1, 0);
+        if(kv.node_count != 2)
+        {
+          continue;
+        }
+
+        String8 key = kv.first->string;
+        String8 value = kv.first->next->string;
+
+        if(str8_match(key, str8_lit("user"), 0))
+        {
+          user = value;
+        }
+        else if(str8_match(key, str8_lit("server"), 0))
+        {
+          server = value;
+        }
+        else if(str8_match(key, str8_lit("proto"), 0))
+        {
+          proto = value;
+        }
+      }
+
+      if(user.size == 0 || server.size == 0)
+      {
+        String8 log_entry = str8_lit("keygen_failed: missing user or server parameter\n");
+        auth_fs_log(fs, log_entry);
+        break;
+      }
+
+      if(!str8_match(proto, str8_lit("ed25519"), 0))
+      {
+        String8 log_entry = str8_lit("keygen_failed: only ed25519 protocol supported\n");
+        auth_fs_log(fs, log_entry);
+        break;
+      }
+
+      Auth_Key new_key = {0};
+      new_key.type = Auth_Key_Type_Ed25519;
+      new_key.user = user;
+      new_key.rp_id = server;
+
+      String8 error = str8_zero();
+      if(!auth_ed25519_generate_keypair(new_key.ed25519_public_key, new_key.ed25519_private_key, &error))
+      {
+        String8 log_entry = str8f(arena, "keygen_failed: user=%S server=%S error=%S\n", user, server, error);
+        auth_fs_log(fs, log_entry);
+        break;
+      }
+
+      if(!auth_keyring_add(fs->rpc_state->keyring, &new_key, &error))
+      {
+        String8 log_entry = str8f(arena, "keygen_failed: user=%S server=%S error=%S\n", user, server, error);
+        auth_fs_log(fs, log_entry);
+        break;
+      }
+
+      String8 saved = auth_keyring_save(arena, fs->rpc_state->keyring);
+      os_write_data_to_file_path(fs->keys_path, saved);
+
+      String8 log_entry = str8f(arena, "keygen_success: user=%S server=%S\n", user, server);
+      auth_fs_log(fs, log_entry);
+      success = 1;
+    }
   }
   break;
 

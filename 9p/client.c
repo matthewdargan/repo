@@ -30,9 +30,10 @@ client9p_init(Arena *arena, u64 fd)
 }
 
 internal ClientFid9P *
-client9p_auth(Arena *arena, Client9P *server_client, String8 auth_server, String8 user_name, String8 attach_path)
+client9p_auth(Arena *arena, Client9P *server_client, String8 auth_server, String8 proto, String8 user_name, String8 attach_path)
 {
   Temp scratch = scratch_begin(&arena, 1);
+  String8 actual_proto = proto.size > 0 ? proto : str8_lit("ed25519");
 
   String8 auth_addr = auth_server.size > 0 ? auth_server : str8_lit("unix!/var/run/9auth");
   OS_Handle auth_handle = dial9p_connect(scratch.arena, auth_addr, str8_lit("unix"), str8_lit("9auth"));
@@ -82,7 +83,7 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_server, String
     return 0;
   }
 
-  String8 start_cmd = str8f(scratch.arena, "start proto=fido2 role=client user=%S server=%S", user_name, attach_path);
+  String8 start_cmd = str8f(scratch.arena, "start proto=%S role=client user=%S server=%S", actual_proto, user_name, attach_path);
   s64 write_result = client9p_fid_pwrite(arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
   if(write_result != (s64)start_cmd.size)
   {
@@ -154,7 +155,7 @@ client9p_mount(Arena *arena, u64 fd, String8 auth_server, String8 attach_path, b
   u32 auth_fid_num = P9_FID_NONE;
   if(use_auth)
   {
-    ClientFid9P *auth_fid = client9p_auth(arena, client, auth_server, user, attach_path);
+    ClientFid9P *auth_fid = client9p_auth(arena, client, auth_server, str8_zero(), user, attach_path);
     if(auth_fid != 0)
     {
       auth_fid_num = auth_fid->fid;

@@ -65,16 +65,17 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
 {
   if(params.user.size == 0)
   {
-    *out_error = str8_lit("User name is required");
+    *out_error = str8_lit("fido2: user name is required");
     return 0;
   }
 
   if(params.rp_id.size == 0)
   {
-    *out_error = str8_lit("RP ID is required");
+    *out_error = str8_lit("fido2: RP ID is required");
     return 0;
   }
 
+  out_key->type = Auth_Key_Type_FIDO2;
   out_key->user = str8_copy(arena, params.user);
   out_key->rp_id = str8_copy(arena, params.rp_id);
 
@@ -95,19 +96,19 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
 
   if(params->credential_id == 0 || params->credential_id_len == 0)
   {
-    *out_error = str8_lit("Credential ID is required");
+    *out_error = str8_lit("fido2: credential ID is required");
     return 0;
   }
 
   if(params->credential_id_len != sizeof(mock_credential_id))
   {
-    *out_error = str8_lit("Invalid credential ID length");
+    *out_error = str8_lit("fido2: invalid credential ID length");
     return 0;
   }
 
   if(!MemoryMatch(params->credential_id, mock_credential_id, sizeof(mock_credential_id)))
   {
-    *out_error = str8_lit("Credential not found");
+    *out_error = str8_lit("fido2: credential not found");
     return 0;
   }
 
@@ -121,17 +122,18 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
 }
 
 internal b32
-auth_fido2_verify_signature(Auth_Fido2_VerifyParams *params, String8 *out_error)
+auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, String8 *out_error)
 {
+  (void)arena;
   if(params->signature == 0 || params->signature_len == 0)
   {
-    *out_error = str8_lit("Signature is required");
+    *out_error = str8_lit("fido2: signature is required");
     return 0;
   }
 
   if(params->public_key == 0 || params->public_key_len == 0)
   {
-    *out_error = str8_lit("Public key is required");
+    *out_error = str8_lit("fido2: public key is required");
     return 0;
   }
 
@@ -140,6 +142,6 @@ auth_fido2_verify_signature(Auth_Fido2_VerifyParams *params, String8 *out_error)
     return 1;
   }
 
-  *out_error = str8_lit("Signature verification failed");
+  *out_error = str8_lit("fido2: signature verification failed");
   return 0;
 }

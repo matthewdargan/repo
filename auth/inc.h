@@ -6,6 +6,7 @@
 
 #include "core.h"
 #include "fido2.h"
+#include "ed25519.h"
 #include "rpc.h"
 #include "fs.h"
 

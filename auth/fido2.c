@@ -87,7 +87,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   Auth_Fido2_DeviceList devices = auth_fido2_enumerate_devices(arena);
   if(devices.count == 0)
   {
-    *out_error = str8_lit("No FIDO2 devices found");
+    *out_error = str8_lit("fido2: no devices found");
     return 0;
   }
 
@@ -96,7 +96,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   dev = fido_dev_new();
   if(dev == 0)
   {
-    *out_error = str8_lit("Failed to allocate FIDO2 device");
+    *out_error = str8_lit("fido2: failed to allocate device");
     return 0;
   }
 
@@ -107,7 +107,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   int r = fido_dev_open(dev, path_cstr);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to open device: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to open device: %S", auth_fido2_error_string(arena, r));
     temp_end(temp);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -117,7 +117,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   cred = fido_cred_new();
   if(cred == 0)
   {
-    *out_error = str8_lit("Failed to allocate credential");
+    *out_error = str8_lit("fido2: failed to allocate credential");
     temp_end(temp);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -127,7 +127,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   r = fido_cred_set_type(cred, COSE_ES256);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to set credential type: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to set credential type: %S", auth_fido2_error_string(arena, r));
     temp_end(temp);
     fido_cred_free(&cred);
     fido_dev_close(dev);
@@ -143,7 +143,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   r = fido_cred_set_rp(cred, rp_id_cstr, rp_name_cstr);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to set relying party: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to set relying party: %S", auth_fido2_error_string(arena, r));
     temp_end(temp);
     fido_cred_free(&cred);
     fido_dev_close(dev);
@@ -161,7 +161,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   temp_end(temp);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to set user: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to set user: %S", auth_fido2_error_string(arena, r));
     fido_cred_free(&cred);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -171,7 +171,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   u8 client_data_hash[32];
   if(!auth_fido2_generate_challenge(client_data_hash))
   {
-    *out_error = str8_lit("Failed to generate challenge");
+    *out_error = str8_lit("fido2: failed to generate challenge");
     fido_cred_free(&cred);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -181,7 +181,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   r = fido_cred_set_clientdata_hash(cred, client_data_hash, 32);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to set client data hash: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to set client data hash: %S", auth_fido2_error_string(arena, r));
     fido_cred_free(&cred);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -193,7 +193,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
     r = fido_cred_set_uv(cred, FIDO_OPT_TRUE);
     if(r != FIDO_OK)
     {
-      *out_error = str8f(arena, "Failed to set UV option: %S", auth_fido2_error_string(arena, r));
+      *out_error = str8f(arena, "fido2: failed to set UV option: %S", auth_fido2_error_string(arena, r));
       fido_cred_free(&cred);
       fido_dev_close(dev);
       fido_dev_free(&dev);
@@ -204,7 +204,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   r = fido_cred_set_rk(cred, FIDO_OPT_FALSE);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to set RK option: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to set RK option: %S", auth_fido2_error_string(arena, r));
     fido_cred_free(&cred);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -214,7 +214,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   r = fido_dev_make_cred(dev, cred, 0);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to make credential: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to make credential: %S", auth_fido2_error_string(arena, r));
     fido_cred_free(&cred);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -226,7 +226,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
 
   if(cred_id == 0 || cred_id_len == 0 || cred_id_len > 256)
   {
-    *out_error = str8_lit("Invalid credential ID");
+    *out_error = str8_lit("fido2: invalid credential ID");
     fido_cred_free(&cred);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -238,13 +238,14 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
 
   if(pubkey == 0 || pubkey_len == 0 || pubkey_len > 256)
   {
-    *out_error = str8_lit("Invalid public key");
+    *out_error = str8_lit("fido2: invalid public key");
     fido_cred_free(&cred);
     fido_dev_close(dev);
     fido_dev_free(&dev);
     return 0;
   }
 
+  out_key->type = Auth_Key_Type_FIDO2;
   out_key->user = str8_copy(arena, params.user);
   out_key->rp_id = str8_copy(arena, params.rp_id);
 
@@ -270,7 +271,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
   Auth_Fido2_DeviceList devices = auth_fido2_enumerate_devices(arena);
   if(devices.count == 0)
   {
-    *out_error = str8_lit("No FIDO2 devices found");
+    *out_error = str8_lit("fido2: no devices found");
     return 0;
   }
 
@@ -279,7 +280,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
   fido_dev_t *dev = fido_dev_new();
   if(dev == 0)
   {
-    *out_error = str8_lit("Failed to allocate FIDO2 device");
+    *out_error = str8_lit("fido2: failed to allocate device");
     return 0;
   }
 
@@ -290,7 +291,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
   int r = fido_dev_open(dev, path_cstr);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to open device: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to open device: %S", auth_fido2_error_string(arena, r));
     temp_end(temp);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -300,7 +301,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
   fido_assert_t *assert = fido_assert_new();
   if(assert == 0)
   {
-    *out_error = str8_lit("Failed to allocate assertion");
+    *out_error = str8_lit("fido2: failed to allocate assertion");
     temp_end(temp);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -314,7 +315,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
   temp_end(temp);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to set relying party: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to set relying party: %S", auth_fido2_error_string(arena, r));
     fido_assert_free(&assert);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -324,7 +325,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
   r = fido_assert_set_clientdata_hash(assert, params->challenge, 32);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to set client data hash: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to set client data hash: %S", auth_fido2_error_string(arena, r));
     fido_assert_free(&assert);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -334,7 +335,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
   r = fido_assert_allow_cred(assert, params->credential_id, params->credential_id_len);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to allow credential: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to allow credential: %S", auth_fido2_error_string(arena, r));
     fido_assert_free(&assert);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -346,7 +347,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
     r = fido_assert_set_uv(assert, FIDO_OPT_TRUE);
     if(r != FIDO_OK)
     {
-      *out_error = str8f(arena, "Failed to set UV option: %S", auth_fido2_error_string(arena, r));
+      *out_error = str8f(arena, "fido2: failed to set UV option: %S", auth_fido2_error_string(arena, r));
       fido_assert_free(&assert);
       fido_dev_close(dev);
       fido_dev_free(&dev);
@@ -357,7 +358,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
   r = fido_dev_get_assert(dev, assert, 0);
   if(r != FIDO_OK)
   {
-    *out_error = str8f(arena, "Failed to get assertion: %S", auth_fido2_error_string(arena, r));
+    *out_error = str8f(arena, "fido2: failed to get assertion: %S", auth_fido2_error_string(arena, r));
     fido_assert_free(&assert);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -369,7 +370,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
 
   if(sig == 0 || sig_len == 0 || sig_len > 256)
   {
-    *out_error = str8_lit("Invalid signature");
+    *out_error = str8_lit("fido2: invalid signature");
     fido_assert_free(&assert);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -381,7 +382,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
 
   if(authdata == 0 || authdata_len == 0 || authdata_len > 256)
   {
-    *out_error = str8_lit("Invalid authenticator data");
+    *out_error = str8_lit("fido2: invalid authenticator data");
     fido_assert_free(&assert);
     fido_dev_close(dev);
     fido_dev_free(&dev);
@@ -409,14 +410,14 @@ auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, Strin
   fido_assert_t *assert = fido_assert_new();
   if(assert == 0)
   {
-    *out_error = str8_lit("Failed to allocate assert");
+    *out_error = str8_lit("fido2: failed to allocate assert");
     return 0;
   }
 
   es256_pk_t *pk = es256_pk_new();
   if(pk == 0)
   {
-    *out_error = str8_lit("Failed to allocate public key");
+    *out_error = str8_lit("fido2: failed to allocate public key");
     fido_assert_free(&assert);
     return 0;
   }
@@ -424,7 +425,7 @@ auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, Strin
   int r = es256_pk_from_ptr(pk, params->public_key, params->public_key_len);
   if(r != FIDO_OK)
   {
-    *out_error = str8_lit("Failed to parse public key");
+    *out_error = str8_lit("fido2: failed to parse public key");
     es256_pk_free(&pk);
     fido_assert_free(&assert);
     return 0;
@@ -437,7 +438,7 @@ auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, Strin
   scratch_end(temp);
   if(r != FIDO_OK)
   {
-    *out_error = str8_lit("Failed to set RP ID");
+    *out_error = str8_lit("fido2: failed to set RP ID");
     es256_pk_free(&pk);
     fido_assert_free(&assert);
     return 0;
@@ -446,7 +447,7 @@ auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, Strin
   r = fido_assert_set_clientdata_hash(assert, params->challenge, 32);
   if(r != FIDO_OK)
   {
-    *out_error = str8_lit("Failed to set clientdata hash");
+    *out_error = str8_lit("fido2: failed to set clientdata hash");
     es256_pk_free(&pk);
     fido_assert_free(&assert);
     return 0;
@@ -455,7 +456,7 @@ auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, Strin
   r = fido_assert_set_count(assert, 1);
   if(r != FIDO_OK)
   {
-    *out_error = str8_lit("Failed to set count");
+    *out_error = str8_lit("fido2: failed to set count");
     es256_pk_free(&pk);
     fido_assert_free(&assert);
     return 0;
@@ -464,7 +465,7 @@ auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, Strin
   r = fido_assert_set_authdata(assert, 0, params->auth_data, params->auth_data_len);
   if(r != FIDO_OK)
   {
-    *out_error = str8_lit("Failed to set authdata");
+    *out_error = str8_lit("fido2: failed to set authdata");
     es256_pk_free(&pk);
     fido_assert_free(&assert);
     return 0;
@@ -473,7 +474,7 @@ auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, Strin
   r = fido_assert_set_sig(assert, 0, params->signature, params->signature_len);
   if(r != FIDO_OK)
   {
-    *out_error = str8_lit("Failed to set signature");
+    *out_error = str8_lit("fido2: failed to set signature");
     es256_pk_free(&pk);
     fido_assert_free(&assert);
     return 0;
@@ -482,7 +483,7 @@ auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, Strin
   r = fido_assert_verify(assert, 0, COSE_ES256, pk);
   if(r != FIDO_OK)
   {
-    *out_error = str8_lit("Signature verification failed");
+    *out_error = str8_lit("fido2: signature verification failed");
     es256_pk_free(&pk);
     fido_assert_free(&assert);
     return 0;
