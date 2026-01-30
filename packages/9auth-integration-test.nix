@@ -10,7 +10,8 @@
       pname = "9auth-integration-test";
       description = "9auth integration test suite";
       version = "0.1.0";
-      buildInputs = [pkgs.libfido2];
+      buildInputs = [pkgs.libfido2 pkgs.openssl];
+      extraLinkFlags = "-lm -lfido2 -lcrypto";
     };
   };
 }

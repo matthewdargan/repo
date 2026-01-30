@@ -3,6 +3,7 @@
 #include "base/inc.c"
 #include "auth/core.c"
 #include "auth/fido2_mock.c"
+#include "auth/ed25519.c"
 #include "auth/rpc.c"
 
 ////////////////////////////////
@@ -14,6 +15,7 @@ test_keyring_add(Arena *arena)
   Auth_KeyRing ring = auth_keyring_alloc(arena, 8);
 
   Auth_Key key = {0};
+  key.type = Auth_Key_Type_FIDO2;
   key.user = str8_lit("alice");
   key.rp_id = str8_lit("9p.localhost");
   key.credential_id_len = 32;
@@ -202,6 +204,17 @@ internal b32
 test_rpc_handle_start_success(Arena *arena)
 {
   Auth_KeyRing ring = auth_keyring_alloc(arena, 8);
+
+  Auth_Key key = {0};
+  key.type = Auth_Key_Type_FIDO2;
+  key.user = str8_lit("alice");
+  key.rp_id = str8_lit("9p.localhost");
+  key.credential_id_len = 16;
+  MemorySet(key.credential_id, 0xAA, 16);
+  key.public_key_len = 32;
+  MemorySet(key.public_key, 0xBB, 32);
+  auth_keyring_add(&ring, &key, 0);
+
   Auth_RPC_State *state = auth_rpc_state_alloc(arena, &ring);
 
   Auth_Conv *conv = 0;
@@ -211,7 +224,7 @@ test_rpc_handle_start_success(Arena *arena)
   params.user = str8_lit("alice");
   params.server = str8_lit("9p.localhost");
 
-  Auth_RPC_Response resp = auth_rpc_handle_start(arena, state, &conv, params);
+  Auth_RPC_Response resp = auth_rpc_handle_start(state, &conv, params);
 
   return resp.error.size == 0 && conv != 0 && conv->state == Auth_State_Started &&
          str8_match(conv->user, str8_lit("alice"), 0);
@@ -229,7 +242,7 @@ test_rpc_handle_start_invalid_proto(Arena *arena)
   params.role = str8_lit("client");
   params.user = str8_lit("alice");
 
-  Auth_RPC_Response resp = auth_rpc_handle_start(arena, state, &conv, params);
+  Auth_RPC_Response resp = auth_rpc_handle_start(state, &conv, params);
 
   return resp.error.size > 0 && conv == 0;
 }
@@ -246,7 +259,7 @@ test_rpc_handle_start_invalid_role(Arena *arena)
   params.role = str8_lit("invalid");
   params.user = str8_lit("alice");
 
-  Auth_RPC_Response resp = auth_rpc_handle_start(arena, state, &conv, params);
+  Auth_RPC_Response resp = auth_rpc_handle_start(state, &conv, params);
 
   return resp.error.size > 0;
 }
@@ -263,7 +276,7 @@ test_rpc_handle_start_missing_user(Arena *arena)
   params.role = str8_lit("client");
   params.user = str8_zero();
 
-  Auth_RPC_Response resp = auth_rpc_handle_start(arena, state, &conv, params);
+  Auth_RPC_Response resp = auth_rpc_handle_start(state, &conv, params);
 
   return resp.error.size > 0;
 }
@@ -362,7 +375,7 @@ test_fido2_verify_signature(Arena *arena)
   verify_params.public_key = key.public_key;
   verify_params.public_key_len = key.public_key_len;
 
-  ok = auth_fido2_verify_signature(&verify_params, &error);
+  ok = auth_fido2_verify_signature(arena, &verify_params, &error);
 
   return ok && error.size == 0;
 }
@@ -414,6 +427,243 @@ test_error_invalid_serialization(Arena *arena)
 }
 
 ////////////////////////////////
+//~ Ed25519 Tests
+
+internal b32
+test_ed25519_generate_keypair(Arena *arena)
+{
+  u8 public_key[32];
+  u8 private_key[32];
+  String8 error = str8_zero();
+
+  b32 ok = auth_ed25519_generate_keypair(public_key, private_key, &error);
+
+  return ok && error.size == 0;
+}
+
+internal b32
+test_ed25519_sign_verify(Arena *arena)
+{
+  u8 public_key[32];
+  u8 private_key[32];
+  String8 error = str8_zero();
+
+  b32 ok = auth_ed25519_generate_keypair(public_key, private_key, &error);
+  if(!ok)
+  {
+    return 0;
+  }
+
+  u8 challenge[32];
+  auth_ed25519_generate_challenge(challenge);
+
+  Auth_Ed25519_SignParams sign_params = {0};
+  MemoryCopy(sign_params.challenge, challenge, 32);
+  MemoryCopy(sign_params.private_key, private_key, 32);
+
+  u8 signature[64];
+  ok = auth_ed25519_sign_challenge(&sign_params, signature, &error);
+  if(!ok)
+  {
+    return 0;
+  }
+
+  Auth_Ed25519_VerifyParams verify_params = {0};
+  MemoryCopy(verify_params.challenge, challenge, 32);
+  MemoryCopy(verify_params.signature, signature, 64);
+  MemoryCopy(verify_params.public_key, public_key, 32);
+
+  ok = auth_ed25519_verify_signature(&verify_params, &error);
+
+  return ok && error.size == 0;
+}
+
+internal b32
+test_ed25519_verify_fail_wrong_challenge(Arena *arena)
+{
+  (void)arena;
+  u8 public_key[32];
+  u8 private_key[32];
+  String8 error = str8_zero();
+
+  b32 ok = auth_ed25519_generate_keypair(public_key, private_key, &error);
+  if(!ok)
+  {
+    return 0;
+  }
+
+  u8 challenge[32];
+  auth_ed25519_generate_challenge(challenge);
+
+  Auth_Ed25519_SignParams sign_params = {0};
+  MemoryCopy(sign_params.challenge, challenge, 32);
+  MemoryCopy(sign_params.private_key, private_key, 32);
+
+  u8 signature[64];
+  ok = auth_ed25519_sign_challenge(&sign_params, signature, &error);
+  if(!ok)
+  {
+    return 0;
+  }
+
+  u8 wrong_challenge[32];
+  auth_ed25519_generate_challenge(wrong_challenge);
+
+  Auth_Ed25519_VerifyParams verify_params = {0};
+  MemoryCopy(verify_params.challenge, wrong_challenge, 32);
+  MemoryCopy(verify_params.signature, signature, 64);
+  MemoryCopy(verify_params.public_key, public_key, 32);
+
+  ok = auth_ed25519_verify_signature(&verify_params, &error);
+
+  return !ok && error.size > 0;
+}
+
+internal b32
+test_keyring_mixed_protocols(Arena *arena)
+{
+  Auth_KeyRing ring = auth_keyring_alloc(arena, 8);
+
+  Auth_Key fido2_key = {0};
+  fido2_key.type = Auth_Key_Type_FIDO2;
+  fido2_key.user = str8_lit("alice");
+  fido2_key.rp_id = str8_lit("9p.localhost");
+  fido2_key.credential_id_len = 32;
+  MemorySet(fido2_key.credential_id, 0xAA, 32);
+  fido2_key.public_key_len = 65;
+  MemorySet(fido2_key.public_key, 0xBB, 65);
+
+  auth_keyring_add(&ring, &fido2_key, 0);
+
+  Auth_Key ed25519_key = {0};
+  ed25519_key.type = Auth_Key_Type_Ed25519;
+  ed25519_key.user = str8_lit("bob");
+  ed25519_key.rp_id = str8_lit("9p.example.com");
+
+  String8 error = str8_zero();
+  auth_ed25519_generate_keypair(ed25519_key.ed25519_public_key, ed25519_key.ed25519_private_key, &error);
+
+  auth_keyring_add(&ring, &ed25519_key, 0);
+
+  String8 saved = auth_keyring_save(arena, &ring);
+
+  log_infof("Saved keyring:\n%.*s\n", (int)saved.size, saved.str);
+
+  Auth_KeyRing ring2 = auth_keyring_alloc(arena, 8);
+  b32 ok = auth_keyring_load(arena, &ring2, saved);
+
+  if(!ok)
+  {
+    log_infof("Failed to load keyring\n");
+    return 0;
+  }
+
+  if(ring2.count != 2)
+  {
+    log_infof("Expected 2 keys, got %llu\n", ring2.count);
+    return 0;
+  }
+
+  Auth_Key *found_fido2 = auth_keyring_lookup(&ring2, str8_lit("alice"), str8_lit("9p.localhost"));
+  Auth_Key *found_ed25519 = auth_keyring_lookup(&ring2, str8_lit("bob"), str8_lit("9p.example.com"));
+
+  if(!found_fido2)
+  {
+    log_infof("FIDO2 key not found\n");
+    return 0;
+  }
+
+  if(!found_ed25519)
+  {
+    log_infof("Ed25519 key not found\n");
+    return 0;
+  }
+
+  if(found_fido2->type != Auth_Key_Type_FIDO2)
+  {
+    log_infof("FIDO2 key has wrong type: %d\n", found_fido2->type);
+    return 0;
+  }
+
+  if(found_ed25519->type != Auth_Key_Type_Ed25519)
+  {
+    log_infof("Ed25519 key has wrong type: %d\n", found_ed25519->type);
+    return 0;
+  }
+
+  return 1;
+}
+
+internal b32
+test_rpc_ed25519_protocol(Arena *arena)
+{
+  Auth_KeyRing ring = auth_keyring_alloc(arena, 8);
+
+  Auth_Key key = {0};
+  key.type = Auth_Key_Type_Ed25519;
+  key.user = str8_lit("alice");
+  key.rp_id = str8_lit("9p.localhost");
+
+  String8 error = str8_zero();
+  auth_ed25519_generate_keypair(key.ed25519_public_key, key.ed25519_private_key, &error);
+  auth_keyring_add(&ring, &key, 0);
+
+  Auth_RPC_State *state = auth_rpc_state_alloc(arena, &ring);
+
+  Auth_Conv *server_conv = 0;
+  Auth_RPC_StartParams server_params = {0};
+  server_params.proto = str8_lit("ed25519");
+  server_params.role = str8_lit("server");
+  server_params.user = str8_lit("alice");
+  server_params.server = str8_lit("9p.localhost");
+
+  Auth_RPC_Response resp = auth_rpc_handle_start(state, &server_conv, server_params);
+  if(!resp.success || server_conv->state != Auth_State_ChallengeReady)
+  {
+    return 0;
+  }
+
+  Auth_RPC_Request read_req = {0};
+  read_req.command = Auth_RPC_Command_Read;
+  resp = auth_rpc_execute(arena, state, server_conv, read_req);
+  if(!resp.success || server_conv->state != Auth_State_ChallengeSent)
+  {
+    return 0;
+  }
+
+  Auth_Conv *client_conv = 0;
+  Auth_RPC_StartParams client_params = {0};
+  client_params.proto = str8_lit("ed25519");
+  client_params.role = str8_lit("client");
+  client_params.user = str8_lit("alice");
+  client_params.server = str8_lit("9p.localhost");
+
+  resp = auth_rpc_handle_start(state, &client_conv, client_params);
+  if(!resp.success || client_conv->state != Auth_State_Started)
+  {
+    return 0;
+  }
+
+  String8 challenge_data = str8(server_conv->challenge, 32);
+  Auth_RPC_Request write_req = {0};
+  write_req.command = Auth_RPC_Command_Write;
+  write_req.write_data = challenge_data;
+
+  resp = auth_rpc_execute(arena, state, client_conv, write_req);
+  if(!resp.success || client_conv->state != Auth_State_Done || client_conv->signature_len != 64)
+  {
+    return 0;
+  }
+
+  String8 signature_data = str8(client_conv->signature, client_conv->signature_len);
+  write_req.write_data = signature_data;
+
+  resp = auth_rpc_execute(arena, state, server_conv, write_req);
+
+  return resp.success && server_conv->state == Auth_State_Done && server_conv->verified;
+}
+
+////////////////////////////////
 //~ Test Runner
 
 typedef struct TestCase TestCase;
@@ -445,6 +695,11 @@ run_tests(Arena *arena)
       {str8_lit("error_invalid_credential"), test_error_invalid_credential},
       {str8_lit("error_missing_key_lookup"), test_error_missing_key_lookup},
       {str8_lit("error_invalid_serialization"), test_error_invalid_serialization},
+      {str8_lit("ed25519_generate_keypair"), test_ed25519_generate_keypair},
+      {str8_lit("ed25519_sign_verify"), test_ed25519_sign_verify},
+      {str8_lit("ed25519_verify_fail_wrong_challenge"), test_ed25519_verify_fail_wrong_challenge},
+      {str8_lit("keyring_mixed_protocols"), test_keyring_mixed_protocols},
+      {str8_lit("rpc_ed25519_protocol"), test_rpc_ed25519_protocol},
   };
 
   u64 test_count = ArrayCount(tests);

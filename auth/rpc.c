@@ -80,19 +80,51 @@ auth_rpc_handle_start(Auth_RPC_State *state, Auth_Conv **out_conv, Auth_RPC_Star
 {
   Auth_RPC_Response response = {0};
 
-  if(!str8_match(params.proto, str8_lit("fido2"), 0))
+  b32 has_proto = params.proto.size > 0;
+  b32 proto_is_fido2 = str8_match(params.proto, str8_lit("fido2"), 0);
+  b32 proto_is_ed25519 = str8_match(params.proto, str8_lit("ed25519"), 0);
+  if(has_proto && !proto_is_fido2 && !proto_is_ed25519)
   {
-    response.error = str8_lit("unsupported protocol");
+    response.error = str8_lit("auth: unsupported protocol");
     return response;
   }
   if(!str8_match(params.role, str8_lit("client"), 0) && !str8_match(params.role, str8_lit("server"), 0))
   {
-    response.error = str8_lit("invalid role");
+    response.error = str8_lit("auth: invalid role");
     return response;
   }
   if(params.user.size == 0)
   {
-    response.error = str8_lit("user required");
+    response.error = str8_lit("auth: user required");
+    return response;
+  }
+
+  Auth_Key *key = auth_keyring_lookup(state->keyring, params.user, params.server);
+  if(key == 0)
+  {
+    response.error = str8_lit("auth: no credential found");
+    return response;
+  }
+
+  String8 expected_proto = str8_zero();
+  if(key->type == Auth_Key_Type_FIDO2)
+  {
+    expected_proto = str8_lit("fido2");
+  }
+  else if(key->type == Auth_Key_Type_Ed25519)
+  {
+    expected_proto = str8_lit("ed25519");
+  }
+  else
+  {
+    response.error = str8_lit("auth: unknown key type");
+    return response;
+  }
+
+  String8 actual_proto = expected_proto;
+  if(has_proto && !str8_match(params.proto, expected_proto, 0))
+  {
+    response.error = str8_lit("auth: protocol mismatch with stored key");
     return response;
   }
 
@@ -101,23 +133,26 @@ auth_rpc_handle_start(Auth_RPC_State *state, Auth_Conv **out_conv, Auth_RPC_Star
   {
     conv = auth_conv_alloc(state->arena, state->next_conv_id, params.user, params.server);
     conv->role = str8_copy(state->arena, params.role);
+    conv->proto = str8_copy(state->arena, actual_proto);
     state->next_conv_id += 1;
     SLLQueuePush(state->conv_first, state->conv_last, conv);
   }
 
   if(str8_match(params.role, str8_lit("server"), 0))
   {
-    Auth_Key *key = auth_keyring_lookup(state->keyring, params.user, params.server);
-    if(key == 0)
+    b32 challenge_ok = 0;
+    if(str8_match(actual_proto, str8_lit("fido2"), 0))
     {
-      response.error = str8_lit("no credential found");
-      conv->state = Auth_State_Error;
-      conv->error = response.error;
-      return response;
+      challenge_ok = auth_fido2_generate_challenge(conv->challenge);
     }
-    if(!auth_fido2_generate_challenge(conv->challenge))
+    else if(str8_match(actual_proto, str8_lit("ed25519"), 0))
     {
-      response.error = str8_lit("failed to generate challenge");
+      challenge_ok = auth_ed25519_generate_challenge(conv->challenge);
+    }
+
+    if(!challenge_ok)
+    {
+      response.error = str8_lit("auth: failed to generate challenge");
       conv->state = Auth_State_Error;
       conv->error = response.error;
       return response;
@@ -141,7 +176,7 @@ auth_rpc_handle_read(Arena *arena, Auth_Conv *conv)
 
   if(conv == 0)
   {
-    response.error = str8_lit("no active conversation");
+    response.error = str8_lit("auth: no active conversation");
     return response;
   }
 
@@ -157,14 +192,27 @@ auth_rpc_handle_read(Arena *arena, Auth_Conv *conv)
 
   case Auth_State_Done:
   {
-    if(str8_match(conv->role, str8_lit("client"), 0) && conv->auth_data_len > 0 && conv->signature_len > 0)
+    if(str8_match(conv->role, str8_lit("client"), 0) && conv->signature_len > 0)
     {
-      // [auth_data_len:4][auth_data][signature]
-      u64 total_len = 4 + conv->auth_data_len + conv->signature_len;
+      // Format: [auth_data_len:4]?[auth_data]?[signature]
+      // Ed25519 has no auth_data, FIDO2 has auth_data
+      u64 total_len = conv->signature_len;
+      u64 auth_prefix_len = 0;
+      if(conv->auth_data_len > 0)
+      {
+        auth_prefix_len = 4 + conv->auth_data_len;
+        total_len += auth_prefix_len;
+      }
       u8 *buffer = push_array(arena, u8, total_len);
-      write_u32(buffer, (u32)conv->auth_data_len);
-      MemoryCopy(buffer + 4, conv->auth_data, conv->auth_data_len);
-      MemoryCopy(buffer + 4 + conv->auth_data_len, conv->signature, conv->signature_len);
+      u8 *write_ptr = buffer;
+      if(conv->auth_data_len > 0)
+      {
+        write_u32(write_ptr, (u32)conv->auth_data_len);
+        write_ptr += 4;
+        MemoryCopy(write_ptr, conv->auth_data, conv->auth_data_len);
+        write_ptr += conv->auth_data_len;
+      }
+      MemoryCopy(write_ptr, conv->signature, conv->signature_len);
       response.success = 1;
       response.data = str8(buffer, total_len);
     }
@@ -184,7 +232,7 @@ auth_rpc_handle_read(Arena *arena, Auth_Conv *conv)
 
   default:
   {
-    response.error = str8_lit("invalid state for read");
+    response.error = str8_lit("auth: invalid state for read");
   }
   break;
   }
@@ -199,7 +247,7 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
 
   if(conv == 0)
   {
-    response.error = str8_lit("no active conversation");
+    response.error = str8_lit("auth: no active conversation");
     return response;
   }
 
@@ -218,32 +266,61 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
     Auth_Key *key = auth_keyring_lookup(state->keyring, conv->user, conv->server);
     if(key == 0)
     {
-      response.error = str8_lit("no credential found");
+      response.error = str8_lit("auth: no credential found");
       conv->state = Auth_State_Error;
       conv->error = response.error;
       return response;
     }
 
-    Auth_Fido2_AssertParams assert_params = {0};
-    assert_params.rp_id = key->rp_id;
-    MemoryCopy(assert_params.challenge, conv->challenge, 32);
-    assert_params.credential_id = key->credential_id;
-    assert_params.credential_id_len = key->credential_id_len;
-
-    Auth_Fido2_Assertion assertion = {0};
     String8 error = str8_zero();
-    if(!auth_fido2_get_assertion(arena, &assert_params, &assertion, &error))
+
+    if(str8_match(conv->proto, str8_lit("fido2"), 0))
     {
-      response.error = error;
+      Auth_Fido2_AssertParams assert_params = {0};
+      assert_params.rp_id = key->rp_id;
+      MemoryCopy(assert_params.challenge, conv->challenge, 32);
+      assert_params.credential_id = key->credential_id;
+      assert_params.credential_id_len = key->credential_id_len;
+
+      Auth_Fido2_Assertion assertion = {0};
+      if(!auth_fido2_get_assertion(arena, &assert_params, &assertion, &error))
+      {
+        response.error = error;
+        conv->state = Auth_State_Error;
+        conv->error = error;
+        return response;
+      }
+
+      MemoryCopy(conv->auth_data, assertion.auth_data, assertion.auth_data_len);
+      conv->auth_data_len = assertion.auth_data_len;
+      MemoryCopy(conv->signature, assertion.signature, assertion.signature_len);
+      conv->signature_len = assertion.signature_len;
+    }
+    else if(str8_match(conv->proto, str8_lit("ed25519"), 0))
+    {
+      Auth_Ed25519_SignParams sign_params = {0};
+      MemoryCopy(sign_params.challenge, conv->challenge, 32);
+      MemoryCopy(sign_params.private_key, key->ed25519_private_key, 32);
+
+      if(!auth_ed25519_sign_challenge(&sign_params, conv->signature, &error))
+      {
+        response.error = error;
+        conv->state = Auth_State_Error;
+        conv->error = error;
+        return response;
+      }
+
+      conv->signature_len = 64;
+      conv->auth_data_len = 0;
+    }
+    else
+    {
+      response.error = str8_lit("unknown protocol");
       conv->state = Auth_State_Error;
-      conv->error = error;
+      conv->error = response.error;
       return response;
     }
 
-    MemoryCopy(conv->auth_data, assertion.auth_data, assertion.auth_data_len);
-    conv->auth_data_len = assertion.auth_data_len;
-    MemoryCopy(conv->signature, assertion.signature, assertion.signature_len);
-    conv->signature_len = assertion.signature_len;
     conv->state = Auth_State_Done;
     conv->verified = 1;
 
@@ -253,57 +330,94 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
 
   case Auth_State_ChallengeSent:
   {
-    // [auth_data_len:4][auth_data][signature]
-    if(data.size < 4)
-    {
-      response.error = str8_lit("invalid data format");
-      return response;
-    }
-
-    u32 auth_data_len = read_u32(data.str);
-    if(auth_data_len > 256 || auth_data_len + 4 > data.size)
-    {
-      response.error = str8_lit("invalid auth_data length");
-      return response;
-    }
-
-    u64 signature_len = data.size - 4 - auth_data_len;
-    if(signature_len > 256)
-    {
-      response.error = str8_lit("signature too large");
-      return response;
-    }
-
-    MemoryCopy(conv->auth_data, data.str + 4, auth_data_len);
-    conv->auth_data_len = auth_data_len;
-    MemoryCopy(conv->signature, data.str + 4 + auth_data_len, signature_len);
-    conv->signature_len = signature_len;
-
     Auth_Key *key = auth_keyring_lookup(state->keyring, conv->user, conv->server);
     if(key == 0)
     {
-      response.error = str8_lit("no credential found");
+      response.error = str8_lit("auth: no credential found");
       conv->state = Auth_State_Error;
       conv->error = response.error;
       return response;
     }
 
-    Auth_Fido2_VerifyParams verify_params = {0};
-    verify_params.rp_id = key->rp_id;
-    MemoryCopy(verify_params.challenge, conv->challenge, 32);
-    verify_params.auth_data = conv->auth_data;
-    verify_params.auth_data_len = conv->auth_data_len;
-    verify_params.signature = conv->signature;
-    verify_params.signature_len = conv->signature_len;
-    verify_params.public_key = key->public_key;
-    verify_params.public_key_len = key->public_key_len;
-
     String8 error = str8_zero();
-    if(!auth_fido2_verify_signature(arena, &verify_params, &error))
+
+    if(str8_match(conv->proto, str8_lit("fido2"), 0))
     {
-      response.error = error;
+      // FIDO2 format: [auth_data_len:4][auth_data][signature]
+      if(data.size < 4)
+      {
+        response.error = str8_lit("invalid data format");
+        return response;
+      }
+
+      u32 auth_data_len = read_u32(data.str);
+      if(auth_data_len > 256 || auth_data_len + 4 > data.size)
+      {
+        response.error = str8_lit("invalid auth_data length");
+        return response;
+      }
+
+      u64 signature_len = data.size - 4 - auth_data_len;
+      if(signature_len > 256)
+      {
+        response.error = str8_lit("signature too large");
+        return response;
+      }
+
+      MemoryCopy(conv->auth_data, data.str + 4, auth_data_len);
+      conv->auth_data_len = auth_data_len;
+      MemoryCopy(conv->signature, data.str + 4 + auth_data_len, signature_len);
+      conv->signature_len = signature_len;
+
+      Auth_Fido2_VerifyParams verify_params = {0};
+      verify_params.rp_id = key->rp_id;
+      MemoryCopy(verify_params.challenge, conv->challenge, 32);
+      verify_params.auth_data = conv->auth_data;
+      verify_params.auth_data_len = conv->auth_data_len;
+      verify_params.signature = conv->signature;
+      verify_params.signature_len = conv->signature_len;
+      verify_params.public_key = key->public_key;
+      verify_params.public_key_len = key->public_key_len;
+
+      if(!auth_fido2_verify_signature(arena, &verify_params, &error))
+      {
+        response.error = error;
+        conv->state = Auth_State_Error;
+        conv->error = error;
+        return response;
+      }
+    }
+    else if(str8_match(conv->proto, str8_lit("ed25519"), 0))
+    {
+      // Ed25519 format: [signature:64]
+      if(data.size != 64)
+      {
+        response.error = str8_lit("invalid signature length (expected 64 bytes)");
+        return response;
+      }
+
+      MemoryCopy(conv->signature, data.str, 64);
+      conv->signature_len = 64;
+      conv->auth_data_len = 0;
+
+      Auth_Ed25519_VerifyParams verify_params = {0};
+      MemoryCopy(verify_params.challenge, conv->challenge, 32);
+      MemoryCopy(verify_params.signature, conv->signature, 64);
+      MemoryCopy(verify_params.public_key, key->ed25519_public_key, 32);
+
+      if(!auth_ed25519_verify_signature(&verify_params, &error))
+      {
+        response.error = error;
+        conv->state = Auth_State_Error;
+        conv->error = error;
+        return response;
+      }
+    }
+    else
+    {
+      response.error = str8_lit("unknown protocol");
       conv->state = Auth_State_Error;
-      conv->error = error;
+      conv->error = response.error;
       return response;
     }
 

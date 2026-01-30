@@ -137,7 +137,7 @@ srv_auth(ServerRequest9P *request)
     return;
   }
 
-  String8 start_cmd = str8f(request->scratch.arena, "start proto=fido2 role=server user=%S server=%S",
+  String8 start_cmd = str8f(request->scratch.arena, "start role=server user=%S server=%S",
                             request->in_msg.user_name, request->in_msg.attach_path);
   s64 write_result = client9p_fid_pwrite(request->server->arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
   if(write_result != (s64)start_cmd.size)
@@ -482,7 +482,7 @@ srv_write(ServerRequest9P *request)
     }
 
     s64 response_len = client9p_fid_pread(request->server->arena, aux->auth_rpc_fid, aux->auth_response_buffer,
-                                           sizeof(aux->auth_response_buffer), 0);
+                                          sizeof(aux->auth_response_buffer), 0);
     if(response_len > 0)
     {
       aux->auth_response_len = response_len;
