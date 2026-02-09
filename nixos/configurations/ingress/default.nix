@@ -13,24 +13,15 @@
       after = ["network-online.target"];
       wants = ["network-online.target"];
     }
-    {
-      what = "nas";
-      where = "/var/lib/nix-client/n/nix";
-      type = "9p";
-      options = "port=5641";
-      after = ["network-online.target"];
-      wants = ["network-online.target"];
-    }
   ];
 in {
   imports = [
     ./boot.nix
-    self.nixosModules."9p-health-check"
+    self.nixosModules."9auth"
     self.nixosModules."9p-tools"
     self.nixosModules.fish
     self.nixosModules.locale
     self.nixosModules.nginx
-    self.nixosModules.nix-client
     self.nixosModules.nix-config
   ];
   environment.systemPackages = [self.packages.${pkgs.stdenv.hostPlatform.system}.neovim];
@@ -44,9 +35,9 @@ in {
     useDHCP = true;
   };
   services = {
-    "9p-health-check" = {
+    "9auth" = {
       enable = true;
-      mounts = ["/var/www/n/media" "/var/lib/nix-client/n/nix"];
+      authorizedUsers = ["mpd"];
     };
     nginx-reverse-proxy = {
       enable = true;
@@ -55,7 +46,6 @@ in {
       publicRoot = "${self.packages.${pkgs.stdenv.hostPlatform.system}.www}";
       email = "matthewdargan57@gmail.com";
     };
-    nix-client.enable = true;
     openssh = {
       enable = true;
       settings.PermitRootLogin = "no";

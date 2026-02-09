@@ -40,6 +40,12 @@ struct Mutex
   u64 u64[1];
 };
 
+typedef struct RWMutex RWMutex;
+struct RWMutex
+{
+  u64 u64[1];
+};
+
 typedef struct Semaphore Semaphore;
 struct Semaphore
 {
@@ -66,6 +72,14 @@ internal void mutex_release(Mutex mutex);
 internal void mutex_take(Mutex mutex);
 internal void mutex_drop(Mutex mutex);
 
+//- reader/writer mutexes
+internal RWMutex rw_mutex_alloc(void);
+internal void rw_mutex_release(RWMutex mutex);
+internal void rw_mutex_take(RWMutex mutex, b32 write_mode);
+internal void rw_mutex_drop(RWMutex mutex);
+#define rw_mutex_take_r(m) rw_mutex_take((m), (0))
+#define rw_mutex_take_w(m) rw_mutex_take((m), (1))
+
 //- cross-process semaphores
 internal Semaphore semaphore_alloc(u32 initial_count, String8 name);
 internal void semaphore_release(Semaphore semaphore);
@@ -74,5 +88,8 @@ internal void semaphore_drop(Semaphore semaphore);
 
 //- scope macros
 #define MutexScope(m) DeferLoop(mutex_take(m), mutex_drop(m))
+#define RWMutexScope(mutex, write_mode) DeferLoop(rw_mutex_take((mutex), (write_mode)), rw_mutex_drop((mutex)))
+#define MutexScopeR(mutex) DeferLoop(rw_mutex_take_r(mutex), rw_mutex_drop(mutex))
+#define MutexScopeW(mutex) DeferLoop(rw_mutex_take_w(mutex), rw_mutex_drop(mutex))
 
 #endif // THREAD_H

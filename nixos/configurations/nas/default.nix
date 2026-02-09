@@ -3,22 +3,11 @@
   pkgs,
   self,
   ...
-}: let
-  mounts = [
-    {
-      what = "127.0.0.1";
-      where = "/var/lib/jellyfin/n/media";
-      type = "9p";
-      options = "port=5640";
-      requires = ["media-serve.service"];
-      after = ["media-serve.service" "network-online.target"];
-      wants = ["network-online.target"];
-    }
-  ];
-in {
+}: {
   imports = [
     ./hardware.nix
-    self.nixosModules."9p-health-check"
+    self.nixosModules."9auth"
+    self.nixosModules."9mount"
     self.nixosModules."9p-tools"
     self.nixosModules.fish
     self.nixosModules.git-server
@@ -40,7 +29,6 @@ in {
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "nas";
     firewall = {
-      allowedTCPPorts = [5641];
       interfaces.${config.services.tailscale.interfaceName} = {
         allowedTCPPorts = [22 5640 8096];
         allowedUDPPorts = [8096];
@@ -49,6 +37,23 @@ in {
     networkmanager.enable = true;
   };
   services = {
+    "9auth" = {
+      enable = true;
+      authorizedUsers = ["jellyfin" "mpd"];
+    };
+    "9mount" = {
+      enable = true;
+      mounts = [
+        {
+          name = "media";
+          dial = "tcp!127.0.0.1!5640";
+          mountPoint = "/var/lib/jellyfin/n/media";
+          useAuth = false;
+          dependsOn = ["media-serve.service"];
+          user = "jellyfin";
+        }
+      ];
+    };
     btrfs.autoScrub.enable = true;
     git-server = {
       enable = true;
@@ -59,24 +64,8 @@ in {
       ];
       repositories.repo.postReceiveHook = pkgs.writeShellScript "post-receive" ''
         set -euo pipefail
-
-        while read -r _ _ ref; do
-          [[ "$ref" == "refs/heads/main" ]] && branch=main
-        done
-
-        if [[ -n "''${branch:-}" ]]; then
-          ${pkgs.git}/bin/git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo reset --hard "$branch"
-          ${pkgs.git}/bin/git --git-dir=/srv/git/repo.git --work-tree=/srv/git/repo clean -fd
-
-          # Trigger systemd service to rebuild in background
-          mkdir -p /var/lib/git-server
-          date -Iseconds > /var/lib/git-server/rebuild-trigger
-        fi
+        exec ${pkgs.git}/bin/git push --mirror github 2>&1 || true
       '';
-    };
-    "9p-health-check" = {
-      enable = true;
-      mounts = ["/var/lib/jellyfin/n/media"];
     };
     jellyfin.enable = true;
     openssh = {
@@ -86,14 +75,6 @@ in {
     tailscale.enable = true;
   };
   systemd = {
-    mounts = map (m: m // {wantedBy = [];}) mounts;
-    automounts =
-      map (m: {
-        inherit (m) where;
-        wantedBy = ["multi-user.target"];
-        automountConfig.TimeoutIdleSec = "600";
-      })
-      mounts;
     services = {
       # 9P servers
       media-serve = {
@@ -107,104 +88,13 @@ in {
         };
         wantedBy = ["multi-user.target"];
       };
-      nix-serve = {
-        description = "9P server for nix builds";
-        after = ["network.target"];
-        wantedBy = ["multi-user.target"];
-        serviceConfig = {
-          User = "git";
-          Group = "git";
-          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs"}/bin/9pfs --root=/srv/nix tcp!*!5641";
-          Restart = "always";
-          RestartSec = "10s";
-        };
-      };
       # Service dependencies
       jellyfin = {
-        after = ["var-lib-jellyfin-n-media.automount"];
-        wants = ["var-lib-jellyfin-n-media.automount"];
-      };
-
-      # Nix rebuild automation
-      nix-rebuild = {
-        description = "Rebuild all NixOS configurations";
-        serviceConfig = {
-          Type = "oneshot";
-          User = "git";
-          Group = "git";
-        };
-        path = [pkgs.nix pkgs.git pkgs.jq pkgs.coreutils pkgs.openssh];
-        script = ''
-                    set -euo pipefail
-
-                    export GIT_DIR=/srv/git/repo.git
-                    export GIT_WORK_TREE=/srv/git/repo
-
-                    FLAKE=/srv/git/repo
-                    CONFIGS=$(nix eval --json "$FLAKE#nixosConfigurations" --apply builtins.attrNames | jq -r '.[]')
-
-                    BUILD_TARGETS=()
-                    for config in $CONFIGS; do
-                      BUILD_TARGETS+=("$FLAKE#nixosConfigurations.$config.config.system.build.toplevel")
-                    done
-
-                    STORE_PATHS=$(nix build "''${BUILD_TARGETS[@]}" --no-link --print-out-paths 2>&1 | grep '^/nix/store/')
-                    nix copy --to file:///srv/nix $STORE_PATHS
-                    nix store sign --store file:///srv/nix --key-file /var/lib/git-server/cache-signing-key.sec --recursive $STORE_PATHS
-
-                    GIT_COMMIT=$(git rev-parse HEAD)
-                    GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-                    BUILD_TIMESTAMP=$(date +%s)
-
-                    echo "$STORE_PATHS" | while read -r STORE_PATH; do
-                      CONFIG_NAME=$(echo "$STORE_PATH" | grep -oP 'nixos-system-\K[^-]+' || echo "")
-                      [[ -z "$CONFIG_NAME" ]] && continue
-
-                      echo "$CONFIG_NAME"
-
-                      GEN_ID=$(echo -n "$STORE_PATH" | sha256sum | cut -c1-16)
-                      HOST_DIR=/srv/nix/hosts/$CONFIG_NAME
-                      GEN_DIR=$HOST_DIR/generations/$GEN_ID
-                      mkdir -p "$GEN_DIR"
-
-                      NIXOS_VERSION=$(echo "$STORE_PATH" | grep -oP 'nixos-system-[^-]+-\K[0-9.]+' || echo "unknown")
-                      SYSTEM=$(nix eval --raw "$FLAKE#nixosConfigurations.$CONFIG_NAME.pkgs.stdenv.hostPlatform.system")
-
-                      echo "$STORE_PATH" > "$GEN_DIR/system"
-
-                      cat > "$GEN_DIR/metadata" <<EOF
-          store_path: $STORE_PATH
-          git_commit: $GIT_COMMIT
-          git_branch: $GIT_BRANCH
-          build_timestamp: $BUILD_TIMESTAMP
-          nixos_version: $NIXOS_VERSION
-          system: $SYSTEM
-          EOF
-
-                      ln -sfn "generations/$GEN_ID" "$HOST_DIR/current.tmp"
-                      mv -Tf "$HOST_DIR/current.tmp" "$HOST_DIR/current"
-
-                      ls -dt "$HOST_DIR/generations"/*/ 2>/dev/null | tail -n +11 | xargs rm -rf || true
-                    done
-
-                    mkdir -p /srv/nix/keys
-                    nix key convert-secret-to-public < /var/lib/git-server/cache-signing-key.sec > /srv/nix/keys/cache-public-key
-
-                    git push --mirror github 2>&1 || true
-        '';
-      };
-    };
-    paths.nix-rebuild = {
-      description = "Watch for git push to trigger rebuild";
-      wantedBy = ["multi-user.target"];
-      pathConfig = {
-        PathChanged = "/var/lib/git-server/rebuild-trigger";
+        after = ["9mount-media.service"];
+        wants = ["9mount-media.service"];
       };
     };
     tmpfiles.rules = [
-      "d /srv/nix 0755 git git -"
-      "d /srv/nix/hosts 0755 git git -"
-      "d /srv/nix/keys 0755 git git -"
       "d /var/lib/git-server 0755 git git -"
       "d /var/lib/jellyfin/n 0755 jellyfin jellyfin -"
     ];

@@ -22,7 +22,6 @@
         "https://cache.nixos.org"
       ];
       trusted-public-keys = [
-        "nas-cache:zS6WxIVuVrTFhM0lF0jZ7z6QIz48y07LlFLV7clLsIg="
         "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
       ];
       trusted-users = ["@wheel" "git"];

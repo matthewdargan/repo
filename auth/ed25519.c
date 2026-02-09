@@ -1,5 +1,5 @@
 ////////////////////////////////
-//~ Challenge Generation
+//~ Ed25519 Operations
 
 internal b32
 auth_ed25519_generate_challenge(u8 challenge[32])
@@ -11,11 +11,8 @@ auth_ed25519_generate_challenge(u8 challenge[32])
   return 1;
 }
 
-////////////////////////////////
-//~ Key Generation
-
 internal b32
-auth_ed25519_generate_keypair(u8 public_key[32], u8 private_key[32], String8 *out_error)
+auth_ed25519_register_credential(Arena *arena, Auth_Ed25519_RegisterParams params, Auth_Key *out_key, String8 *out_error)
 {
   EVP_PKEY_CTX *ctx = 0;
   EVP_PKEY *pkey = 0;
@@ -36,6 +33,9 @@ auth_ed25519_generate_keypair(u8 public_key[32], u8 private_key[32], String8 *ou
   }
   else
   {
+    u8 public_key[32];
+    u8 private_key[32];
+
     size_t public_key_len = 32;
     if(EVP_PKEY_get_raw_public_key(pkey, public_key, &public_key_len) <= 0 || public_key_len != 32)
     {
@@ -50,6 +50,13 @@ auth_ed25519_generate_keypair(u8 public_key[32], u8 private_key[32], String8 *ou
       }
       else
       {
+        out_key->type = Auth_Proto_Ed25519;
+        out_key->user = str8_copy(arena, params.user);
+        out_key->server = str8_copy(arena, params.server);
+
+        MemoryCopy(out_key->ed25519_public_key, public_key, 32);
+        MemoryCopy(out_key->ed25519_private_key, private_key, 32);
+
         success = 1;
       }
     }
@@ -66,9 +73,6 @@ auth_ed25519_generate_keypair(u8 public_key[32], u8 private_key[32], String8 *ou
 
   return success;
 }
-
-////////////////////////////////
-//~ Challenge Signing
 
 internal b32
 auth_ed25519_sign_challenge(Auth_Ed25519_SignParams *params, u8 signature[64],
@@ -119,9 +123,6 @@ auth_ed25519_sign_challenge(Auth_Ed25519_SignParams *params, u8 signature[64],
 
   return success;
 }
-
-////////////////////////////////
-//~ Signature Verification
 
 internal b32
 auth_ed25519_verify_signature(Auth_Ed25519_VerifyParams *params, String8 *out_error)

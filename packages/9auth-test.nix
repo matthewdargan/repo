@@ -11,7 +11,7 @@
       description = "9auth test suite";
       version = "0.1.0";
       buildInputs = [pkgs.libfido2 pkgs.openssl];
-      extraLinkFlags = "-lm -lfido2 -lcrypto";
+      extraLinkFlags = "-lfido2 -lcrypto";
     };
   };
 }

@@ -32,6 +32,11 @@ tctx_select(TCTX *tctx)
 internal TCTX *
 tctx_selected(void)
 {
+  if(tctx_thread_local == 0)
+  {
+    TCTX *tctx = tctx_alloc();
+    tctx_select(tctx);
+  }
   return tctx_thread_local;
 }
 

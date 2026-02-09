@@ -3,35 +3,18 @@
 #include "base/inc.c"
 #include "9p/inc.c"
 
-////////////////////////////////
-//~ Helper Functions
-
-internal void
-usage(void)
-{
-  log_error(
-      str8_lit("usage: 9p [-A=<aname>] <address> <cmd> <args>\n"
-               "cmds: create <name>..., read <name>, write <name>, remove <name>..., stat <name>, ls <name>...\n"));
-}
-
 internal Client9P *
-client9p_connect(Arena *arena, String8 address, String8 aname)
+client9p_connect(Arena *arena, String8 address, String8 attach_path, String8 auth_server, String8 server_id)
 {
-  if(address.size == 0)
-  {
-    log_error(str8_lit("9p: namespace mounting not implemented\n"));
-    return 0;
-  }
-
   OS_Handle socket = dial9p_connect(arena, address, str8_lit("tcp"), str8_lit("9pfs"));
   if(os_handle_match(socket, os_handle_zero()))
   {
-    log_errorf("9p: dial failed for '%S'\n", address);
+    log_errorf("9p: dial failed: %S\n", address);
     return 0;
   }
 
   u64 fd = socket.u64[0];
-  Client9P *client = client9p_mount(arena, fd, str8_zero(), aname, 0);
+  Client9P *client = client9p_mount(arena, fd, auth_server, attach_path, server_id, 1);
   if(client == 0)
   {
     os_file_close(socket);
@@ -48,14 +31,14 @@ ls_print_name(Arena *arena, Client9P *client, String8 name)
   Dir9P d = client9p_stat(arena, client, name);
   if(d.name.size == 0)
   {
-    log_errorf("9p: failed to stat '%S'\n", name);
+    log_errorf("9p: stat failed: %S\n", name);
   }
   else if(d.mode & P9_ModeFlag_Directory)
   {
     ClientFid9P *fid = client9p_open(arena, client, name, P9_OpenFlag_Read);
     if(fid == 0)
     {
-      log_errorf("9p: failed to open directory '%S'\n", name);
+      log_errorf("9p: open failed: %S\n", name);
     }
     else
     {
@@ -83,27 +66,48 @@ entry_point(CmdLine *cmd_line)
   Log *log = log_alloc();
   log_select(log);
   log_scope_begin();
-  String8 aname = str8_zero();
 
-  if(cmd_line_has_argument(cmd_line, str8_lit("A")))
+  String8 auth_server = cmd_line_string(cmd_line, str8_lit("auth-server"));
+  String8 attach_path = cmd_line_string(cmd_line, str8_lit("aname"));
+  String8 server_id = cmd_line_string(cmd_line, str8_lit("server-id"));
+
+  if(auth_server.size == 0)
   {
-    aname = cmd_line_string(cmd_line, str8_lit("A"));
+    auth_server = str8_lit("unix!/run/9auth/socket");
   }
+
+  if(attach_path.size == 0)
+  {
+    attach_path = str8_lit("/");
+  }
+
   if(cmd_line->inputs.node_count < 2)
   {
-    usage();
+    log_error(str8_lit("usage: 9p [options] <address> <cmd> <args>\n"
+                       "options:\n"
+                       "  --auth-server=<addr>    9auth server address (default: unix!/run/9auth/socket)\n"
+                       "  --aname=<path>          Remote path to attach (default: /)\n"
+                       "  --server-id=<id>        Server hostname for authentication (required)\n"
+                       "cmds: create <name>..., read <name>, write <name>, remove <name>..., stat <name>, ls <name>...\n"));
   }
   else
   {
+    if(server_id.size == 0)
+    {
+      log_error(str8_lit("9p: --server-id required\n"));
+      log_scope_flush(scratch.arena);
+      scratch_end(scratch);
+      return;
+    }
+
     String8Node *inputs = cmd_line->inputs.first;
     String8 address = inputs->string;
     String8 command = inputs->next->string;
     String8Node *args = inputs->next->next;
 
-    // create name...
     if(str8_match(command, str8_lit("create"), 0))
     {
-      Client9P *client = client9p_connect(scratch.arena, address, aname);
+      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
       if(client != 0)
       {
         for(String8Node *node = args; node != 0; node = node->next)
@@ -112,7 +116,7 @@ entry_point(CmdLine *cmd_line)
           ClientFid9P *fid = client9p_create(scratch.arena, client, name, P9_OpenFlag_Read, 0666);
           if(fid == 0)
           {
-            log_errorf("9p: failed to create '%S'\n", name);
+            log_errorf("9p: create failed: %S\n", name);
           }
           else
           {
@@ -122,17 +126,16 @@ entry_point(CmdLine *cmd_line)
         client9p_unmount(scratch.arena, client);
       }
     }
-    // read name
     else if(str8_match(command, str8_lit("read"), 0))
     {
       String8 name = args->string;
-      Client9P *client = client9p_connect(scratch.arena, address, aname);
+      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
       if(client != 0)
       {
         ClientFid9P *fid = client9p_open(scratch.arena, client, name, P9_OpenFlag_Read);
         if(fid == 0)
         {
-          log_errorf("9p: failed to open '%S'\n", name);
+          log_errorf("9p: open failed: %S\n", name);
         }
         else
         {
@@ -144,13 +147,13 @@ entry_point(CmdLine *cmd_line)
             {
               if(n < 0)
               {
-                log_error(str8_lit("9p: read error\n"));
+                log_error(str8_lit("9p: read failed\n"));
               }
               break;
             }
             if(write(STDOUT_FILENO, buf, n) != n)
             {
-              log_errorf("9p: write error: %s\n", strerror(errno));
+              log_errorf("9p: write failed: %s\n", strerror(errno));
               break;
             }
           }
@@ -159,17 +162,16 @@ entry_point(CmdLine *cmd_line)
         client9p_unmount(scratch.arena, client);
       }
     }
-    // write name
     else if(str8_match(command, str8_lit("write"), 0))
     {
       String8 name = args->string;
-      Client9P *client = client9p_connect(scratch.arena, address, aname);
+      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
       if(client != 0)
       {
         ClientFid9P *fid = client9p_open(scratch.arena, client, name, P9_OpenFlag_Write | P9_OpenFlag_Truncate);
         if(fid == 0)
         {
-          log_errorf("9p: failed to open '%S'\n", name);
+          log_errorf("9p: open failed: %S\n", name);
         }
         else
         {
@@ -181,14 +183,14 @@ entry_point(CmdLine *cmd_line)
             {
               if(n < 0)
               {
-                log_errorf("9p: write error: %s\n", strerror(errno));
+                log_errorf("9p: read failed: %s\n", strerror(errno));
               }
               break;
             }
             s64 nwrite = client9p_fid_pwrite(scratch.arena, fid, buf, n, -1);
             if(nwrite != n)
             {
-              log_error(str8_lit("9p: write error\n"));
+              log_error(str8_lit("9p: write failed\n"));
               break;
             }
           }
@@ -197,10 +199,9 @@ entry_point(CmdLine *cmd_line)
         client9p_unmount(scratch.arena, client);
       }
     }
-    // remove name...
     else if(str8_match(command, str8_lit("remove"), 0))
     {
-      Client9P *client = client9p_connect(scratch.arena, address, aname);
+      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
       if(client != 0)
       {
         for(String8Node *node = args; node != 0; node = node->next)
@@ -208,23 +209,22 @@ entry_point(CmdLine *cmd_line)
           String8 name = node->string;
           if(client9p_remove(scratch.arena, client, name) < 0)
           {
-            log_errorf("9p: failed to remove '%S'\n", name);
+            log_errorf("9p: remove failed: %S\n", name);
           }
         }
         client9p_unmount(scratch.arena, client);
       }
     }
-    // stat name
     else if(str8_match(command, str8_lit("stat"), 0))
     {
       String8 name = args->string;
-      Client9P *client = client9p_connect(scratch.arena, address, aname);
+      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
       if(client != 0)
       {
         Dir9P d = client9p_stat(scratch.arena, client, name);
         if(d.name.size == 0)
         {
-          log_errorf("9p: failed to stat '%S'\n", name);
+          log_errorf("9p: stat failed: %S\n", name);
         }
         else
         {
@@ -233,10 +233,9 @@ entry_point(CmdLine *cmd_line)
         client9p_unmount(scratch.arena, client);
       }
     }
-    // ls name...
     else if(str8_match(command, str8_lit("ls"), 0))
     {
-      Client9P *client = client9p_connect(scratch.arena, address, aname);
+      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
       if(client != 0)
       {
         String8Node *name_node = args;
@@ -256,7 +255,7 @@ entry_point(CmdLine *cmd_line)
     }
     else
     {
-      log_errorf("9p: unsupported command '%S'\n", command);
+      log_errorf("9p: unsupported command: %S\n", command);
     }
   }
 

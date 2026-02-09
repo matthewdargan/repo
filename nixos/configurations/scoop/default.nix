@@ -4,32 +4,14 @@
   ...
 }: let
   user = "mpd";
-  mounts = [
-    {
-      what = "nas";
-      where = "/home/${user}/n/media";
-      type = "9p";
-      options = "port=5640";
-      after = ["network-online.target"];
-      wants = ["network-online.target"];
-    }
-    {
-      what = "nas";
-      where = "/var/lib/nix-client/n/nix";
-      type = "9p";
-      options = "port=5641";
-      after = ["network-online.target"];
-      wants = ["network-online.target"];
-    }
-  ];
 in {
   imports = [
     ./hardware.nix
-    self.nixosModules."9p-health-check"
+    self.nixosModules."9auth"
+    self.nixosModules."9mount"
     self.nixosModules."9p-tools"
     self.nixosModules.fish
     self.nixosModules.locale
-    self.nixosModules.nix-client
     self.nixosModules.nix-config
     self.nixosModules.yubikey
   ];
@@ -45,16 +27,27 @@ in {
   programs.steam.enable = true;
   security.rtkit.enable = true;
   services = {
-    "9p-health-check" = {
+    "9auth" = {
       enable = true;
-      mounts = ["/home/${user}/n/media" "/var/lib/nix-client/n/nix"];
+      authorizedUsers = ["mpd"];
+    };
+    "9mount" = {
+      enable = true;
+      mounts = [
+        {
+          name = "media";
+          dial = "tcp!nas!5640";
+          mountPoint = "/home/${user}/n/media";
+          useAuth = false;
+          inherit user;
+        }
+      ];
     };
     desktopManager.plasma6.enable = true;
     displayManager.sddm = {
       enable = true;
       wayland.enable = true;
     };
-    nix-client.enable = true;
     pipewire = {
       enable = true;
       alsa = {
@@ -71,16 +64,6 @@ in {
         variant = "";
       };
     };
-  };
-  systemd = {
-    mounts = map (m: m // {wantedBy = [];}) mounts;
-    automounts =
-      map (m: {
-        inherit (m) where;
-        wantedBy = ["multi-user.target"];
-        automountConfig.TimeoutIdleSec = "600";
-      })
-      mounts;
   };
   system.stateVersion = "25.05";
   users.users.${user} = {

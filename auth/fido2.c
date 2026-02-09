@@ -25,6 +25,8 @@ auth_fido2_enumerate_devices(Arena *arena)
   fido_dev_info_t *dev_list = 0;
   size_t dev_count = 0;
 
+  fido_init(0);
+
   dev_list = fido_dev_info_new(64);
   if(dev_list == 0)
   {
@@ -82,8 +84,6 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   fido_dev_t *dev = 0;
   fido_cred_t *cred = 0;
 
-  fido_init(0);
-
   Auth_Fido2_DeviceList devices = auth_fido2_enumerate_devices(arena);
   if(devices.count == 0)
   {
@@ -136,11 +136,9 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   }
 
   String8 rp_id_copy = str8_copy(temp.arena, params.rp_id);
-  String8 rp_name_copy = str8_copy(temp.arena, params.rp_name);
   char *rp_id_cstr = (char *)rp_id_copy.str;
-  char *rp_name_cstr = (char *)rp_name_copy.str;
 
-  r = fido_cred_set_rp(cred, rp_id_cstr, rp_name_cstr);
+  r = fido_cred_set_rp(cred, rp_id_cstr, rp_id_cstr);
   if(r != FIDO_OK)
   {
     *out_error = str8f(arena, "fido2: failed to set relying party: %S", auth_fido2_error_string(arena, r));
@@ -245,9 +243,9 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
     return 0;
   }
 
-  out_key->type = Auth_Key_Type_FIDO2;
+  out_key->type = Auth_Proto_FIDO2;
   out_key->user = str8_copy(arena, params.user);
-  out_key->rp_id = str8_copy(arena, params.rp_id);
+  out_key->server = str8_copy(arena, params.rp_id);
 
   MemoryCopy(out_key->credential_id, cred_id, cred_id_len);
   out_key->credential_id_len = cred_id_len;
@@ -266,8 +264,6 @@ internal b32
 auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fido2_Assertion *out_assertion,
                          String8 *out_error)
 {
-  fido_init(0);
-
   Auth_Fido2_DeviceList devices = auth_fido2_enumerate_devices(arena);
   if(devices.count == 0)
   {

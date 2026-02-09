@@ -77,55 +77,83 @@ test_stat_file(Arena *arena, Client9P *client, String8 name, u64 expected_size)
 internal b32
 test_wstat_chmod(Arena *arena, Client9P *client, String8 name, u32 mode)
 {
-  Dir9P dir = client9p_stat(arena, client, name);
+  ClientFid9P *fid = client9p_fid_walk(arena, client->root, name);
+  if(fid == 0)
+  {
+    return 0;
+  }
+  Dir9P dir = client9p_fid_stat(arena, fid);
   if(dir.name.size == 0)
   {
+    client9p_fid_close(arena, fid);
     return 0;
   }
   dir.mode = mode;
-  b32 result = client9p_wstat(arena, client, name, dir);
+  b32 result = client9p_fid_wstat(arena, fid, dir);
   if(!result)
   {
+    client9p_fid_close(arena, fid);
     return 0;
   }
-  Dir9P new_dir = client9p_stat(arena, client, name);
+  Dir9P new_dir = client9p_fid_stat(arena, fid);
+  client9p_fid_close(arena, fid);
   return (new_dir.mode & 0777) == (mode & 0777);
 }
 
 internal b32
 test_wstat_truncate(Arena *arena, Client9P *client, String8 name, u64 new_size)
 {
-  Dir9P dir = client9p_stat(arena, client, name);
+  ClientFid9P *fid = client9p_fid_walk(arena, client->root, name);
+  if(fid == 0)
+  {
+    return 0;
+  }
+  Dir9P dir = client9p_fid_stat(arena, fid);
   if(dir.name.size == 0)
   {
+    client9p_fid_close(arena, fid);
     return 0;
   }
   dir.length = new_size;
-  b32 result = client9p_wstat(arena, client, name, dir);
+  b32 result = client9p_fid_wstat(arena, fid, dir);
   if(!result)
   {
+    client9p_fid_close(arena, fid);
     return 0;
   }
-  Dir9P new_dir = client9p_stat(arena, client, name);
+  Dir9P new_dir = client9p_fid_stat(arena, fid);
+  client9p_fid_close(arena, fid);
   return new_dir.length == new_size;
 }
 
 internal b32
 test_wstat_rename(Arena *arena, Client9P *client, String8 old_name, String8 new_name)
 {
-  Dir9P dir = client9p_stat(arena, client, old_name);
-  if(dir.name.size == 0)
+  ClientFid9P *fid = client9p_fid_walk(arena, client->root, old_name);
+  if(fid == 0)
   {
     return 0;
   }
+  Dir9P dir = client9p_fid_stat(arena, fid);
+  if(dir.name.size == 0)
+  {
+    client9p_fid_close(arena, fid);
+    return 0;
+  }
   dir.name = new_name;
-  b32 result = client9p_wstat(arena, client, old_name, dir);
+  b32 result = client9p_fid_wstat(arena, fid, dir);
+  client9p_fid_close(arena, fid);
   if(!result)
   {
     return 0;
   }
-  Dir9P new_dir = client9p_stat(arena, client, new_name);
-  return new_dir.name.size > 0;
+  ClientFid9P *new_fid = client9p_fid_walk(arena, client->root, new_name);
+  b32 exists = new_fid != 0;
+  if(exists)
+  {
+    client9p_fid_close(arena, new_fid);
+  }
+  return exists;
 }
 
 internal b32
@@ -685,7 +713,7 @@ run_tests(Arena *arena, String8 address)
   }
 
   u64 fd = socket.u64[0];
-  Client9P *client = client9p_mount(arena, fd, str8_zero(), str8_zero(), 0);
+  Client9P *client = client9p_mount(arena, fd, str8_zero(), str8_zero(), str8_zero(), 0);
   if(client == 0)
   {
     os_file_close(socket);

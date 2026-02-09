@@ -5,7 +5,7 @@
 }: {
   home = {
     homeDirectory = "/home/mpd";
-    packages = [pkgs.claude-code self.packages.${pkgs.stdenv.hostPlatform.system}.neovim pkgs.opencode];
+    packages = [self.packages.${pkgs.stdenv.hostPlatform.system}.neovim];
     stateVersion = "25.11";
     username = "mpd";
   };

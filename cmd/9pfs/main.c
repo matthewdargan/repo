@@ -7,6 +7,7 @@ global FsContext9P *fs_context = 0;
 global WP_Pool *worker_pool = 0;
 global b32 require_auth = 0;
 global String8 auth_server_addr = {0};
+global String8 server_id = {0};
 
 internal void
 fid_release(Server9P *server, ServerFid9P *fid)
@@ -51,6 +52,12 @@ fid_aux_release(Server9P *server, FidAuxiliary9P *aux)
   {
     fs9p_closedir(&aux->dir_iter);
     aux->has_dir_iter = 0;
+  }
+  if(aux->auth_client)
+  {
+    close(aux->auth_client->fd);
+    aux->auth_client = 0;
+    aux->auth_rpc_fid = 0;
   }
 
   aux->next = server->fid_aux_free_list;
@@ -102,7 +109,7 @@ srv_auth(ServerRequest9P *request)
     return;
   }
 
-  String8 auth_addr = auth_server_addr.size > 0 ? auth_server_addr : str8_lit("unix!/var/run/9auth");
+  String8 auth_addr = auth_server_addr.size > 0 ? auth_server_addr : str8_lit("unix!/run/9auth/socket");
   OS_Handle auth_handle = dial9p_connect(request->server->arena, auth_addr, str8_lit("unix"), str8_lit("9auth"));
   if(os_handle_match(auth_handle, os_handle_zero()))
   {
@@ -137,8 +144,9 @@ srv_auth(ServerRequest9P *request)
     return;
   }
 
+  String8 srv_id = server_id.size > 0 ? server_id : str8_lit("localhost");
   String8 start_cmd = str8f(request->scratch.arena, "start role=server user=%S server=%S",
-                            request->in_msg.user_name, request->in_msg.attach_path);
+                            request->in_msg.user_name, srv_id);
   s64 write_result = client9p_fid_pwrite(request->server->arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
   if(write_result != (s64)start_cmd.size)
   {
@@ -150,6 +158,7 @@ srv_auth(ServerRequest9P *request)
   aux->is_auth_fid = 1;
   aux->auth_verified = 0;
   aux->auth_user = str8_copy(request->server->arena, request->in_msg.user_name);
+  aux->auth_client = auth_client;
   aux->auth_rpc_fid = rpc_fid;
 
   request->out_msg.auth_qid.type = QidTypeFlag_Auth;
@@ -518,6 +527,34 @@ srv_write(ServerRequest9P *request)
 }
 
 internal void
+srv_clunk(ServerRequest9P *request)
+{
+  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  fid_aux_release(request->server, aux);
+  ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
+  fid_release(request->server, fid);
+  server9p_respond(request, str8_zero());
+}
+
+internal void
+srv_remove(ServerRequest9P *request)
+{
+  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+
+  if(fs_context->readonly)
+  {
+    server9p_respond(request, str8_lit("read-only filesystem"));
+    return;
+  }
+
+  fs9p_remove(fs_context, fid_aux_get_path(aux));
+  fid_aux_release(request->server, aux);
+  ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
+  fid_release(request->server, fid);
+  server9p_respond(request, str8_zero());
+}
+
+internal void
 srv_stat(ServerRequest9P *request)
 {
   FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
@@ -569,34 +606,6 @@ srv_wstat(ServerRequest9P *request)
     }
   }
 
-  server9p_respond(request, str8_zero());
-}
-
-internal void
-srv_remove(ServerRequest9P *request)
-{
-  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
-
-  if(fs_context->readonly)
-  {
-    server9p_respond(request, str8_lit("read-only filesystem"));
-    return;
-  }
-
-  fs9p_remove(fs_context, fid_aux_get_path(aux));
-  fid_aux_release(request->server, aux);
-  ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
-  fid_release(request->server, fid);
-  server9p_respond(request, str8_zero());
-}
-
-internal void
-srv_clunk(ServerRequest9P *request)
-{
-  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
-  fid_aux_release(request->server, aux);
-  ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
-  fid_release(request->server, fid);
   server9p_respond(request, str8_zero());
 }
 
@@ -663,17 +672,17 @@ handle_connection(OS_Handle connection_socket)
     case Msg9P_Twrite:
       srv_write(request);
       break;
+    case Msg9P_Tclunk:
+      srv_clunk(request);
+      break;
+    case Msg9P_Tremove:
+      srv_remove(request);
+      break;
     case Msg9P_Tstat:
       srv_stat(request);
       break;
     case Msg9P_Twstat:
       srv_wstat(request);
-      break;
-    case Msg9P_Tremove:
-      srv_remove(request);
-      break;
-    case Msg9P_Tclunk:
-      srv_clunk(request);
       break;
     default:
       server9p_respond(request, str8_lit("unsupported operation"));
@@ -714,6 +723,7 @@ entry_point(CmdLine *cmd_line)
   b32 readonly = cmd_line_has_flag(cmd_line, str8_lit("readonly"));
   require_auth = cmd_line_has_flag(cmd_line, str8_lit("require-auth"));
   auth_server_addr = cmd_line_string(cmd_line, str8_lit("auth-server"));
+  server_id = cmd_line_string(cmd_line, str8_lit("server-id"));
 
   u64 worker_count = 0;
   String8 threads_str = cmd_line_string(cmd_line, str8_lit("threads"));
@@ -731,13 +741,14 @@ entry_point(CmdLine *cmd_line)
   {
     fprintf(stderr, "usage: 9pfs [options] <address>\n"
                     "options:\n"
-                    "  --root=<path>        Root directory to serve (default: current directory)\n"
-                    "  --readonly           Serve in read-only mode\n"
-                    "  --require-auth       Require authentication via 9auth daemon\n"
-                    "  --auth-server=<addr> Auth server address (default: unix!/var/run/9auth)\n"
-                    "  --threads=<n>        Number of worker threads (default: max(4, cores/4))\n"
+                    "  --root=<path>         Root directory to serve (default: current directory)\n"
+                    "  --readonly            Serve in read-only mode\n"
+                    "  --require-auth        Require authentication via 9auth daemon\n"
+                    "  --auth-server=<addr>  Auth server address (default: unix!/run/9auth/socket)\n"
+                    "  --server-id=<id>      Server hostname for auth (default: localhost)\n"
+                    "  --threads=<n>         Number of worker threads (default: max(4, cores/4))\n"
                     "arguments:\n"
-                    "  <address>            Dial string (e.g., tcp!host!port)\n");
+                    "  <address>             Dial string (e.g., tcp!host!port)\n");
     fflush(stderr);
   }
   else

@@ -1,5 +1,6 @@
 _: {
   flake.homeModules = {
+    "agents" = ./agents.nix;
     "base" = ./base.nix;
     "development" = ./development.nix;
     "discord" = ./discord.nix;

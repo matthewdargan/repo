@@ -2,49 +2,24 @@
   pkgs,
   self,
   ...
-}: let
-  mounts = [
-    {
-      what = "10.0.0.2";
-      where = "/var/lib/nix-client/n/nix";
-      type = "9p";
-      options = "port=5641";
-      after = ["network-online.target"];
-      wants = ["network-online.target"];
-    }
-  ];
-in {
+}: {
   imports = [
     ./boot.nix
     ./network.nix
     ./services.nix
-    self.nixosModules."9p-health-check"
+    self.nixosModules."9auth"
     self.nixosModules."9p-tools"
     self.nixosModules.fish
     self.nixosModules.locale
-    self.nixosModules.nix-client
     self.nixosModules.nix-config
   ];
   environment.systemPackages = [
     pkgs.iproute2
     self.packages.${pkgs.stdenv.hostPlatform.system}.neovim
   ];
-  services = {
-    "9p-health-check" = {
-      enable = true;
-      mounts = ["/var/lib/nix-client/n/nix"];
-    };
-    nix-client.enable = true;
-  };
-  systemd = {
-    mounts = map (m: m // {wantedBy = [];}) mounts;
-    automounts =
-      map (m: {
-        inherit (m) where;
-        wantedBy = ["multi-user.target"];
-        automountConfig.TimeoutIdleSec = "600";
-      })
-      mounts;
+  services."9auth" = {
+    enable = true;
+    authorizedUsers = ["mpd"];
   };
   system.stateVersion = "25.11";
   users.users.mpd = {

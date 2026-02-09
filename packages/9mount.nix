@@ -10,6 +10,8 @@
       pname = "9mount";
       description = "Mounts a 9p filesystem";
       version = "0.1.0";
+      buildInputs = [pkgs.fuse3];
+      extraLinkFlags = "-lfuse3 -lpthread";
     };
   };
 }

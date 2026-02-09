@@ -4,7 +4,7 @@
       enable = true;
       settings = {
         control-socket = {
-          socket-name = "/run/kea/kea-dhcp4.sock";
+          socket-name = "/run/kea/dhcp4-socket";
           socket-type = "unix";
         };
         interfaces-config.interfaces = ["br-lan"];
@@ -73,7 +73,7 @@
         ];
         remote-control = {
           control-enable = true;
-          control-interface = "/var/run/unbound/unbound.sock";
+          control-interface = "/run/unbound/socket";
         };
         server = {
           access-control = [

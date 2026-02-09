@@ -53,9 +53,8 @@ Implementation of the 9P protocol for network file systems.
 
 - **`9pfs/`** - 9P file server (disk-backed with arena-based tmp/)
 - **`9pfs-test/`** - Test program for 9P file server implementations
-- **`9mount/`** - Mount 9P filesystems
+- **`9mount/`** - Mount 9P filesystems (FUSE, unmount with fusermount3)
 - **`9bind/`** - Bind mount directories
-- **`9umount/`** - Unmount 9P filesystems
 - **`mount-9p/`** - mount(8) helper for 9P filesystems
 - **`9p/`** - 9P protocol inspection tool
 

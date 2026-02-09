@@ -17,6 +17,7 @@ in {
     ];
 
     "mpd@scoop" = mkHome [
+      self.homeModules.agents
       self.homeModules.base
       self.homeModules.development
       self.homeModules.discord

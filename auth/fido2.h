@@ -15,7 +15,6 @@ struct Auth_Fido2_RegisterParams
 {
   String8 user;
   String8 rp_id;
-  String8 rp_name;
   b32 require_uv;
 };
 

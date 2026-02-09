@@ -238,6 +238,26 @@ internal u64 bswap_u64(u64 x);
 #endif
 
 ////////////////////////////////
+//~ Atomic Operations
+
+#define ins_atomic_u64_eval(x) __atomic_load_n(x, __ATOMIC_SEQ_CST)
+#define ins_atomic_u64_inc_eval(x) (__atomic_fetch_add((u64 *)(x), 1, __ATOMIC_SEQ_CST) + 1)
+#define ins_atomic_u64_dec_eval(x) (__atomic_fetch_sub((u64 *)(x), 1, __ATOMIC_SEQ_CST) - 1)
+#define ins_atomic_u64_eval_assign(x, c) __atomic_exchange_n(x, c, __ATOMIC_SEQ_CST)
+#define ins_atomic_u64_add_eval(x, c) (__atomic_fetch_add((u64 *)(x), c, __ATOMIC_SEQ_CST) + (c))
+#define ins_atomic_u64_eval_cond_assign(x, k, c) ({ u64 _new = (c); __atomic_compare_exchange_n((u64 *)(x),&_new,(k),0,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST); _new; })
+#define ins_atomic_u32_eval(x) __atomic_load_n(x, __ATOMIC_SEQ_CST)
+#define ins_atomic_u32_inc_eval(x) (__atomic_fetch_add((u32 *)(x), 1, __ATOMIC_SEQ_CST) + 1)
+#define ins_atomic_u32_dec_eval(x) (__atomic_fetch_sub((u32 *)(x), 1, __ATOMIC_SEQ_CST) - 1)
+#define ins_atomic_u32_add_eval(x, c) (__atomic_fetch_add((u32 *)(x), c, __ATOMIC_SEQ_CST) + (c))
+#define ins_atomic_u32_eval_assign(x, c) __atomic_exchange_n((x), (c), __ATOMIC_SEQ_CST)
+#define ins_atomic_u32_eval_cond_assign(x, k, c) ({ u32 _new = (c); __atomic_compare_exchange_n((u32 *)(x),&_new,(k),0,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST); _new; })
+#define ins_atomic_u8_eval_assign(x, c) __atomic_exchange_n((x), (c), __ATOMIC_SEQ_CST)
+#define ins_atomic_ptr_eval_cond_assign(x, k, c) (void *)ins_atomic_u64_eval_cond_assign((u64 *)(x), (u64)(k), (u64)(c))
+#define ins_atomic_ptr_eval_assign(x, c) (void *)ins_atomic_u64_eval_assign((u64 *)(x), (u64)(c))
+#define ins_atomic_ptr_eval(x) (void *)ins_atomic_u64_eval((u64 *)x)
+
+////////////////////////////////
 //~ Raw byte IO
 
 internal u16 read_u16(void const *ptr);

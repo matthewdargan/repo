@@ -12,23 +12,14 @@
       after = ["network-online.target"];
       wants = ["network-online.target"];
     }
-    {
-      what = "nas";
-      where = "/var/lib/nix-client/n/nix";
-      type = "9p";
-      options = "port=5641";
-      after = ["network-online.target"];
-      wants = ["network-online.target"];
-    }
   ];
 in {
   imports = [
     ./boot.nix
-    self.nixosModules."9p-health-check"
+    self.nixosModules."9auth"
     self.nixosModules."9p-tools"
     self.nixosModules.fish
     self.nixosModules.locale
-    self.nixosModules.nix-client
     self.nixosModules.nix-config
   ];
   networking = {
@@ -37,16 +28,15 @@ in {
   };
   programs.steam.enable = true;
   services = {
-    "9p-health-check" = {
+    "9auth" = {
       enable = true;
-      mounts = ["/home/mpd/n/media" "/var/lib/nix-client/n/nix"];
+      authorizedUsers = ["mpd"];
     };
     desktopManager.plasma6.enable = true;
     displayManager.sddm = {
       enable = true;
       wayland.enable = true;
     };
-    nix-client.enable = true;
     openssh = {
       enable = true;
       settings.PermitRootLogin = "no";

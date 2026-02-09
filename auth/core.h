@@ -10,7 +10,6 @@ typedef enum
   Auth_State_Started,
   Auth_State_ChallengeReady,
   Auth_State_ChallengeSent,
-  Auth_State_SignatureRecv,
   Auth_State_Done,
   Auth_State_Error,
 } Auth_State;
@@ -18,7 +17,9 @@ typedef enum
 ////////////////////////////////
 //~ Conversation
 
+typedef struct Auth_Key Auth_Key;
 typedef struct Auth_Conv Auth_Conv;
+
 struct Auth_Conv
 {
   Auth_Conv *next;
@@ -27,6 +28,7 @@ struct Auth_Conv
   String8 server;
   String8 role;
   String8 proto;
+  Auth_Key *key;
   Auth_State state;
   u64 start_time;
   u8 challenge[32];
@@ -39,23 +41,23 @@ struct Auth_Conv
 };
 
 ////////////////////////////////
-//~ Key Type
+//~ Protocol
 
 typedef enum
 {
-  Auth_Key_Type_FIDO2,
-  Auth_Key_Type_Ed25519,
-} Auth_Key_Type;
+  Auth_Proto_Ed25519 = 1,
+  Auth_Proto_FIDO2 = 2,
+} Auth_Proto;
 
 ////////////////////////////////
-//~ Key (Multi-Protocol Credential)
+//~ Key
 
 typedef struct Auth_Key Auth_Key;
 struct Auth_Key
 {
-  Auth_Key_Type type;
+  Auth_Proto type;
   String8 user;
-  String8 rp_id;
+  String8 server;
   // FIDO2
   u8 credential_id[256];
   u64 credential_id_len;
@@ -82,15 +84,14 @@ struct Auth_KeyRing
 //~ Conversation Functions
 
 internal Auth_Conv *auth_conv_alloc(Arena *arena, u64 tag, String8 user, String8 server);
-internal b32 auth_conv_is_expired(Auth_Conv *conv, u64 current_time, u64 timeout_seconds);
 
 ////////////////////////////////
 //~ Key Ring Functions
 
 internal Auth_KeyRing auth_keyring_alloc(Arena *arena, u64 capacity);
 internal b32 auth_keyring_add(Auth_KeyRing *ring, Auth_Key *key, String8 *out_error);
-internal Auth_Key *auth_keyring_lookup(Auth_KeyRing *ring, String8 user, String8 rp_id);
-internal void auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 rp_id);
+internal Auth_Key *auth_keyring_lookup(Auth_KeyRing *ring, String8 user, String8 server);
+internal void auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 server);
 
 ////////////////////////////////
 //~ Key Ring Serialization

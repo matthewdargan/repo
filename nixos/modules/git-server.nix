@@ -45,12 +45,12 @@ in {
           postReceiveHook = lib.mkOption {
             type = lib.types.nullOr lib.types.path;
             default = null;
-            description = "Path to post-receive hook script";
+            description = "Post-receive hook script for this repository";
           };
         };
       });
       default = {};
-      description = "Git repositories to manage";
+      description = "Git repositories to configure with hooks";
     };
   };
 
@@ -67,11 +67,14 @@ in {
     users.groups.${cfg.group} = {};
 
     systemd.tmpfiles.rules =
-      ["d ${cfg.baseDir} 0755 ${cfg.user} ${cfg.group} -"]
-      ++ lib.flatten (lib.mapAttrsToList (name: repo:
+      [
+        "d ${cfg.baseDir} 0755 ${cfg.user} ${cfg.group} -"
+      ]
+      ++ (lib.concatLists (lib.mapAttrsToList (name: repo:
         lib.optionals (repo.postReceiveHook != null) [
+          "d ${cfg.baseDir}/${name}.git/hooks 0755 ${cfg.user} ${cfg.group} -"
           "L+ ${cfg.baseDir}/${name}.git/hooks/post-receive - - - - ${repo.postReceiveHook}"
         ])
-      cfg.repositories);
+      cfg.repositories));
   };
 }

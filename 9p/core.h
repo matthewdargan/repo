@@ -25,8 +25,8 @@ read_only global String8 version_9p = str8_lit_comp("9P2000");
 #define P9_FID_NONE max_u32
 #define P9_OPEN_MODE_NONE max_u32
 #define P9_MESSAGE_HEADER_SIZE 24
-#define P9_IOUNIT_DEFAULT 8192
-#define P9_DIR_ENTRY_MAX 8192
+#define P9_IOUNIT_DEFAULT MB(1)
+#define P9_DIR_ENTRY_MAX MB(1)
 #define P9_DIR_BUFFER_MAX (P9_DIR_ENTRY_MAX * 16)
 
 ////////////////////////////////
@@ -147,6 +147,7 @@ enum
   P9_OpenFlag_ReadWrite = 2,
   P9_OpenFlag_Execute = 3,
   P9_OpenFlag_Truncate = 16,
+  P9_OpenFlag_RemoveOnClose = 64,
 };
 
 ////////////////////////////////

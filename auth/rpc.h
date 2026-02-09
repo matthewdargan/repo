@@ -18,10 +18,10 @@ typedef enum
 typedef struct Auth_RPC_StartParams Auth_RPC_StartParams;
 struct Auth_RPC_StartParams
 {
-  String8 proto;
-  String8 role;
   String8 user;
   String8 server;
+  String8 proto;
+  String8 role;
 };
 
 typedef struct Auth_RPC_Request Auth_RPC_Request;
@@ -48,6 +48,7 @@ struct Auth_RPC_State
 {
   Arena *arena;
   Auth_KeyRing *keyring;
+  String8 keys_path;
   Mutex mutex;
   Auth_Conv *conv_first;
   Auth_Conv *conv_last;
@@ -57,7 +58,7 @@ struct Auth_RPC_State
 ////////////////////////////////
 //~ RPC Functions
 
-internal Auth_RPC_State *auth_rpc_state_alloc(Arena *arena, Auth_KeyRing *keyring);
+internal Auth_RPC_State *auth_rpc_state_alloc(Arena *arena, Auth_KeyRing *keyring, String8 keys_path);
 internal Auth_RPC_Request auth_rpc_parse(Arena *arena, String8 command_line);
 internal Auth_RPC_Response auth_rpc_handle_start(Auth_RPC_State *state, Auth_Conv **out_conv,
                                                  Auth_RPC_StartParams params);

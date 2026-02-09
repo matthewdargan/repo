@@ -154,6 +154,63 @@ mutex_drop(Mutex mutex)
   pthread_mutex_unlock(m);
 }
 
+//- reader/writer mutexes
+internal RWMutex
+rw_mutex_alloc(void)
+{
+  pthread_rwlock_t *rwlock =
+      (pthread_rwlock_t *)mmap(0, sizeof(*rwlock), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  AssertAlways(rwlock != MAP_FAILED);
+
+  int err = pthread_rwlock_init(rwlock, 0);
+  AssertAlways(err == 0);
+
+  RWMutex result = {(u64)rwlock};
+  return result;
+}
+
+internal void
+rw_mutex_release(RWMutex mutex)
+{
+  if(MemoryIsZeroStruct(&mutex))
+  {
+    return;
+  }
+  pthread_rwlock_t *rwlock = (pthread_rwlock_t *)mutex.u64[0];
+  pthread_rwlock_destroy(rwlock);
+  int err = munmap(rwlock, sizeof(*rwlock));
+  AssertAlways(err == 0);
+}
+
+internal void
+rw_mutex_take(RWMutex mutex, b32 write_mode)
+{
+  if(MemoryIsZeroStruct(&mutex))
+  {
+    return;
+  }
+  pthread_rwlock_t *rwlock = (pthread_rwlock_t *)mutex.u64[0];
+  if(write_mode)
+  {
+    pthread_rwlock_wrlock(rwlock);
+  }
+  else
+  {
+    pthread_rwlock_rdlock(rwlock);
+  }
+}
+
+internal void
+rw_mutex_drop(RWMutex mutex)
+{
+  if(MemoryIsZeroStruct(&mutex))
+  {
+    return;
+  }
+  pthread_rwlock_t *rwlock = (pthread_rwlock_t *)mutex.u64[0];
+  pthread_rwlock_unlock(rwlock);
+}
+
 //- cross-process semaphores
 internal Semaphore
 semaphore_alloc(u32 initial_count, String8 name)

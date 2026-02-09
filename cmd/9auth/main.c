@@ -93,6 +93,12 @@ srv_attach(ServerRequest9P *request)
 }
 
 internal void
+srv_flush(ServerRequest9P *request)
+{
+  server9p_respond(request, str8_zero());
+}
+
+internal void
 srv_walk(ServerRequest9P *request)
 {
   Auth_FidAuxiliary9P *from_aux = get_fid_aux(request->server, request->fid);
@@ -162,6 +168,12 @@ srv_open(ServerRequest9P *request)
   request->out_msg.qid = request->fid->qid;
   request->out_msg.io_unit_size = request->server->max_message_size - 24;
   server9p_respond(request, str8_zero());
+}
+
+internal void
+srv_create(ServerRequest9P *request)
+{
+  server9p_respond(request, str8_lit("cannot create files"));
 }
 
 internal void
@@ -238,6 +250,26 @@ srv_write(ServerRequest9P *request)
 }
 
 internal void
+srv_clunk(ServerRequest9P *request)
+{
+  Auth_FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  fid_aux_release(request->server, aux);
+  ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
+  if(fid != 0)
+  {
+    fid->hash_next = request->server->fid_free_list;
+    request->server->fid_free_list = fid;
+  }
+  server9p_respond(request, str8_zero());
+}
+
+internal void
+srv_remove(ServerRequest9P *request)
+{
+  server9p_respond(request, str8_lit("cannot remove files"));
+}
+
+internal void
 srv_stat(ServerRequest9P *request)
 {
   Auth_FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
@@ -277,39 +309,7 @@ srv_stat(ServerRequest9P *request)
 }
 
 internal void
-srv_clunk(ServerRequest9P *request)
-{
-  Auth_FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
-  fid_aux_release(request->server, aux);
-  ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
-  if(fid != 0)
-  {
-    fid->hash_next = request->server->fid_free_list;
-    request->server->fid_free_list = fid;
-  }
-  server9p_respond(request, str8_zero());
-}
-
-internal void
 srv_wstat(ServerRequest9P *request)
-{
-  server9p_respond(request, str8_zero());
-}
-
-internal void
-srv_remove(ServerRequest9P *request)
-{
-  server9p_respond(request, str8_lit("cannot remove files"));
-}
-
-internal void
-srv_create(ServerRequest9P *request)
-{
-  server9p_respond(request, str8_lit("cannot create files"));
-}
-
-internal void
-srv_flush(ServerRequest9P *request)
 {
   server9p_respond(request, str8_zero());
 }
@@ -327,7 +327,17 @@ handle_connection(OS_Handle connection_socket)
   log_scope_begin();
 
   u64 connection_fd = connection_socket.u64[0];
-  log_info(str8_lit("9auth: connection established\n"));
+
+  struct ucred cred;
+  socklen_t cred_len = sizeof(cred);
+  if(getsockopt(connection_fd, SOL_SOCKET, SO_PEERCRED, &cred, &cred_len) == 0)
+  {
+    log_infof("9auth: connection from pid=%d uid=%d gid=%d\n", cred.pid, cred.uid, cred.gid);
+  }
+  else
+  {
+    log_info(str8_lit("9auth: connection established (peer credentials unavailable)\n"));
+  }
 
   Server9P *server = server9p_alloc(connection_arena, connection_fd, connection_fd);
   if(server == 0)
@@ -362,11 +372,17 @@ handle_connection(OS_Handle connection_socket)
     case Msg9P_Tattach:
       srv_attach(request);
       break;
+    case Msg9P_Tflush:
+      srv_flush(request);
+      break;
     case Msg9P_Twalk:
       srv_walk(request);
       break;
     case Msg9P_Topen:
       srv_open(request);
+      break;
+    case Msg9P_Tcreate:
+      srv_create(request);
       break;
     case Msg9P_Tread:
       srv_read(request);
@@ -374,23 +390,17 @@ handle_connection(OS_Handle connection_socket)
     case Msg9P_Twrite:
       srv_write(request);
       break;
-    case Msg9P_Tstat:
-      srv_stat(request);
-      break;
-    case Msg9P_Twstat:
-      srv_wstat(request);
-      break;
     case Msg9P_Tclunk:
       srv_clunk(request);
       break;
     case Msg9P_Tremove:
       srv_remove(request);
       break;
-    case Msg9P_Tcreate:
-      srv_create(request);
+    case Msg9P_Tstat:
+      srv_stat(request);
       break;
-    case Msg9P_Tflush:
-      srv_flush(request);
+    case Msg9P_Twstat:
+      srv_wstat(request);
       break;
     default:
       server9p_respond(request, str8_lit("unsupported operation"));
@@ -421,18 +431,16 @@ entry_point(CmdLine *cmd_line)
 {
   Arena *arena = arena_alloc();
 
-  b32 add_credential = cmd_line_has_flag(cmd_line, str8_lit("a"));
-  b32 list_credentials = cmd_line_has_flag(cmd_line, str8_lit("l"));
+  b32 register_credential = cmd_line_has_flag(cmd_line, str8_lit("register"));
   b32 export_credential = cmd_line_has_flag(cmd_line, str8_lit("export"));
   b32 import_credential = cmd_line_has_flag(cmd_line, str8_lit("import"));
-  b32 keygen = cmd_line_has_flag(cmd_line, str8_lit("keygen"));
 
   String8 proto = cmd_line_string(cmd_line, str8_lit("proto"));
 
   String8 socket_path = cmd_line_string(cmd_line, str8_lit("socket-path"));
   if(socket_path.size == 0)
   {
-    socket_path = str8_lit("/var/run/9auth");
+    socket_path = str8_lit("/run/9auth/socket");
   }
   String8 socket_addr = str8f(arena, "unix!%S", socket_path);
 
@@ -449,14 +457,96 @@ entry_point(CmdLine *cmd_line)
     worker_count = u64_from_str8(threads_str, 10);
   }
 
-  if(export_credential)
+  if(register_credential)
   {
     String8 user = cmd_line_string(cmd_line, str8_lit("user"));
-    String8 rp_id = cmd_line_string(cmd_line, str8_lit("rp_id"));
+    String8 server = cmd_line_string(cmd_line, str8_lit("server"));
 
-    if(user.size == 0 || rp_id.size == 0)
+    if(user.size == 0 || server.size == 0 || proto.size == 0)
     {
-      fprintf(stderr, "usage: 9auth --export --user=<user> --rp_id=<rp_id>\n");
+      fprintf(stderr, "usage: 9auth --register --user=<user> --server=<server> --proto=<ed25519|fido2>\n");
+      fflush(stderr);
+      return;
+    }
+    if(!str8_match(proto, str8_lit("ed25519"), 0) && !str8_match(proto, str8_lit("fido2"), 0))
+    {
+      fprintf(stderr, "9auth: unsupported protocol: %.*s\n", (int)proto.size, proto.str);
+      fflush(stderr);
+      return;
+    }
+
+    Auth_Key new_key = {0};
+    String8 error = str8_zero();
+    b32 success = 0;
+
+    if(str8_match(proto, str8_lit("ed25519"), 0))
+    {
+      Auth_Ed25519_RegisterParams params = {0};
+      params.user = user;
+      params.server = server;
+
+      success = auth_ed25519_register_credential(arena, params, &new_key, &error);
+    }
+    else if(str8_match(proto, str8_lit("fido2"), 0))
+    {
+      Auth_Fido2_RegisterParams params = {0};
+      params.user = user;
+      params.rp_id = server;
+
+      fprintf(stdout, "9auth: touch FIDO2 token\n");
+      fflush(stdout);
+
+      success = auth_fido2_register_credential(arena, params, &new_key, &error);
+    }
+
+    if(success)
+    {
+      String8 existing = os_data_from_file_path(arena, keys_path);
+      Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
+
+      if(existing.size > 0)
+      {
+        auth_keyring_load(arena, &ring, existing);
+      }
+
+      String8 add_error = str8_zero();
+      if(!auth_keyring_add(&ring, &new_key, &add_error))
+      {
+        fprintf(stderr, "9auth: failed to add credential: %.*s\n", (int)add_error.size, add_error.str);
+        fflush(stderr);
+      }
+      else
+      {
+        String8 saved = auth_keyring_save(arena, &ring);
+        if(!os_write_data_to_file_path(keys_path, saved))
+        {
+          fprintf(stderr, "9auth: failed to save credential to %.*s (check file permissions)\n",
+                  (int)keys_path.size, keys_path.str);
+          fflush(stderr);
+        }
+        else
+        {
+          fprintf(stdout, "9auth: registered %.*s credential\n", (int)proto.size, proto.str);
+          fflush(stdout);
+        }
+      }
+    }
+    else
+    {
+      fprintf(stderr, "9auth: registration failed: %.*s\n", (int)error.size, error.str);
+      fflush(stderr);
+    }
+
+    return;
+  }
+  else if(export_credential)
+  {
+    String8 user = cmd_line_string(cmd_line, str8_lit("user"));
+    String8 server = cmd_line_string(cmd_line, str8_lit("server"));
+
+    if(user.size == 0 || server.size == 0)
+    {
+      fprintf(stderr, "usage: 9auth --export --user=<user> --server=<server>\n");
       fflush(stderr);
       return;
     }
@@ -477,11 +567,11 @@ entry_point(CmdLine *cmd_line)
       return;
     }
 
-    Auth_Key *key = auth_keyring_lookup(&ring, user, rp_id);
+    Auth_Key *key = auth_keyring_lookup(&ring, user, server);
     if(key == 0)
     {
-      fprintf(stderr, "9auth: no credential found for user='%.*s' rp_id='%.*s'\n",
-              (int)user.size, user.str, (int)rp_id.size, rp_id.str);
+      fprintf(stderr, "9auth: no credential found for user='%.*s' server='%.*s'\n",
+              (int)user.size, user.str, (int)server.size, server.str);
       fflush(stderr);
       return;
     }
@@ -550,10 +640,10 @@ entry_point(CmdLine *cmd_line)
     for(u64 i = 0; i < import_ring.count; i += 1)
     {
       Auth_Key *key = &import_ring.keys[i];
-      Auth_Key *existing_key = auth_keyring_lookup(&ring, key->user, key->rp_id);
+      Auth_Key *existing_key = auth_keyring_lookup(&ring, key->user, key->server);
       if(existing_key != 0)
       {
-        auth_keyring_remove(&ring, key->user, key->rp_id);
+        auth_keyring_remove(&ring, key->user, key->server);
       }
       String8 add_error = str8_zero();
       if(!auth_keyring_add(&ring, key, &add_error))
@@ -570,180 +660,6 @@ entry_point(CmdLine *cmd_line)
 
     fprintf(stdout, "9auth: imported %lu credentials\n", import_ring.count);
     fflush(stdout);
-    return;
-  }
-  else if(keygen)
-  {
-    String8 user = cmd_line_string(cmd_line, str8_lit("user"));
-    String8 server = cmd_line_string(cmd_line, str8_lit("server"));
-
-    if(user.size == 0 || server.size == 0 || proto.size == 0)
-    {
-      fprintf(stderr, "usage: 9auth --keygen --user=<user> --server=<server> --proto=<fido2|ed25519>\n");
-      fflush(stderr);
-      return;
-    }
-
-    if(proto.size == 0)
-    {
-      fprintf(stderr, "9auth: --proto is required (ed25519)\n");
-      fflush(stderr);
-      return;
-    }
-    if(!str8_match(proto, str8_lit("ed25519"), 0))
-    {
-      fprintf(stderr, "9auth: --keygen only supports ed25519 protocol\n");
-      fflush(stderr);
-      return;
-    }
-
-    Auth_Key new_key = {0};
-    new_key.type = Auth_Key_Type_Ed25519;
-    new_key.user = user;
-    new_key.rp_id = server;
-
-    String8 error = str8_zero();
-    if(!auth_ed25519_generate_keypair(new_key.ed25519_public_key, new_key.ed25519_private_key, &error))
-    {
-      fprintf(stderr, "9auth: failed to generate keypair: %.*s\n", (int)error.size, error.str);
-      fflush(stderr);
-      return;
-    }
-
-    String8 existing = os_data_from_file_path(arena, keys_path);
-    Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
-
-    if(existing.size > 0)
-    {
-      auth_keyring_load(arena, &ring, existing);
-    }
-
-    String8 add_error = str8_zero();
-    if(!auth_keyring_add(&ring, &new_key, &add_error))
-    {
-      fprintf(stderr, "9auth: failed to add credential: %.*s\n", (int)add_error.size, add_error.str);
-      fflush(stderr);
-      return;
-    }
-
-    String8 saved = auth_keyring_save(arena, &ring);
-    os_write_data_to_file_path(keys_path, saved);
-
-    fprintf(stdout, "Generated Ed25519 keypair for user=%.*s server=%.*s\n",
-            (int)user.size, user.str, (int)server.size, server.str);
-    fflush(stdout);
-
-    return;
-  }
-  else if(add_credential)
-  {
-    String8 user = cmd_line_string(cmd_line, str8_lit("user"));
-    String8 rp_id = cmd_line_string(cmd_line, str8_lit("rp_id"));
-    String8 rp_name = cmd_line_string(cmd_line, str8_lit("rp_name"));
-
-    if(user.size == 0 || rp_id.size == 0 || proto.size == 0)
-    {
-      fprintf(stderr, "usage: 9auth -a --user=<user> --rp_id=<rp_id> --proto=<fido2|ed25519> [--rp_name=<name>]\n");
-      fflush(stderr);
-      return;
-    }
-    if(!str8_match(proto, str8_lit("fido2"), 0) && !str8_match(proto, str8_lit("ed25519"), 0))
-    {
-      fprintf(stderr, "9auth: unsupported protocol: %.*s\n", (int)proto.size, proto.str);
-      fflush(stderr);
-      return;
-    }
-
-    Auth_Key new_key = {0};
-    String8 error = str8_zero();
-    b32 success = 0;
-
-    if(str8_match(proto, str8_lit("fido2"), 0))
-    {
-      if(rp_name.size == 0)
-      {
-        rp_name = rp_id;
-      }
-
-      Auth_Fido2_RegisterParams params = {0};
-      params.user = user;
-      params.rp_id = rp_id;
-      params.rp_name = rp_name;
-
-      fprintf(stdout, "9auth: touch FIDO2 token\n");
-      fflush(stdout);
-
-      success = auth_fido2_register_credential(arena, params, &new_key, &error);
-    }
-    else if(str8_match(proto, str8_lit("ed25519"), 0))
-    {
-      new_key.type = Auth_Key_Type_Ed25519;
-      new_key.user = user;
-      new_key.rp_id = rp_id;
-
-      success = auth_ed25519_generate_keypair(new_key.ed25519_public_key, new_key.ed25519_private_key, &error);
-    }
-
-    if(success)
-    {
-      String8 existing = os_data_from_file_path(arena, keys_path);
-      Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
-
-      if(existing.size > 0)
-      {
-        auth_keyring_load(arena, &ring, existing);
-      }
-
-      String8 add_error = str8_zero();
-      if(!auth_keyring_add(&ring, &new_key, &add_error))
-      {
-        fprintf(stderr, "9auth: failed to add credential: %.*s\n", (int)add_error.size, add_error.str);
-        fflush(stderr);
-      }
-      else
-      {
-        String8 saved = auth_keyring_save(arena, &ring);
-        os_write_data_to_file_path(keys_path, saved);
-        fprintf(stdout, "9auth: registered %.*s credential\n", (int)proto.size, proto.str);
-        fflush(stdout);
-      }
-    }
-    else
-    {
-      fprintf(stderr, "9auth: registration failed: %.*s\n", (int)error.size, error.str);
-      fflush(stderr);
-    }
-
-    return;
-  }
-  else if(list_credentials)
-  {
-    String8 data = os_data_from_file_path(arena, keys_path);
-    Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
-
-    if(data.size == 0)
-    {
-      fprintf(stdout, "9auth: no credentials\n");
-      fflush(stdout);
-    }
-    else if(auth_keyring_load(arena, &ring, data))
-    {
-      for(u64 i = 0; i < ring.count; i += 1)
-      {
-        Auth_Key *key = &ring.keys[i];
-        String8 type_str = (key->type == Auth_Key_Type_FIDO2) ? str8_lit("fido2") : str8_lit("ed25519");
-        fprintf(stdout, "9auth: type=%.*s user=%.*s rp_id=%.*s\n",
-                (int)type_str.size, type_str.str,
-                (int)key->user.size, key->user.str, (int)key->rp_id.size, key->rp_id.str);
-      }
-      fflush(stdout);
-    }
-    else
-    {
-      fprintf(stderr, "9auth: failed to load credentials\n");
-      fflush(stderr);
-    }
-
     return;
   }
 
@@ -772,7 +688,7 @@ entry_point(CmdLine *cmd_line)
     }
   }
 
-  Auth_RPC_State *rpc_state = auth_rpc_state_alloc(arena, &ring);
+  Auth_RPC_State *rpc_state = auth_rpc_state_alloc(arena, &ring, keys_path);
   auth_fs_state = auth_fs_alloc(arena, rpc_state, keys_path);
 
   OS_Handle listen_socket = dial9p_listen(socket_addr, str8_lit("unix"), str8_lit("9auth"));
@@ -792,8 +708,7 @@ entry_point(CmdLine *cmd_line)
 
   worker_pool = wp_pool_alloc(arena, worker_count);
 
-  fprintf(stdout, "9auth: daemon started on %.*s\n", (int)socket_path.size, socket_path.str);
-  fprintf(stdout, "9auth: launched %lu worker threads\n", worker_count);
+  fprintf(stdout, "9auth: daemon started on %.*s with %lu worker threads\n", (int)socket_path.size, socket_path.str, worker_count);
   fflush(stdout);
 
   for(;;)

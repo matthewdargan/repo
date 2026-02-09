@@ -653,6 +653,14 @@ os_socket_listen_unix(String8 path)
     close(fd);
     return os_handle_zero();
   }
+
+  if(chmod(path_buffer, 0660) < 0)
+  {
+    close(fd);
+    unlink(path_buffer);
+    return os_handle_zero();
+  }
+
   if(listen(fd, 128) < 0)
   {
     close(fd);
