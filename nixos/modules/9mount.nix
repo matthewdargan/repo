@@ -82,15 +82,16 @@ in {
           wants = ["network-online.target"];
           wantedBy = ["multi-user.target"];
           serviceConfig = {
-            ExecStart = pkgs.writeShellScript "9mount-${m.name}" ''
+            ExecStartPre = pkgs.writeShellScript "9mount-${m.name}-pre" ''
               set -euo pipefail
               if ${pkgs.util-linux}/bin/mountpoint -q ${lib.escapeShellArg m.mountPoint}; then
                 ${pkgs.fuse3}/bin/fusermount3 -u ${lib.escapeShellArg m.mountPoint} 2>/dev/null || \
                   ${pkgs.util-linux}/bin/umount -l ${lib.escapeShellArg m.mountPoint} || true
               fi
               ${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArg m.mountPoint}
-              exec ${self.packages.${pkgs.stdenv.hostPlatform.system}."9mount"}/bin/9mount ${args}
+              ${pkgs.coreutils}/bin/chown ${lib.escapeShellArg m.user} ${lib.escapeShellArg m.mountPoint}
             '';
+            ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9mount"}/bin/9mount ${args}";
             ExecStop = "${pkgs.fuse3}/bin/fusermount3 -u ${lib.escapeShellArg m.mountPoint}";
             KillMode = "control-group";
             Restart = "on-failure";
