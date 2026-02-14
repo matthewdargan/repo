@@ -19,7 +19,7 @@ typedef struct Auth_RPC_StartParams Auth_RPC_StartParams;
 struct Auth_RPC_StartParams
 {
   String8 user;
-  String8 server;
+  String8 auth_id;
   String8 proto;
   String8 role;
 };

@@ -22,20 +22,20 @@
         description = "Local mount point directory";
       };
 
-      useAuth = lib.mkOption {
-        type = lib.types.bool;
-        default = true;
-        description = "Whether to use authentication via 9auth";
+      authDaemon = lib.mkOption {
+        type = lib.types.str;
+        default = "unix!/run/9auth/socket";
+        description = "Auth daemon address";
+      };
+      authId = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Server identity for authentication (enables auth when non-empty)";
       };
       aname = lib.mkOption {
         type = lib.types.str;
         default = "/";
-        description = "Remote attach name (aname)";
-      };
-      authServer = lib.mkOption {
-        type = lib.types.str;
-        default = "unix!/run/9auth/socket";
-        description = "Address of the 9auth daemon";
+        description = "Remote attach name";
       };
 
       dependsOn = lib.mkOption {
@@ -63,16 +63,16 @@ in {
     boot.kernelModules = ["fuse"];
     systemd.services = lib.listToAttrs (
       map (m: let
-        args = lib.concatStringsSep " " (
-          lib.filter (x: x != "") [
-            (lib.optionalString m.useAuth "--auth")
-            (lib.optionalString (m.authServer != "unix!/run/9auth/socket")
-              "--auth-server=${lib.escapeShellArg m.authServer}")
-            "--aname=${lib.escapeShellArg m.aname}"
-            (lib.escapeShellArg m.dial)
-            (lib.escapeShellArg m.mountPoint)
-          ]
-        );
+        args = lib.concatStringsSep " " [
+          (lib.optionalString (m.authDaemon != "unix!/run/9auth/socket")
+            "--auth-daemon=${lib.escapeShellArg m.authDaemon}")
+          (lib.optionalString (m.authId != "")
+            "--auth-id=${lib.escapeShellArg m.authId}")
+          (lib.optionalString (m.aname != "/")
+            "--aname=${lib.escapeShellArg m.aname}")
+          (lib.escapeShellArg m.dial)
+          (lib.escapeShellArg m.mountPoint)
+        ];
       in {
         name = "9mount-${m.name}";
         value = {
@@ -82,15 +82,17 @@ in {
           wants = ["network-online.target"];
           wantedBy = ["multi-user.target"];
           serviceConfig = {
-            ExecStartPre = pkgs.writeShellScript "9mount-${m.name}-pre" ''
-              set -euo pipefail
-              if ${pkgs.util-linux}/bin/mountpoint -q ${lib.escapeShellArg m.mountPoint}; then
-                ${pkgs.fuse3}/bin/fusermount3 -u ${lib.escapeShellArg m.mountPoint} 2>/dev/null || \
-                  ${pkgs.util-linux}/bin/umount -l ${lib.escapeShellArg m.mountPoint} || true
-              fi
-              ${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArg m.mountPoint}
-              ${pkgs.coreutils}/bin/chown ${lib.escapeShellArg m.user} ${lib.escapeShellArg m.mountPoint}
-            '';
+            ExecStartPre =
+              "+"
+              + pkgs.writeShellScript "9mount-${m.name}-pre" ''
+                set -euo pipefail
+                if ${pkgs.util-linux}/bin/mountpoint -q ${lib.escapeShellArg m.mountPoint}; then
+                  ${pkgs.fuse3}/bin/fusermount3 -u ${lib.escapeShellArg m.mountPoint} 2>/dev/null || \
+                    ${pkgs.util-linux}/bin/umount -l ${lib.escapeShellArg m.mountPoint} || true
+                fi
+                ${pkgs.coreutils}/bin/mkdir -p ${lib.escapeShellArg m.mountPoint}
+                ${pkgs.coreutils}/bin/chown "${lib.escapeShellArg m.user}:" ${lib.escapeShellArg m.mountPoint}
+              '';
             ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9mount"}/bin/9mount ${args}";
             ExecStop = "${pkgs.fuse3}/bin/fusermount3 -u ${lib.escapeShellArg m.mountPoint}";
             KillMode = "control-group";

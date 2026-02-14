@@ -50,9 +50,9 @@ auth_rpc_parse(Arena *arena, String8 command_line)
       {
         request.start.user = value;
       }
-      else if(str8_match(key, str8_lit("server"), 0))
+      else if(str8_match(key, str8_lit("auth-id"), 0))
       {
-        request.start.server = value;
+        request.start.auth_id = value;
       }
       else if(str8_match(key, str8_lit("proto"), 0))
       {
@@ -118,7 +118,7 @@ auth_rpc_handle_start(Auth_RPC_State *state, Auth_Conv **out_conv, Auth_RPC_Star
     for(u64 i = 0; i < state->keyring->count; i += 1)
     {
       Auth_Key *candidate = &state->keyring->keys[i];
-      if(!str8_match(candidate->user, params.user, 0) || !str8_match(candidate->server, params.server, 0))
+      if(!str8_match(candidate->user, params.user, 0) || !str8_match(candidate->auth_id, params.auth_id, 0))
       {
         continue;
       }
@@ -171,7 +171,7 @@ auth_rpc_handle_start(Auth_RPC_State *state, Auth_Conv **out_conv, Auth_RPC_Star
   Auth_Conv *conv = 0;
   MutexScope(state->mutex)
   {
-    conv = auth_conv_alloc(state->arena, state->next_conv_id, params.user, params.server);
+    conv = auth_conv_alloc(state->arena, state->next_conv_id, params.user, params.auth_id);
     conv->role = str8_copy(state->arena, params.role);
     conv->key = key;
     if(expected_proto.size > 0)
@@ -228,8 +228,8 @@ auth_rpc_handle_read(Arena *arena, Auth_Conv *conv)
     return response;
   }
 
-  u64 now = os_now_microseconds();
-  if(now - conv->start_time > Million(10))
+  u32 now = os_now_unix();
+  if(now - conv->start_time > 10)
   {
     response.error = str8_lit("auth: conversation expired");
     return response;
@@ -239,11 +239,11 @@ auth_rpc_handle_read(Arena *arena, Auth_Conv *conv)
   {
   case Auth_State_ChallengeReady:
   {
-    u8 *buffer = push_array(arena, u8, 40);
-    write_u64(buffer, conv->start_time);
-    MemoryCopy(buffer + 8, conv->challenge, 32);
+    u8 *buffer = push_array(arena, u8, 36);
+    write_u32(buffer, conv->start_time);
+    MemoryCopy(buffer + 4, conv->challenge, 32);
     response.success = 1;
-    response.data = str8(buffer, 40);
+    response.data = str8(buffer, 36);
     conv->state = Auth_State_ChallengeSent;
   }
   break;
@@ -252,9 +252,8 @@ auth_rpc_handle_read(Arena *arena, Auth_Conv *conv)
   {
     if(str8_match(conv->role, str8_lit("client"), 0) && conv->signature_len > 0)
     {
-      // Format: [protocol:u64][auth_data_len:u64]?[auth_data]?[signature]
-      // Ed25519: [protocol:u64=1][signature:64bytes]
-      // FIDO2: [protocol:u64=2][auth_data_len:u64][auth_data][signature]
+      // Ed25519: [protocol:8][public_key:32][signature:64]
+      // FIDO2: [protocol:8][auth_data_len:8][auth_data][signature]
       u64 proto = 0;
       if(str8_match(conv->proto, str8_lit("ed25519"), 0))
       {
@@ -266,6 +265,10 @@ auth_rpc_handle_read(Arena *arena, Auth_Conv *conv)
       }
 
       u64 total_len = 8 + conv->signature_len;
+      if(proto == Auth_Proto_Ed25519)
+      {
+        total_len += 32;
+      }
       if(conv->auth_data_len > 0)
       {
         total_len += 8 + conv->auth_data_len;
@@ -277,6 +280,11 @@ auth_rpc_handle_read(Arena *arena, Auth_Conv *conv)
       write_u64(write_ptr, proto);
       write_ptr += 8;
 
+      if(proto == Auth_Proto_Ed25519)
+      {
+        MemoryCopy(write_ptr, conv->key->ed25519_public_key, 32);
+        write_ptr += 32;
+      }
       if(conv->auth_data_len > 0)
       {
         write_u64(write_ptr, conv->auth_data_len);
@@ -324,8 +332,8 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
     return response;
   }
 
-  u64 now = os_now_microseconds();
-  if(now - conv->start_time > Million(10))
+  u32 now = os_now_unix();
+  if(now - conv->start_time > 10)
   {
     response.error = str8_lit("auth: conversation expired");
     return response;
@@ -335,21 +343,21 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
   {
   case Auth_State_Started:
   {
-    if(data.size != 40)
+    if(data.size != 36)
     {
-      response.error = str8_lit("invalid challenge format");
+      response.error = str8_lit("auth: invalid challenge format");
       return response;
     }
 
-    u64 challenge_timestamp = read_u64(data.str);
-    u64 now = os_now_microseconds();
-    if(now - challenge_timestamp > Million(10))
+    u32 challenge_timestamp = read_u32(data.str);
+    u32 now_check = os_now_unix();
+    if(now_check - challenge_timestamp > 10)
     {
       response.error = str8_lit("auth: challenge expired");
       return response;
     }
 
-    MemoryCopy(conv->challenge, data.str + 8, 32);
+    MemoryCopy(conv->challenge, data.str + 4, 32);
 
     Auth_Key *key = conv->key;
     String8 error = str8_zero();
@@ -374,7 +382,7 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
     else if(str8_match(conv->proto, str8_lit("fido2"), 0))
     {
       Auth_Fido2_AssertParams assert_params = {0};
-      assert_params.rp_id = key->server;
+      assert_params.rp_id = key->auth_id;
       MemoryCopy(assert_params.challenge, conv->challenge, 32);
       assert_params.credential_id = key->credential_id;
       assert_params.credential_id_len = key->credential_id_len;
@@ -395,7 +403,7 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
     }
     else
     {
-      response.error = str8_lit("unknown protocol");
+      response.error = str8_lit("auth: unknown protocol");
       conv->state = Auth_State_Error;
       conv->error = response.error;
       return response;
@@ -412,7 +420,7 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
   {
     if(data.size < 8)
     {
-      response.error = str8_lit("invalid data format: too small");
+      response.error = str8_lit("auth: invalid data format: too small");
       return response;
     }
 
@@ -422,7 +430,7 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
 
     if(wire_proto != Auth_Proto_Ed25519 && wire_proto != Auth_Proto_FIDO2)
     {
-      response.error = str8_lit("invalid protocol in wire format");
+      response.error = str8_lit("auth: invalid protocol in wire format");
       return response;
     }
 
@@ -432,13 +440,27 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
       for(u64 i = 0; i < state->keyring->count; i += 1)
       {
         Auth_Key *candidate = &state->keyring->keys[i];
-        if(!str8_match(candidate->user, conv->user, 0) || !str8_match(candidate->server, conv->server, 0))
+        if(!str8_match(candidate->user, conv->user, 0) || !str8_match(candidate->auth_id, conv->auth_id, 0))
         {
           continue;
         }
 
         if(candidate->type == wire_proto)
         {
+          if(wire_proto == Auth_Proto_Ed25519)
+          {
+            if(payload_len < 32)
+            {
+              response.error = str8_lit("auth: ed25519 payload too small for public key");
+              return response;
+            }
+            u8 *client_pubkey = payload;
+            if(MemoryCompare(client_pubkey, candidate->ed25519_public_key, 32) != 0)
+            {
+              continue;
+            }
+          }
+
           key = candidate;
           conv->key = key;
           break;
@@ -470,14 +492,14 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
 
     if(wire_proto == Auth_Proto_Ed25519)
     {
-      // Ed25519 format: [protocol:u64][signature:64]
-      if(payload_len != 64)
+      // Ed25519 format: [protocol:8][public_key:32][signature:64]
+      if(payload_len != 96)
       {
-        response.error = str8_lit("invalid Ed25519 signature");
+        response.error = str8_lit("auth: invalid Ed25519 signature");
         return response;
       }
 
-      MemoryCopy(conv->signature, payload, 64);
+      MemoryCopy(conv->signature, payload + 32, 64);
       conv->signature_len = 64;
       conv->auth_data_len = 0;
 
@@ -496,24 +518,24 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
     }
     else if(wire_proto == Auth_Proto_FIDO2)
     {
-      // FIDO2 format: [protocol:u64][auth_data_len:u64][auth_data][signature]
+      // FIDO2 format: [protocol:8][auth_data_len:8][auth_data][signature]
       if(payload_len < 8)
       {
-        response.error = str8_lit("invalid FIDO2 format");
+        response.error = str8_lit("auth: invalid FIDO2 format");
         return response;
       }
 
       u64 auth_data_len = read_u64(payload);
       if(auth_data_len > 256 || auth_data_len + 8 > payload_len)
       {
-        response.error = str8_lit("invalid auth_data length");
+        response.error = str8_lit("auth: invalid auth_data length");
         return response;
       }
 
       u64 signature_len = payload_len - 8 - auth_data_len;
       if(signature_len > 256)
       {
-        response.error = str8_lit("signature too large");
+        response.error = str8_lit("auth: signature too large");
         return response;
       }
 
@@ -523,7 +545,7 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
       conv->signature_len = signature_len;
 
       Auth_Fido2_VerifyParams verify_params = {0};
-      verify_params.rp_id = key->server;
+      verify_params.rp_id = key->auth_id;
       MemoryCopy(verify_params.challenge, conv->challenge, 32);
       verify_params.auth_data = conv->auth_data;
       verify_params.auth_data_len = conv->auth_data_len;
@@ -550,7 +572,7 @@ auth_rpc_handle_write(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Stri
 
   default:
   {
-    response.error = str8_lit("invalid state for write");
+    response.error = str8_lit("auth: invalid state for write");
   }
   break;
   }
@@ -586,7 +608,7 @@ auth_rpc_execute(Arena *arena, Auth_RPC_State *state, Auth_Conv *conv, Auth_RPC_
 
   default:
   {
-    response.error = str8_lit("unknown command");
+    response.error = str8_lit("auth: unknown command");
   }
   break;
   }

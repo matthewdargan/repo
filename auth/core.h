@@ -25,12 +25,12 @@ struct Auth_Conv
   Auth_Conv *next;
   u64 tag;
   String8 user;
-  String8 server;
+  String8 auth_id;
   String8 role;
   String8 proto;
   Auth_Key *key;
   Auth_State state;
-  u64 start_time;
+  u32 start_time;
   u8 challenge[32];
   u8 auth_data[256];
   u64 auth_data_len;
@@ -57,7 +57,7 @@ struct Auth_Key
 {
   Auth_Proto type;
   String8 user;
-  String8 server;
+  String8 auth_id;
   // FIDO2
   u8 credential_id[256];
   u64 credential_id_len;
@@ -83,15 +83,15 @@ struct Auth_KeyRing
 ////////////////////////////////
 //~ Conversation Functions
 
-internal Auth_Conv *auth_conv_alloc(Arena *arena, u64 tag, String8 user, String8 server);
+internal Auth_Conv *auth_conv_alloc(Arena *arena, u64 tag, String8 user, String8 auth_id);
 
 ////////////////////////////////
 //~ Key Ring Functions
 
 internal Auth_KeyRing auth_keyring_alloc(Arena *arena, u64 capacity);
 internal b32 auth_keyring_add(Auth_KeyRing *ring, Auth_Key *key, String8 *out_error);
-internal Auth_Key *auth_keyring_lookup(Auth_KeyRing *ring, String8 user, String8 server);
-internal void auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 server);
+internal Auth_Key *auth_keyring_lookup(Auth_KeyRing *ring, String8 user, String8 auth_id);
+internal void auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 auth_id, Auth_Proto type);
 
 ////////////////////////////////
 //~ Key Ring Serialization

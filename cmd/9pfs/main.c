@@ -6,8 +6,8 @@
 global FsContext9P *fs_context = 0;
 global WP_Pool *worker_pool = 0;
 global b32 require_auth = 0;
-global String8 auth_server_addr = {0};
-global String8 server_id = {0};
+global String8 auth_daemon_addr = {0};
+global String8 auth_id = {0};
 
 internal void
 fid_release(Server9P *server, ServerFid9P *fid)
@@ -126,7 +126,7 @@ srv_auth(ServerRequest9P *request)
     return;
   }
 
-  String8 auth_addr = auth_server_addr.size > 0 ? auth_server_addr : str8_lit("unix!/run/9auth/socket");
+  String8 auth_addr = auth_daemon_addr.size > 0 ? auth_daemon_addr : str8_lit("unix!/run/9auth/socket");
   OS_Handle auth_handle = dial9p_connect(request->server->arena, auth_addr, str8_lit("unix"), str8_lit("9auth"));
   if(os_handle_match(auth_handle, os_handle_zero()))
   {
@@ -161,8 +161,8 @@ srv_auth(ServerRequest9P *request)
     return;
   }
 
-  String8 srv_id = server_id.size > 0 ? server_id : str8_lit("localhost");
-  String8 start_cmd = str8f(request->scratch.arena, "start role=server user=%S server=%S",
+  String8 srv_id = auth_id.size > 0 ? auth_id : str8_lit("localhost");
+  String8 start_cmd = str8f(request->scratch.arena, "start role=server user=%S auth-id=%S",
                             request->in_msg.user_name, srv_id);
   s64 write_result = client9p_fid_pwrite(request->server->arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
   if(write_result != (s64)start_cmd.size)
@@ -739,9 +739,9 @@ entry_point(CmdLine *cmd_line)
 
   String8 address = str8_zero();
   b32 readonly = cmd_line_has_flag(cmd_line, str8_lit("readonly"));
-  require_auth = cmd_line_has_flag(cmd_line, str8_lit("require-auth"));
-  auth_server_addr = cmd_line_string(cmd_line, str8_lit("auth-server"));
-  server_id = cmd_line_string(cmd_line, str8_lit("server-id"));
+  auth_daemon_addr = cmd_line_string(cmd_line, str8_lit("auth-daemon"));
+  auth_id = cmd_line_string(cmd_line, str8_lit("auth-id"));
+  require_auth = auth_id.size > 0;
 
   u64 worker_count = 0;
   String8 threads_str = cmd_line_string(cmd_line, str8_lit("threads"));
@@ -761,9 +761,8 @@ entry_point(CmdLine *cmd_line)
                     "options:\n"
                     "  --root=<path>         Root directory to serve (default: current directory)\n"
                     "  --readonly            Serve in read-only mode\n"
-                    "  --require-auth        Require authentication via 9auth daemon\n"
-                    "  --auth-server=<addr>  Auth server address (default: unix!/run/9auth/socket)\n"
-                    "  --server-id=<id>      Server hostname for auth (default: localhost)\n"
+                    "  --auth-daemon=<addr>  Auth daemon address (default: unix!/run/9auth/socket)\n"
+                    "  --auth-id=<id>        Server identity for auth (enables auth when present)\n"
                     "  --threads=<n>         Number of worker threads (default: max(4, cores/4))\n"
                     "arguments:\n"
                     "  <address>             Dial string (e.g., tcp!host!port)\n");

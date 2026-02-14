@@ -17,15 +17,19 @@
 <h2>Projects</h2>
 <ul class="projects">
 <li>
-<h3><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9pfs">9P File Server</a></h3>
-<p>Complete 9P2000 file server. Exports local directories over the network. Multithreaded with configurable worker pool.</p>
-<p>Related tools: <a href="https://github.com/matthewdargan/repo/tree/main/cmd/9mount">9mount</a>, <a href="https://github.com/matthewdargan/repo/tree/main/cmd/9bind">9bind</a>, <a href="https://github.com/matthewdargan/repo/tree/main/cmd/9umount">9umount</a>, <a href="https://github.com/matthewdargan/repo/tree/main/cmd/mount-9p">mount-9p</a>, <a href="https://github.com/matthewdargan/repo/tree/main/cmd/9p">9p</a></p>
-<p class="status">Production | <a href="https://github.com/matthewdargan/repo/tree/main/9p">Library</a></p>
+<h3><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9pfs">9pfs</a></h3>
+<p><a href="https://9fans.github.io/plan9port/man/man9/intro.html">9P2000</a> file server with 9auth authentication. Exports local directories over the network. Multithreaded with configurable worker pool.</p>
+<p class="status">Production</p>
 </li>
 <li>
-<h3>Authentication Server</h3>
-<p>Centralized credential management for 9P infrastructure. Inspired by Plan 9's <a href="https://9p.io/sys/doc/auth.pdf">factotum</a>.</p>
-<p class="status">Early development | <a href="https://github.com/matthewdargan/repo/tree/main/cmd/authd">Source</a></p>
+<h3><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9mount">9mount</a></h3>
+<p>FUSE client for mounting 9P filesystems. Supports 9auth authentication with automatic reconnection. Userspace implementation with no kernel dependencies.</p>
+<p class="status">Production</p>
+</li>
+<li>
+<h3><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9auth">9auth</a></h3>
+<p>Authentication daemon for 9P infrastructure. Supports Ed25519 public key and FIDO2 hardware authentication. Inspired by Plan 9's <a href="https://9p.io/sys/doc/auth.pdf">factotum</a>.</p>
+<p class="status">Production</p>
 </li>
 <li>
 <h3>Content-Addressable Filesystem</h3>

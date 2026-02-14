@@ -3,24 +3,18 @@
   self,
   ...
 }: let
-  mounts = [
-    {
-      what = "nas";
-      where = "/home/mpd/n/media";
-      type = "9p";
-      options = "port=5640";
-      after = ["network-online.target"];
-      wants = ["network-online.target"];
-    }
-  ];
+  user = "mpd";
 in {
   imports = [
     ./boot.nix
     self.nixosModules."9auth"
-    self.nixosModules."9p-tools"
+    self.nixosModules."9mount"
     self.nixosModules.fish
     self.nixosModules.locale
     self.nixosModules.nix-config
+  ];
+  environment.systemPackages = [
+    self.packages.${pkgs.stdenv.hostPlatform.system}."9p"
   ];
   networking = {
     hostName = "steamdeck";
@@ -30,7 +24,20 @@ in {
   services = {
     "9auth" = {
       enable = true;
-      authorizedUsers = ["mpd"];
+      authorizedUsers = [user];
+    };
+    "9mount" = {
+      enable = true;
+      mounts = [
+        {
+          name = "media";
+          dial = "tcp!nas!5640";
+          mountPoint = "/home/${user}/n/media";
+          authId = "nas";
+          dependsOn = ["tailscaled.service"];
+          inherit user;
+        }
+      ];
     };
     desktopManager.plasma6.enable = true;
     displayManager.sddm = {
@@ -51,18 +58,8 @@ in {
     };
     tailscale.enable = true;
   };
-  systemd = {
-    mounts = map (m: m // {wantedBy = [];}) mounts;
-    automounts =
-      map (m: {
-        inherit (m) where;
-        wantedBy = ["multi-user.target"];
-        automountConfig.TimeoutIdleSec = "600";
-      })
-      mounts;
-  };
   system.stateVersion = "26.05";
-  users.users.mpd = {
+  users.users.${user} = {
     description = "Matthew Dargan";
     extraGroups = [
       "input"

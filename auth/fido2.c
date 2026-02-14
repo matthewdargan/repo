@@ -245,7 +245,7 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
 
   out_key->type = Auth_Proto_FIDO2;
   out_key->user = str8_copy(arena, params.user);
-  out_key->server = str8_copy(arena, params.rp_id);
+  out_key->auth_id = str8_copy(arena, params.rp_id);
 
   MemoryCopy(out_key->credential_id, cred_id, cred_id_len);
   out_key->credential_id_len = cred_id_len;

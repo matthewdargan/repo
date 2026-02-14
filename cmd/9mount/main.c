@@ -19,9 +19,9 @@ struct MountState
   Arena *perm_arena;
   OS_Handle server_fd;
   String8 dial_str;
-  String8 auth_server;
+  String8 auth_daemon;
+  String8 auth_id;
   String8 attach_path;
-  String8 server_id;
   b32 use_auth;
   u64 last_reconnect_time;
   u64 reconnect_backoff;
@@ -89,7 +89,7 @@ reconnect_attempt_locked(Arena *arena)
   MutexScope(g_client_rpc_mutex)
   {
     client = client9p_mount(g_mount->perm_arena, handle.u64[0],
-                            g_mount->auth_server, g_mount->attach_path, g_mount->server_id,
+                            g_mount->auth_daemon, g_mount->auth_id, g_mount->attach_path,
                             g_mount->use_auth);
   }
   if(client == 0)
@@ -792,22 +792,16 @@ entry_point(CmdLine *cmd_line)
   log_select(log);
   log_scope_begin();
 
-  b32 use_auth = cmd_line_has_flag(cmd_line, str8_lit("auth"));
-  String8 auth_server = cmd_line_string(cmd_line, str8_lit("auth-server"));
+  String8 auth_daemon = cmd_line_string(cmd_line, str8_lit("auth-daemon"));
+  String8 auth_id = cmd_line_string(cmd_line, str8_lit("auth-id"));
   String8 attach_path = cmd_line_string(cmd_line, str8_lit("aname"));
-  String8 server_id = cmd_line_string(cmd_line, str8_lit("server-id"));
 
-  if(auth_server.size == 0)
+  if(auth_daemon.size == 0)
   {
-    auth_server = str8_lit("unix!/run/9auth/socket");
+    auth_daemon = str8_lit("unix!/run/9auth/socket");
   }
 
-  if(use_auth && server_id.size == 0)
-  {
-    log_errorf("9mount: --server-id required when using --auth\n");
-    log_scope_flush(arena);
-    return;
-  }
+  b32 use_auth = auth_id.size > 0;
 
   if(attach_path.size == 0)
   {
@@ -818,15 +812,14 @@ entry_point(CmdLine *cmd_line)
   {
     log_error(str8_lit("usage: 9mount [options] <dial> <mtpt>\n"
                        "options:\n"
-                       "  --auth                  Use authentication via 9auth\n"
-                       "  --auth-server=<addr>    9auth server address (default: unix!/run/9auth/socket)\n"
+                       "  --auth-daemon=<addr>    Auth daemon address (default: unix!/run/9auth/socket)\n"
+                       "  --auth-id=<id>          Server identity for authentication (enables auth when present)\n"
                        "  --aname=<path>          Remote path to attach (default: /)\n"
-                       "  --server-id=<id>        Server hostname for authentication (required with --auth)\n"
                        "examples:\n"
                        "  9mount tcp!nas!5640 /mnt/media\n"
-                       "  9mount --auth --server-id=nas.local tcp!nas!5640 /mnt/media\n"
-                       "  9mount --auth --server-id=e2etest.local unix!/tmp/9pfs /mnt/test\n"
-                       "  9mount --auth --server-id=e2etest.local --aname=subdir unix!/tmp/9pfs /mnt/test\n"));
+                       "  9mount --auth-id=nas tcp!nas!5640 /mnt/media\n"
+                       "  9mount --auth-id=e2etest.local unix!/tmp/9pfs /mnt/test\n"
+                       "  9mount --auth-id=e2etest.local --aname=subdir unix!/tmp/9pfs /mnt/test\n"));
     log_scope_flush(arena);
     return;
   }
@@ -857,8 +850,8 @@ entry_point(CmdLine *cmd_line)
   }
 
   Arena *mount_arena = arena_alloc();
-  String8 server_hostname = use_auth ? server_id : str8_zero();
-  Client9P *client = client9p_mount(mount_arena, handle.u64[0], auth_server, attach_path, server_hostname, use_auth);
+  String8 auth_id_param = use_auth ? auth_id : str8_zero();
+  Client9P *client = client9p_mount(mount_arena, handle.u64[0], auth_daemon, auth_id_param, attach_path, use_auth);
 
   if(client == 0)
   {
@@ -873,9 +866,9 @@ entry_point(CmdLine *cmd_line)
   g_mount->perm_arena = mount_arena;
   g_mount->server_fd = handle;
   g_mount->dial_str = str8_copy(mount_arena, dial);
-  g_mount->auth_server = str8_copy(mount_arena, auth_server);
+  g_mount->auth_daemon = str8_copy(mount_arena, auth_daemon);
+  g_mount->auth_id = str8_copy(mount_arena, auth_id);
   g_mount->attach_path = str8_copy(mount_arena, attach_path);
-  g_mount->server_id = str8_copy(mount_arena, server_id);
   g_mount->use_auth = use_auth;
   g_mount->reconnect_backoff = Million(1);
 

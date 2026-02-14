@@ -4,7 +4,7 @@
 #include "9p/inc.c"
 
 internal Client9P *
-client9p_connect(Arena *arena, String8 address, String8 attach_path, String8 auth_server, String8 server_id)
+client9p_connect(Arena *arena, String8 address, String8 auth_daemon, String8 auth_id, String8 attach_path, b32 use_auth)
 {
   OS_Handle socket = dial9p_connect(arena, address, str8_lit("tcp"), str8_lit("9pfs"));
   if(os_handle_match(socket, os_handle_zero()))
@@ -14,7 +14,7 @@ client9p_connect(Arena *arena, String8 address, String8 attach_path, String8 aut
   }
 
   u64 fd = socket.u64[0];
-  Client9P *client = client9p_mount(arena, fd, auth_server, attach_path, server_id, 1);
+  Client9P *client = client9p_mount(arena, fd, auth_daemon, auth_id, attach_path, use_auth);
   if(client == 0)
   {
     os_file_close(socket);
@@ -67,13 +67,13 @@ entry_point(CmdLine *cmd_line)
   log_select(log);
   log_scope_begin();
 
-  String8 auth_server = cmd_line_string(cmd_line, str8_lit("auth-server"));
+  String8 auth_daemon = cmd_line_string(cmd_line, str8_lit("auth-daemon"));
+  String8 auth_id = cmd_line_string(cmd_line, str8_lit("auth-id"));
   String8 attach_path = cmd_line_string(cmd_line, str8_lit("aname"));
-  String8 server_id = cmd_line_string(cmd_line, str8_lit("server-id"));
 
-  if(auth_server.size == 0)
+  if(auth_daemon.size == 0)
   {
-    auth_server = str8_lit("unix!/run/9auth/socket");
+    auth_daemon = str8_lit("unix!/run/9auth/socket");
   }
 
   if(attach_path.size == 0)
@@ -85,20 +85,14 @@ entry_point(CmdLine *cmd_line)
   {
     log_error(str8_lit("usage: 9p [options] <address> <cmd> <args>\n"
                        "options:\n"
-                       "  --auth-server=<addr>    9auth server address (default: unix!/run/9auth/socket)\n"
+                       "  --auth-daemon=<addr>    Auth daemon address (default: unix!/run/9auth/socket)\n"
+                       "  --auth-id=<id>          Server identity for authentication (enables auth when present)\n"
                        "  --aname=<path>          Remote path to attach (default: /)\n"
-                       "  --server-id=<id>        Server hostname for authentication (required)\n"
                        "cmds: create <name>..., read <name>, write <name>, remove <name>..., stat <name>, ls <name>...\n"));
   }
   else
   {
-    if(server_id.size == 0)
-    {
-      log_error(str8_lit("9p: --server-id required\n"));
-      log_scope_flush(scratch.arena);
-      scratch_end(scratch);
-      return;
-    }
+    b32 use_auth = auth_id.size > 0;
 
     String8Node *inputs = cmd_line->inputs.first;
     String8 address = inputs->string;
@@ -107,7 +101,7 @@ entry_point(CmdLine *cmd_line)
 
     if(str8_match(command, str8_lit("create"), 0))
     {
-      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
+      Client9P *client = client9p_connect(scratch.arena, address, auth_daemon, auth_id, attach_path, use_auth);
       if(client != 0)
       {
         for(String8Node *node = args; node != 0; node = node->next)
@@ -129,7 +123,7 @@ entry_point(CmdLine *cmd_line)
     else if(str8_match(command, str8_lit("read"), 0))
     {
       String8 name = args->string;
-      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
+      Client9P *client = client9p_connect(scratch.arena, address, auth_daemon, auth_id, attach_path, use_auth);
       if(client != 0)
       {
         ClientFid9P *fid = client9p_open(scratch.arena, client, name, P9_OpenFlag_Read);
@@ -183,7 +177,7 @@ entry_point(CmdLine *cmd_line)
     else if(str8_match(command, str8_lit("write"), 0))
     {
       String8 name = args->string;
-      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
+      Client9P *client = client9p_connect(scratch.arena, address, auth_daemon, auth_id, attach_path, use_auth);
       if(client != 0)
       {
         ClientFid9P *fid = client9p_open(scratch.arena, client, name, P9_OpenFlag_Write | P9_OpenFlag_Truncate);
@@ -227,7 +221,7 @@ entry_point(CmdLine *cmd_line)
     }
     else if(str8_match(command, str8_lit("remove"), 0))
     {
-      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
+      Client9P *client = client9p_connect(scratch.arena, address, auth_daemon, auth_id, attach_path, use_auth);
       if(client != 0)
       {
         for(String8Node *node = args; node != 0; node = node->next)
@@ -244,7 +238,7 @@ entry_point(CmdLine *cmd_line)
     else if(str8_match(command, str8_lit("stat"), 0))
     {
       String8 name = args->string;
-      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
+      Client9P *client = client9p_connect(scratch.arena, address, auth_daemon, auth_id, attach_path, use_auth);
       if(client != 0)
       {
         Dir9P d = client9p_stat(scratch.arena, client, name);
@@ -261,7 +255,7 @@ entry_point(CmdLine *cmd_line)
     }
     else if(str8_match(command, str8_lit("ls"), 0))
     {
-      Client9P *client = client9p_connect(scratch.arena, address, attach_path, auth_server, server_id);
+      Client9P *client = client9p_connect(scratch.arena, address, auth_daemon, auth_id, attach_path, use_auth);
       if(client != 0)
       {
         String8Node *name_node = args;

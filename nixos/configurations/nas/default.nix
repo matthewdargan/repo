@@ -8,7 +8,6 @@
     ./hardware.nix
     self.nixosModules."9auth"
     self.nixosModules."9mount"
-    self.nixosModules."9p-tools"
     self.nixosModules.fish
     self.nixosModules.git-server
     self.nixosModules.locale
@@ -25,6 +24,9 @@
       "vfat"
     ];
   };
+  environment.systemPackages = [
+    self.packages.${pkgs.stdenv.hostPlatform.system}."9p"
+  ];
   networking = rec {
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "nas";
@@ -39,7 +41,7 @@
   services = {
     "9auth" = {
       enable = true;
-      authorizedUsers = ["jellyfin" "mpd"];
+      authorizedUsers = ["jellyfin" "mpd" "storage"];
     };
     "9mount" = {
       enable = true;
@@ -48,7 +50,7 @@
           name = "media";
           dial = "tcp!127.0.0.1!5640";
           mountPoint = "/var/lib/jellyfin/n/media";
-          useAuth = false;
+          authId = "nas";
           dependsOn = ["media-serve.service"];
           user = "jellyfin";
         }
@@ -81,7 +83,7 @@
         after = ["network.target"];
         description = "9P server for media files";
         serviceConfig = {
-          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs"}/bin/9pfs --root=/media tcp!*!5640";
+          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs"}/bin/9pfs --root=/media --auth-id=nas tcp!*!5640";
           Restart = "always";
           RestartSec = "5s";
           User = "storage";

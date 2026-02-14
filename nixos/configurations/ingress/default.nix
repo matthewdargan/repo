@@ -4,27 +4,21 @@
   self,
   ...
 }: let
-  mounts = [
-    {
-      what = "nas";
-      where = "/var/www/n/media";
-      type = "9p";
-      options = "port=5640";
-      after = ["network-online.target"];
-      wants = ["network-online.target"];
-    }
-  ];
+  user = "mpd";
 in {
   imports = [
     ./boot.nix
     self.nixosModules."9auth"
-    self.nixosModules."9p-tools"
+    self.nixosModules."9mount"
     self.nixosModules.fish
     self.nixosModules.locale
     self.nixosModules.nginx
     self.nixosModules.nix-config
   ];
-  environment.systemPackages = [self.packages.${pkgs.stdenv.hostPlatform.system}.neovim];
+  environment.systemPackages = [
+    self.packages.${pkgs.stdenv.hostPlatform.system}."9p"
+    self.packages.${pkgs.stdenv.hostPlatform.system}.neovim
+  ];
   networking = rec {
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "ingress";
@@ -37,7 +31,20 @@ in {
   services = {
     "9auth" = {
       enable = true;
-      authorizedUsers = ["mpd"];
+      authorizedUsers = [user];
+    };
+    "9mount" = {
+      enable = true;
+      mounts = [
+        {
+          name = "media";
+          dial = "tcp!nas!5640";
+          mountPoint = "/var/www/n/media";
+          authId = "nas";
+          dependsOn = ["tailscaled.service"];
+          inherit user;
+        }
+      ];
     };
     nginx-reverse-proxy = {
       enable = true;
@@ -53,14 +60,6 @@ in {
     tailscale.enable = true;
   };
   systemd = {
-    mounts = map (m: m // {wantedBy = [];}) mounts;
-    automounts =
-      map (m: {
-        inherit (m) where;
-        wantedBy = ["multi-user.target"];
-        automountConfig.TimeoutIdleSec = "600";
-      })
-      mounts;
     services.authd = {
       description = "Session authentication daemon";
       after = ["network-online.target"];
@@ -87,7 +86,7 @@ in {
       };
     };
     tmpfiles.rules = [
-      "d /var/www/n 0755 root root -"
+      "d /var/www/n 0755 ${user} ${user} -"
     ];
   };
   system.stateVersion = "26.05";
@@ -99,7 +98,7 @@ in {
         isSystemUser = true;
         group = "authd";
       };
-      mpd = {
+      ${user} = {
         description = "Matthew Dargan";
         extraGroups = [
           "systemd-journal"

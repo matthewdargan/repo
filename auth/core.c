@@ -44,14 +44,14 @@ bytes_from_hex(Arena *arena, String8 hex)
 //~ Conversation Functions
 
 internal Auth_Conv *
-auth_conv_alloc(Arena *arena, u64 tag, String8 user, String8 server)
+auth_conv_alloc(Arena *arena, u64 tag, String8 user, String8 auth_id)
 {
   Auth_Conv *conv = push_array(arena, Auth_Conv, 1);
   conv->tag = tag;
   conv->user = str8_copy(arena, user);
-  conv->server = str8_copy(arena, server);
+  conv->auth_id = str8_copy(arena, auth_id);
   conv->state = Auth_State_None;
-  conv->start_time = os_now_microseconds();
+  conv->start_time = os_now_unix();
   return conv;
 }
 
@@ -93,7 +93,7 @@ auth_keyring_add(Auth_KeyRing *ring, Auth_Key *key, String8 *out_error)
   Auth_Key *dst = &ring->keys[ring->count];
   dst->type = key->type;
   dst->user = str8_copy(ring->arena, key->user);
-  dst->server = str8_copy(ring->arena, key->server);
+  dst->auth_id = str8_copy(ring->arena, key->auth_id);
 
   switch(key->type)
   {
@@ -120,12 +120,12 @@ auth_keyring_add(Auth_KeyRing *ring, Auth_Key *key, String8 *out_error)
 }
 
 internal Auth_Key *
-auth_keyring_lookup(Auth_KeyRing *ring, String8 user, String8 server)
+auth_keyring_lookup(Auth_KeyRing *ring, String8 user, String8 auth_id)
 {
   for(u64 i = 0; i < ring->count; i += 1)
   {
     Auth_Key *key = &ring->keys[i];
-    if(str8_match(key->user, user, 0) && str8_match(key->server, server, 0))
+    if(str8_match(key->user, user, 0) && str8_match(key->auth_id, auth_id, 0))
     {
       return key;
     }
@@ -134,12 +134,12 @@ auth_keyring_lookup(Auth_KeyRing *ring, String8 user, String8 server)
 }
 
 internal void
-auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 server)
+auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 auth_id, Auth_Proto type)
 {
   for(u64 i = 0; i < ring->count; i += 1)
   {
     Auth_Key *key = &ring->keys[i];
-    if(str8_match(key->user, user, 0) && str8_match(key->server, server, 0))
+    if(str8_match(key->user, user, 0) && str8_match(key->auth_id, auth_id, 0) && key->type == type)
     {
       if(i < ring->count - 1)
       {
@@ -171,7 +171,7 @@ auth_keyring_save(Arena *arena, Auth_KeyRing *ring)
     {
       String8 pubkey_hex = hex_from_bytes(scratch.arena, key->ed25519_public_key, 32);
       String8 privkey_hex = hex_from_bytes(scratch.arena, key->ed25519_private_key, 32);
-      line = str8f(scratch.arena, "ed25519 %S %S %S %S\n", key->user, key->server, pubkey_hex, privkey_hex);
+      line = str8f(scratch.arena, "ed25519 %S %S %S %S\n", key->user, key->auth_id, pubkey_hex, privkey_hex);
     }
     break;
 
@@ -179,7 +179,7 @@ auth_keyring_save(Arena *arena, Auth_KeyRing *ring)
     {
       String8 cred_hex = hex_from_bytes(scratch.arena, key->credential_id, key->credential_id_len);
       String8 pubkey_hex = hex_from_bytes(scratch.arena, key->public_key, key->public_key_len);
-      line = str8f(scratch.arena, "fido2 %S %S %S %S\n", key->user, key->server, cred_hex, pubkey_hex);
+      line = str8f(scratch.arena, "fido2 %S %S %S %S\n", key->user, key->auth_id, cred_hex, pubkey_hex);
     }
     break;
     }
@@ -218,13 +218,13 @@ auth_keyring_load(Arena *arena, Auth_KeyRing *ring, String8 data)
 
     String8Node *type_node = parts.first;
     String8Node *user_node = type_node->next;
-    String8Node *server_node = user_node->next;
-    String8Node *data1_node = server_node->next;
+    String8Node *auth_id_node = user_node->next;
+    String8Node *data1_node = auth_id_node->next;
     String8Node *data2_node = data1_node->next;
 
     Auth_Key key = {0};
     key.user = str8_copy(arena, user_node->string);
-    key.server = str8_copy(arena, server_node->string);
+    key.auth_id = str8_copy(arena, auth_id_node->string);
 
     if(str8_match(type_node->string, str8_lit("ed25519"), 0))
     {
@@ -314,7 +314,7 @@ auth_validate_credential_format(Auth_Key *key, String8 *out_error)
   {
     return 0;
   }
-  if(!auth_validate_identifier(key->server, out_error))
+  if(!auth_validate_identifier(key->auth_id, out_error))
   {
     return 0;
   }

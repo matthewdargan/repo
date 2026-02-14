@@ -30,11 +30,11 @@ client9p_init(Arena *arena, u64 fd)
 }
 
 internal ClientFid9P *
-client9p_auth(Arena *arena, Client9P *server_client, String8 auth_server, String8 proto, String8 user_name, String8 attach_path, String8 server_hostname)
+client9p_auth(Arena *arena, Client9P *server_client, String8 auth_daemon, String8 auth_id, String8 proto, String8 user_name, String8 attach_path)
 {
   Temp scratch = scratch_begin(&arena, 1);
 
-  String8 auth_addr = auth_server.size > 0 ? auth_server : str8_lit("unix!/run/9auth/socket");
+  String8 auth_addr = auth_daemon.size > 0 ? auth_daemon : str8_lit("unix!/run/9auth/socket");
   OS_Handle auth_handle = dial9p_connect(scratch.arena, auth_addr, str8_lit("unix"), str8_lit("9auth"));
   if(os_handle_match(auth_handle, os_handle_zero()))
   {
@@ -82,7 +82,7 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_server, String
     return 0;
   }
 
-  String8 start_cmd = str8f(scratch.arena, "start proto=%S role=client user=%S server=%S", proto, user_name, server_hostname);
+  String8 start_cmd = str8f(scratch.arena, "start proto=%S role=client user=%S auth-id=%S", proto, user_name, auth_id);
   s64 write_result = client9p_fid_pwrite(arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
   if(write_result != (s64)start_cmd.size)
   {
@@ -91,9 +91,9 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_server, String
     return 0;
   }
 
-  u8 challenge[40];
-  s64 challenge_len = client9p_fid_pread(arena, server_auth_fid, challenge, 40, 0);
-  if(challenge_len != 40)
+  u8 challenge[36];
+  s64 challenge_len = client9p_fid_pread(arena, server_auth_fid, challenge, 36, 0);
+  if(challenge_len != 36)
   {
     os_file_close(auth_handle);
     scratch_end(scratch);
@@ -106,8 +106,8 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_server, String
     fflush(stdout);
   }
 
-  write_result = client9p_fid_pwrite(arena, rpc_fid, challenge, 40, 0);
-  if(write_result != 40)
+  write_result = client9p_fid_pwrite(arena, rpc_fid, challenge, 36, 0);
+  if(write_result != 36)
   {
     os_file_close(auth_handle);
     scratch_end(scratch);
@@ -148,7 +148,7 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_server, String
 }
 
 internal Client9P *
-client9p_mount(Arena *arena, u64 fd, String8 auth_server, String8 attach_path, String8 server_hostname, b32 use_auth)
+client9p_mount(Arena *arena, u64 fd, String8 auth_daemon, String8 auth_id, String8 attach_path, b32 use_auth)
 {
   Client9P *client = client9p_init(arena, fd);
   if(client == 0)
@@ -160,7 +160,7 @@ client9p_mount(Arena *arena, u64 fd, String8 auth_server, String8 attach_path, S
   u32 auth_fid_num = P9_FID_NONE;
   if(use_auth)
   {
-    ClientFid9P *auth_fid = client9p_auth(arena, client, auth_server, str8_zero(), user, attach_path, server_hostname);
+    ClientFid9P *auth_fid = client9p_auth(arena, client, auth_daemon, auth_id, str8_zero(), user, attach_path);
     if(auth_fid != 0)
     {
       auth_fid_num = auth_fid->fid;

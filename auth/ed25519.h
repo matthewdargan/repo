@@ -14,7 +14,7 @@ typedef struct Auth_Ed25519_RegisterParams Auth_Ed25519_RegisterParams;
 struct Auth_Ed25519_RegisterParams
 {
   String8 user;
-  String8 server;
+  String8 auth_id;
 };
 
 ////////////////////////////////

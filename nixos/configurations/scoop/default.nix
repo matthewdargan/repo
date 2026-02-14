@@ -9,7 +9,6 @@ in {
     ./hardware.nix
     self.nixosModules."9auth"
     self.nixosModules."9mount"
-    self.nixosModules."9p-tools"
     self.nixosModules.fish
     self.nixosModules.locale
     self.nixosModules.nix-config
@@ -19,6 +18,9 @@ in {
     efi.canTouchEfiVariables = true;
     systemd-boot.enable = true;
   };
+  environment.systemPackages = [
+    self.packages.${pkgs.stdenv.hostPlatform.system}."9p"
+  ];
   networking = {
     hostName = "scoop";
     firewall.checkReversePath = "loose";
@@ -29,7 +31,7 @@ in {
   services = {
     "9auth" = {
       enable = true;
-      authorizedUsers = ["mpd"];
+      authorizedUsers = [user];
     };
     "9mount" = {
       enable = true;
@@ -38,7 +40,8 @@ in {
           name = "media";
           dial = "tcp!nas!5640";
           mountPoint = "/home/${user}/n/media";
-          useAuth = false;
+          authId = "nas";
+          dependsOn = ["tailscaled.service"];
           inherit user;
         }
       ];

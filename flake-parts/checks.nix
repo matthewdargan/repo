@@ -74,7 +74,7 @@
           trap "kill $auth_pid 2>/dev/null || true; rm -rf $testdir" EXIT
           sleep 2
 
-          ${server}/bin/9pfs --root="$testdir/fs-root" --require-auth --auth-server=unix!"$auth_socket" --server-id=e2etest.local unix!"$fs_socket" &
+          ${server}/bin/9pfs --root="$testdir/fs-root" --auth-daemon=unix!"$auth_socket" --auth-id=e2etest.local unix!"$fs_socket" &
           fs_pid=$!
           trap "kill $fs_pid $auth_pid 2>/dev/null || true; rm -rf $testdir" EXIT
           sleep 2

@@ -172,14 +172,14 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
       {
         *conv = new_conv;
 
-        String8 log_entry = str8f(arena, "start: user=%S server=%S proto=%S role=%S state=%d\n", request.start.user,
-                                  request.start.server, request.start.proto, request.start.role, new_conv->state);
+        String8 log_entry = str8f(arena, "start: user=%S auth_id=%S proto=%S role=%S state=%d\n", request.start.user,
+                                  request.start.auth_id, request.start.proto, request.start.role, new_conv->state);
         auth_fs_log(fs, log_entry);
       }
       else
       {
-        String8 log_entry = str8f(arena, "start_failed: user=%S server=%S error=%S\n", request.start.user,
-                                  request.start.server, response.error);
+        String8 log_entry = str8f(arena, "start_failed: user=%S auth_id=%S error=%S\n", request.start.user,
+                                  request.start.auth_id, response.error);
         auth_fs_log(fs, log_entry);
       }
     }
@@ -225,7 +225,7 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
     if(str8_match(command, str8_lit("register"), 0))
     {
       String8 user = str8_zero();
-      String8 server = str8_zero();
+      String8 auth_id = str8_zero();
       String8 proto = str8_zero();
 
       for(String8Node *node = parts.first->next; node != 0; node = node->next)
@@ -244,9 +244,9 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
         {
           user = value;
         }
-        else if(str8_match(key, str8_lit("server"), 0))
+        else if(str8_match(key, str8_lit("auth-id"), 0))
         {
-          server = value;
+          auth_id = value;
         }
         else if(str8_match(key, str8_lit("proto"), 0))
         {
@@ -254,9 +254,9 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
         }
       }
 
-      if(user.size == 0 || server.size == 0 || proto.size == 0)
+      if(user.size == 0 || auth_id.size == 0 || proto.size == 0)
       {
-        String8 log_entry = str8_lit("register_failed: missing required parameters (user, server, proto)\n");
+        String8 log_entry = str8_lit("register_failed: missing required parameters (user, auth_id, proto)\n");
         auth_fs_log(fs, log_entry);
         break;
       }
@@ -268,11 +268,11 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
       {
         Auth_Ed25519_RegisterParams reg_params = {0};
         reg_params.user = user;
-        reg_params.server = server;
+        reg_params.auth_id = auth_id;
 
         if(!auth_ed25519_register_credential(arena, reg_params, &new_key, &error))
         {
-          String8 log_entry = str8f(arena, "register_failed: user=%S server=%S proto=%S error=%S\n", user, server, proto, error);
+          String8 log_entry = str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error);
           auth_fs_log(fs, log_entry);
           break;
         }
@@ -281,11 +281,11 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
       {
         Auth_Fido2_RegisterParams reg_params = {0};
         reg_params.user = user;
-        reg_params.rp_id = server;
+        reg_params.rp_id = auth_id;
 
         if(!auth_fido2_register_credential(arena, reg_params, &new_key, &error))
         {
-          String8 log_entry = str8f(arena, "register_failed: user=%S server=%S proto=%S error=%S\n", user, server, proto, error);
+          String8 log_entry = str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error);
           auth_fs_log(fs, log_entry);
           break;
         }
@@ -299,7 +299,7 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
 
       if(!auth_keyring_add(fs->rpc_state->keyring, &new_key, &error))
       {
-        String8 log_entry = str8f(arena, "register_failed: user=%S server=%S proto=%S error=%S\n", user, server, proto, error);
+        String8 log_entry = str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error);
         auth_fs_log(fs, log_entry);
         break;
       }
@@ -307,7 +307,7 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
       String8 saved = auth_keyring_save(arena, fs->rpc_state->keyring);
       os_write_data_to_file_path(fs->keys_path, saved);
 
-      String8 log_entry = str8f(arena, "register_success: user=%S server=%S proto=%S\n", user, server, proto);
+      String8 log_entry = str8f(arena, "register_success: user=%S auth_id=%S proto=%S\n", user, auth_id, proto);
       auth_fs_log(fs, log_entry);
       success = 1;
     }

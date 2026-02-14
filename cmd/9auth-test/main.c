@@ -12,7 +12,7 @@ typedef struct AuthTestContext AuthTestContext;
 struct AuthTestContext
 {
   Arena *arena;
-  String8 auth_addr;
+  String8 auth_daemon;
   String8 fs_addr;
   String8 proto;
 };
@@ -48,7 +48,7 @@ auth_mount(Arena *arena, String8 addr, String8 user)
 }
 
 internal Client9P *
-fs_mount_auth(Arena *arena, String8 fs_addr, String8 auth_addr, String8 proto, String8 user, String8 server_hostname, String8 aname)
+fs_mount_auth(Arena *arena, String8 fs_addr, String8 auth_daemon, String8 auth_id, String8 proto, String8 user, String8 aname)
 {
   OS_Handle fs_socket = dial9p_connect(arena, fs_addr, str8_lit("unix"), str8_lit("564"));
   if(os_handle_match(fs_socket, os_handle_zero()))
@@ -64,7 +64,7 @@ fs_mount_auth(Arena *arena, String8 fs_addr, String8 auth_addr, String8 proto, S
     return 0;
   }
 
-  ClientFid9P *auth_fid = client9p_auth(arena, client, auth_addr, proto, user, aname, server_hostname);
+  ClientFid9P *auth_fid = client9p_auth(arena, client, auth_daemon, auth_id, proto, user, aname);
   if(auth_fid == 0)
   {
     os_file_close(fs_socket);
@@ -88,7 +88,7 @@ internal b32
 test_register(AuthTestContext *ctx)
 {
   String8 user = get_user_name(ctx->arena);
-  Client9P *client = auth_mount(ctx->arena, ctx->auth_addr, user);
+  Client9P *client = auth_mount(ctx->arena, ctx->auth_daemon, user);
   if(client == 0)
   {
     return 0;
@@ -107,7 +107,7 @@ test_register(AuthTestContext *ctx)
   }
 
   Temp scratch = scratch_begin(&ctx->arena, 1);
-  String8 register_cmd = str8f(scratch.arena, "register user=e2etest server=e2etest.local proto=%S", ctx->proto);
+  String8 register_cmd = str8f(scratch.arena, "register user=e2etest auth-id=e2etest.local proto=%S", ctx->proto);
   s64 written = client9p_fid_pwrite(ctx->arena, ctl_fid, (void *)register_cmd.str, register_cmd.size, 0);
   scratch_end(scratch);
 
@@ -119,10 +119,10 @@ internal b32
 test_authenticated_mount(AuthTestContext *ctx)
 {
   String8 user = str8_lit("e2etest");
-  String8 server_hostname = str8_lit("e2etest.local");
+  String8 auth_id = str8_lit("e2etest.local");
   String8 aname = str8_lit("/");
 
-  Client9P *client = fs_mount_auth(ctx->arena, ctx->fs_addr, ctx->auth_addr, ctx->proto, user, server_hostname, aname);
+  Client9P *client = fs_mount_auth(ctx->arena, ctx->fs_addr, ctx->auth_daemon, auth_id, ctx->proto, user, aname);
   if(client == 0)
   {
     return 0;
@@ -152,13 +152,13 @@ struct AuthTestCase
 };
 
 internal void
-run_auth_tests(Arena *arena, String8 auth_addr, String8 fs_addr, b32 run_fido2)
+run_auth_tests(Arena *arena, String8 auth_daemon, String8 fs_addr, b32 run_fido2)
 {
   AuthTestCase tests[] = {
-    {str8_lit("ed25519_register"),            str8_lit("ed25519"), test_register},
-    {str8_lit("ed25519_authenticated_mount"), str8_lit("ed25519"), test_authenticated_mount},
-    {str8_lit("fido2_register"),              str8_lit("fido2"),   test_register},
-    {str8_lit("fido2_authenticated_mount"),   str8_lit("fido2"),   test_authenticated_mount},
+      {str8_lit("ed25519_register"), str8_lit("ed25519"), test_register},
+      {str8_lit("ed25519_authenticated_mount"), str8_lit("ed25519"), test_authenticated_mount},
+      {str8_lit("fido2_register"), str8_lit("fido2"), test_register},
+      {str8_lit("fido2_authenticated_mount"), str8_lit("fido2"), test_authenticated_mount},
   };
 
   u64 test_count = ArrayCount(tests);
@@ -186,7 +186,7 @@ run_auth_tests(Arena *arena, String8 auth_addr, String8 fs_addr, b32 run_fido2)
     Temp scratch = scratch_begin(&arena, 1);
     AuthTestContext ctx = {0};
     ctx.arena = scratch.arena;
-    ctx.auth_addr = auth_addr;
+    ctx.auth_daemon = auth_daemon;
     ctx.fs_addr = fs_addr;
     ctx.proto = test->proto;
 
@@ -233,10 +233,10 @@ entry_point(CmdLine *cmd_line)
   }
 
   b32 run_fido2 = cmd_line_has_flag(cmd_line, str8_lit("fido2"));
-  String8 auth_addr = cmd_line->inputs.first->string;
+  String8 auth_daemon = cmd_line->inputs.first->string;
   String8 fs_addr = cmd_line->inputs.first->next->string;
 
-  run_auth_tests(scratch.arena, auth_addr, fs_addr, run_fido2);
+  run_auth_tests(scratch.arena, auth_daemon, fs_addr, run_fido2);
 
   log_scope_flush(scratch.arena);
   scratch_end(scratch);

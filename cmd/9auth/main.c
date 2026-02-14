@@ -478,11 +478,11 @@ entry_point(CmdLine *cmd_line)
   if(register_credential)
   {
     String8 user = cmd_line_string(cmd_line, str8_lit("user"));
-    String8 server = cmd_line_string(cmd_line, str8_lit("server"));
+    String8 auth_id = cmd_line_string(cmd_line, str8_lit("auth-id"));
 
-    if(user.size == 0 || server.size == 0 || proto.size == 0)
+    if(user.size == 0 || auth_id.size == 0 || proto.size == 0)
     {
-      fprintf(stderr, "usage: 9auth --register --user=<user> --server=<server> --proto=<ed25519|fido2>\n");
+      fprintf(stderr, "usage: 9auth --register --user=<user> --auth-id=<auth-id> --proto=<ed25519|fido2>\n");
       fflush(stderr);
       return;
     }
@@ -501,7 +501,7 @@ entry_point(CmdLine *cmd_line)
     {
       Auth_Ed25519_RegisterParams params = {0};
       params.user = user;
-      params.server = server;
+      params.auth_id = auth_id;
 
       success = auth_ed25519_register_credential(arena, params, &new_key, &error);
     }
@@ -509,7 +509,7 @@ entry_point(CmdLine *cmd_line)
     {
       Auth_Fido2_RegisterParams params = {0};
       params.user = user;
-      params.rp_id = server;
+      params.rp_id = auth_id;
 
       fprintf(stdout, "9auth: touch FIDO2 token\n");
       fflush(stdout);
@@ -560,11 +560,11 @@ entry_point(CmdLine *cmd_line)
   else if(export_credential)
   {
     String8 user = cmd_line_string(cmd_line, str8_lit("user"));
-    String8 server = cmd_line_string(cmd_line, str8_lit("server"));
+    String8 auth_id = cmd_line_string(cmd_line, str8_lit("auth-id"));
 
-    if(user.size == 0 || server.size == 0)
+    if(user.size == 0 || auth_id.size == 0)
     {
-      fprintf(stderr, "usage: 9auth --export --user=<user> --server=<server>\n");
+      fprintf(stderr, "usage: 9auth --export --user=<user> --auth-id=<auth-id>\n");
       fflush(stderr);
       return;
     }
@@ -585,20 +585,34 @@ entry_point(CmdLine *cmd_line)
       return;
     }
 
-    Auth_Key *key = auth_keyring_lookup(&ring, user, server);
-    if(key == 0)
+    Auth_KeyRing export_ring = auth_keyring_alloc(arena, 0);
+    u64 matched_count = 0;
+
+    for(u64 i = 0; i < ring.count; i += 1)
     {
-      fprintf(stderr, "9auth: no credential found for user='%.*s' server='%.*s'\n",
-              (int)user.size, user.str, (int)server.size, server.str);
-      fflush(stderr);
-      return;
+      Auth_Key *key = &ring.keys[i];
+      if(str8_match(key->user, user, 0) && str8_match(key->auth_id, auth_id, 0))
+      {
+        Auth_Key export_key = *key;
+        if(export_key.type == Auth_Proto_Ed25519)
+        {
+          MemoryZero(export_key.ed25519_private_key, sizeof(export_key.ed25519_private_key));
+        }
+        String8 add_error = str8_zero();
+        if(!auth_keyring_add(&export_ring, &export_key, &add_error))
+        {
+          fprintf(stderr, "9auth: failed to add credential: %.*s\n", (int)add_error.size, add_error.str);
+          fflush(stderr);
+          continue;
+        }
+        matched_count += 1;
+      }
     }
 
-    Auth_KeyRing export_ring = auth_keyring_alloc(arena, 1);
-    String8 add_error = str8_zero();
-    if(!auth_keyring_add(&export_ring, key, &add_error))
+    if(matched_count == 0)
     {
-      fprintf(stderr, "9auth: failed to add credential: %.*s\n", (int)add_error.size, add_error.str);
+      fprintf(stderr, "9auth: no credentials found for user='%.*s' auth-id='%.*s'\n",
+              (int)user.size, user.str, (int)auth_id.size, auth_id.str);
       fflush(stderr);
       return;
     }
@@ -606,6 +620,9 @@ entry_point(CmdLine *cmd_line)
     String8 exported = auth_keyring_save(arena, &export_ring);
     fwrite(exported.str, 1, exported.size, stdout);
     fflush(stdout);
+
+    fprintf(stderr, "9auth: exported %lu credentials\n", matched_count);
+    fflush(stderr);
 
     return;
   }
@@ -669,11 +686,6 @@ entry_point(CmdLine *cmd_line)
     for(u64 i = 0; i < import_ring.count; i += 1)
     {
       Auth_Key *key = &import_ring.keys[i];
-      Auth_Key *existing_key = auth_keyring_lookup(&ring, key->user, key->server);
-      if(existing_key != 0)
-      {
-        auth_keyring_remove(&ring, key->user, key->server);
-      }
       String8 add_error = str8_zero();
       if(!auth_keyring_add(&ring, key, &add_error))
       {

@@ -52,7 +52,7 @@ auth_ed25519_register_credential(Arena *arena, Auth_Ed25519_RegisterParams param
       {
         out_key->type = Auth_Proto_Ed25519;
         out_key->user = str8_copy(arena, params.user);
-        out_key->server = str8_copy(arena, params.server);
+        out_key->auth_id = str8_copy(arena, params.auth_id);
 
         MemoryCopy(out_key->ed25519_public_key, public_key, 32);
         MemoryCopy(out_key->ed25519_private_key, private_key, 32);

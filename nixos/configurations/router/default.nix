@@ -8,13 +8,14 @@
     ./network.nix
     ./services.nix
     self.nixosModules."9auth"
-    self.nixosModules."9p-tools"
+    self.nixosModules."9mount"
     self.nixosModules.fish
     self.nixosModules.locale
     self.nixosModules.nix-config
   ];
   environment.systemPackages = [
     pkgs.iproute2
+    self.packages.${pkgs.stdenv.hostPlatform.system}."9p"
     self.packages.${pkgs.stdenv.hostPlatform.system}.neovim
   ];
   services."9auth" = {
