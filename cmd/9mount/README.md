@@ -1,6 +1,6 @@
 # 9mount
 
-Mount a [9P](https://9fans.github.io/plan9port/man/man9/intro.html) filesystem at a mount point.
+FUSE-based 9P client with automatic connection recovery. Mounts remote 9P servers as local filesystems, translates VFS operations into 9P protocol messages. Unlike kernel v9fs, runs in userspace and integrates with [`9auth`](../9auth/README.md) for Ed25519/FIDO2 authentication.
 
 ## Usage
 
@@ -8,41 +8,72 @@ Mount a [9P](https://9fans.github.io/plan9port/man/man9/intro.html) filesystem a
 9mount [options] <dial> <mtpt>
 ```
 
+**Arguments:**
+- `<dial>` - Server address (`tcp!nas!5640`, `unix!/tmp/9p.sock`)
+- `<mtpt>` - Local mount point (`/mnt/media`, `~/n/nas`)
+
 **Options:**
-
-- `--dry-run` - Print mount command without executing
-- `--aname=<path>` - Remote path to attach (default: root)
-- `--msize=<bytes>` - Maximum 9P message size
-- `--uid=<uid>` - User ID for mount (default: current user)
-- `--gid=<gid>` - Group ID for mount (default: current group)
-
-**Dial formats:**
-
-- `tcp!HOST!PORT` - TCP connection (hostname or IP)
-- `unix!SOCKET` - Unix domain socket
+- `--auth-daemon=<addr>` - Auth daemon address (default: `unix!/run/9auth/socket`)
+- `--auth-id=<id>` - Server identity (enables authentication)
+- `--aname=<path>` - Remote attach path (default: `/`)
 
 ## Examples
 
-Mount a 9P server over TCP:
+### Unauthenticated
 
 ```sh
-9mount 'tcp!nas!564' ~/n/nas
+9mount tcp!localhost!5640 /mnt/test
 ```
 
-Mount via unix socket:
+### Authenticated
+
+Requires your public key imported on server (see [`9auth`](../9auth/README.md)):
 
 ```sh
-9mount 'unix!/tmp/9p.sock' ~/n/remote
+9mount --auth-id=nas tcp!nas!5640 ~/media
+9mount --auth-id=nas --aname=/public tcp!nas!5640 ~/public
 ```
 
-Mount with specific attach name:
+### Production (NixOS)
+
+```nix
+services."9mount" = {
+  enable = true;
+  mounts = [{
+    name = "media";
+    dial = "tcp!nas!5640";
+    mountPoint = "/mnt/media";
+    authId = "nas";
+  }];
+};
+```
+
+Creates `9mount-media.service` that starts on boot.
+
+## Unmounting
 
 ```sh
-9mount --aname='/home/user/mail' 'tcp!server!5640' ~/mail
+fusermount3 -u /mnt/media
+# or
+sudo umount /mnt/media
 ```
 
-Dry run to see mount command:
+## Automatic Reconnection
 
-```sh
-9mount --dry-run 'tcp!localhost!5640' ~/n/test
-```
+Transparent recovery from network failures and server restarts:
+
+1. I/O operation fails → returns `-EIO`
+2. Next I/O triggers reconnect attempt
+3. Exponential backoff with jitter: 0.5-1s, 1-2s, 2-4s, 4-8s, up to 30-60s
+4. On reconnect, operations resume
+
+**Preserved:** Open file handles, mount point accessibility
+**Lost:** In-flight operations (fail with `-EIO`)
+
+Jitter prevents thundering herd when server restarts with many clients.
+
+## Authentication
+
+When `--auth-id` is specified, mount connects to local 9auth daemon for challenge-response. Server verifies with your imported public key.
+
+See [`9auth`](../9auth/README.md) for key setup.
