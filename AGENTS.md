@@ -49,12 +49,26 @@ Implementation of the 9P protocol for network file systems.
 - **`fs.c/h`** - Filesystem abstraction layer (path resolution, file operations, metadata, directory iteration)
 - **`inc.h/inc.c`** - Unity build includes for the layer
 
+### `auth/` - Authentication
+
+Ed25519 and FIDO2 authentication for 9P protocol.
+
+- **`ed25519.c/h`** - Ed25519 signature generation/verification
+- **`fido2.c/h`** - FIDO2 hardware token support
+- **`keyring.c/h`** - Credential storage and management
+- **`rpc.c/h`** - Authentication RPC protocol
+- **`fs.c/h`** - 9P filesystem interface for auth daemon
+- **`inc.h/inc.c`** - Unity build includes for the layer
+
 ### `cmd/` - Command-line Tools
 
-- **`9pfs/`** - 9P file server (disk-backed with arena-based tmp/)
+- **`9auth/`** - Authentication daemon (manages Ed25519/FIDO2 keys, provides auth for 9P)
+- **`9auth-test/`** - Test program for 9auth authentication
+- **`9pfs/`** - 9P file server (disk-backed, supports authentication)
 - **`9pfs-test/`** - Test program for 9P file server implementations
-- **`9mount/`** - Mount 9P filesystems (FUSE, unmount with fusermount3)
-- **`9p/`** - 9P protocol inspection tool
+- **`9mount/`** - FUSE-based 9P mount client (auto-reconnection, authentication)
+- **`9p/`** - CLI tool for one-shot 9P operations
+- **`authd/`** - Session authentication daemon for nginx auth_request
 
 ### `packages/` - Nix Packages
 

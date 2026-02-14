@@ -18,17 +18,17 @@
 <ul class="projects">
 <li>
 <h3><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9pfs">9pfs</a></h3>
-<p><a href="https://9fans.github.io/plan9port/man/man9/intro.html">9P2000</a> file server with 9auth authentication. Exports local directories over the network. Multithreaded with configurable worker pool.</p>
+<p><a href="https://9fans.github.io/plan9port/man/man9/intro.html">9P</a> file server. Exports local directories with Ed25519/FIDO2 authentication. Multithreaded with configurable worker pool.</p>
 <p class="status">Production</p>
 </li>
 <li>
 <h3><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9mount">9mount</a></h3>
-<p>FUSE client for mounting 9P filesystems. Supports 9auth authentication with automatic reconnection. Userspace implementation with no kernel dependencies.</p>
+<p>FUSE client for 9P filesystems. Authenticated mounts with automatic connection recovery.</p>
 <p class="status">Production</p>
 </li>
 <li>
 <h3><a href="https://github.com/matthewdargan/repo/tree/main/cmd/9auth">9auth</a></h3>
-<p>Authentication daemon for 9P infrastructure. Supports Ed25519 public key and FIDO2 hardware authentication. Inspired by Plan 9's <a href="https://9p.io/sys/doc/auth.pdf">factotum</a>.</p>
+<p>Authentication daemon for 9P. Ed25519 and FIDO2 hardware token support. Inspired by Plan 9's <a href="https://9p.io/sys/doc/auth.pdf">factotum</a>.</p>
 <p class="status">Production</p>
 </li>
 <li>
