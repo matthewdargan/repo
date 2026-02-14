@@ -50,13 +50,30 @@ fid_aux_release(Server9P *server, Auth_FidAuxiliary9P *aux)
 }
 
 internal Auth_FidAuxiliary9P *
-get_fid_aux(Server9P *server, ServerFid9P *fid)
+fid_aux_get(Server9P *server, ServerFid9P *fid)
 {
   if(fid->auxiliary == 0)
   {
     fid->auxiliary = fid_aux_alloc(server);
   }
   return (Auth_FidAuxiliary9P *)fid->auxiliary;
+}
+
+internal void
+fid_release_all(Server9P *server)
+{
+  for(u32 i = 0; i < server->max_fid_count; i += 1)
+  {
+    for(ServerFid9P *fid = server->fid_table[i], *next = 0; fid != 0; fid = next)
+    {
+      next = fid->hash_next;
+      fid_aux_release(server, (Auth_FidAuxiliary9P *)fid->auxiliary);
+      fid->hash_next = server->fid_free_list;
+      server->fid_free_list = fid;
+    }
+    server->fid_table[i] = 0;
+  }
+  server->fid_count = 0;
 }
 
 ////////////////////////////////
@@ -86,7 +103,7 @@ srv_attach(ServerRequest9P *request)
   request->fid->qid.version = root.qid_version;
   request->out_msg.qid = request->fid->qid;
 
-  Auth_FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  Auth_FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
   aux->file_type = Auth_File_Root;
 
   server9p_respond(request, str8_zero());
@@ -101,11 +118,11 @@ srv_flush(ServerRequest9P *request)
 internal void
 srv_walk(ServerRequest9P *request)
 {
-  Auth_FidAuxiliary9P *from_aux = get_fid_aux(request->server, request->fid);
+  Auth_FidAuxiliary9P *from_aux = fid_aux_get(request->server, request->fid);
 
   if(request->in_msg.walk_name_count == 0)
   {
-    Auth_FidAuxiliary9P *new_aux = get_fid_aux(request->server, request->new_fid);
+    Auth_FidAuxiliary9P *new_aux = fid_aux_get(request->server, request->new_fid);
     new_aux->file_type = from_aux->file_type;
     new_aux->conv = from_aux->conv;
     request->new_fid->qid = request->fid->qid;
@@ -154,7 +171,7 @@ srv_walk(ServerRequest9P *request)
     current_type = info.type;
   }
 
-  Auth_FidAuxiliary9P *new_aux = get_fid_aux(request->server, request->new_fid);
+  Auth_FidAuxiliary9P *new_aux = fid_aux_get(request->server, request->new_fid);
   new_aux->file_type = current_type;
   new_aux->conv = from_aux->conv;
   request->new_fid->qid = request->out_msg.walk_qids[request->in_msg.walk_name_count - 1];
@@ -179,7 +196,7 @@ srv_create(ServerRequest9P *request)
 internal void
 srv_read(ServerRequest9P *request)
 {
-  Auth_FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  Auth_FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
 
   if(aux->file_type == Auth_File_Root)
   {
@@ -233,7 +250,7 @@ srv_read(ServerRequest9P *request)
 internal void
 srv_write(ServerRequest9P *request)
 {
-  Auth_FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  Auth_FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
 
   b32 success =
       auth_fs_write(request->scratch.arena, auth_fs_state, aux->file_type, &aux->conv, request->in_msg.payload_data);
@@ -252,7 +269,7 @@ srv_write(ServerRequest9P *request)
 internal void
 srv_clunk(ServerRequest9P *request)
 {
-  Auth_FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  Auth_FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
   fid_aux_release(request->server, aux);
   ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
   if(fid != 0)
@@ -272,7 +289,7 @@ srv_remove(ServerRequest9P *request)
 internal void
 srv_stat(ServerRequest9P *request)
 {
-  Auth_FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  Auth_FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
   Auth_File_Info info = {0};
 
   if(aux->file_type == Auth_File_Root)
@@ -408,6 +425,7 @@ handle_connection(OS_Handle connection_socket)
     }
   }
 
+  fid_release_all(server);
   os_file_close(connection_socket);
   log_info(str8_lit("9auth: connection closed\n"));
   log_scope_flush(scratch.arena);
@@ -598,12 +616,23 @@ entry_point(CmdLine *cmd_line)
     for(;;)
     {
       ssize_t n = read(STDIN_FILENO, buffer, sizeof(buffer));
-      if(n <= 0)
+      if(n > 0)
+      {
+        String8 chunk = str8_copy(arena, str8(buffer, n));
+        str8_list_push(arena, &input_chunks, chunk);
+      }
+      else if(n == 0)
       {
         break;
       }
-      String8 chunk = str8_copy(arena, str8(buffer, n));
-      str8_list_push(arena, &input_chunks, chunk);
+      else if(errno == EINTR)
+      {
+        continue;
+      }
+      else
+      {
+        break;
+      }
     }
 
     String8 input = str8_list_join(arena, input_chunks, 0);

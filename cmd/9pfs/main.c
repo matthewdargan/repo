@@ -65,7 +65,7 @@ fid_aux_release(Server9P *server, FidAuxiliary9P *aux)
 }
 
 internal FidAuxiliary9P *
-get_fid_aux(Server9P *server, ServerFid9P *fid)
+fid_aux_get(Server9P *server, ServerFid9P *fid)
 {
   if(fid->auxiliary == 0)
   {
@@ -86,6 +86,23 @@ fid_aux_set_path(FidAuxiliary9P *aux, String8 path)
   Assert(path.size <= sizeof(aux->path_buffer));
   MemoryCopy(aux->path_buffer, path.str, path.size);
   aux->path_len = path.size;
+}
+
+internal void
+fid_release_all(Server9P *server)
+{
+  for(u32 i = 0; i < server->max_fid_count; i += 1)
+  {
+    for(ServerFid9P *fid = server->fid_table[i], *next = 0; fid != 0; fid = next)
+    {
+      next = fid->hash_next;
+      fid_aux_release(server, (FidAuxiliary9P *)fid->auxiliary);
+      fid->hash_next = server->fid_free_list;
+      server->fid_free_list = fid;
+    }
+    server->fid_table[i] = 0;
+  }
+  server->fid_count = 0;
 }
 
 ////////////////////////////////
@@ -154,7 +171,7 @@ srv_auth(ServerRequest9P *request)
     return;
   }
 
-  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
   aux->is_auth_fid = 1;
   aux->auth_verified = 0;
   aux->auth_user = str8_copy(request->server->arena, request->in_msg.user_name);
@@ -186,7 +203,7 @@ srv_attach(ServerRequest9P *request)
       return;
     }
 
-    FidAuxiliary9P *auth_aux = get_fid_aux(request->server, auth_fid);
+    FidAuxiliary9P *auth_aux = fid_aux_get(request->server, auth_fid);
     if(!auth_aux->is_auth_fid)
     {
       server9p_respond(request, str8_lit("fid is not auth fid"));
@@ -225,11 +242,11 @@ srv_attach(ServerRequest9P *request)
 internal void
 srv_walk(ServerRequest9P *request)
 {
-  FidAuxiliary9P *from_aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *from_aux = fid_aux_get(request->server, request->fid);
 
   if(request->in_msg.walk_name_count == 0)
   {
-    FidAuxiliary9P *new_aux = get_fid_aux(request->server, request->new_fid);
+    FidAuxiliary9P *new_aux = fid_aux_get(request->server, request->new_fid);
     fid_aux_set_path(new_aux, fid_aux_get_path(from_aux));
     request->new_fid->qid = request->fid->qid;
     request->out_msg.walk_qid_count = 0;
@@ -303,7 +320,7 @@ srv_walk(ServerRequest9P *request)
     current_path = res.absolute_path;
   }
 
-  FidAuxiliary9P *new_aux = get_fid_aux(request->server, request->new_fid);
+  FidAuxiliary9P *new_aux = fid_aux_get(request->server, request->new_fid);
   fid_aux_set_path(new_aux, current_path);
   request->new_fid->qid = request->out_msg.walk_qids[request->in_msg.walk_name_count - 1];
   request->out_msg.walk_qid_count = request->in_msg.walk_name_count;
@@ -313,7 +330,7 @@ srv_walk(ServerRequest9P *request)
 internal void
 srv_open(ServerRequest9P *request)
 {
-  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
 
   u32 access_mode = request->in_msg.open_mode & 3;
   if(fs_context->readonly && access_mode != P9_OpenFlag_Read)
@@ -345,7 +362,7 @@ srv_open(ServerRequest9P *request)
 internal void
 srv_create(ServerRequest9P *request)
 {
-  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
 
   if(fs_context->readonly)
   {
@@ -397,7 +414,7 @@ srv_create(ServerRequest9P *request)
 internal void
 srv_read(ServerRequest9P *request)
 {
-  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
 
   if(aux->is_auth_fid)
   {
@@ -472,7 +489,7 @@ srv_read(ServerRequest9P *request)
 internal void
 srv_write(ServerRequest9P *request)
 {
-  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
 
   if(aux->is_auth_fid)
   {
@@ -529,7 +546,7 @@ srv_write(ServerRequest9P *request)
 internal void
 srv_clunk(ServerRequest9P *request)
 {
-  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
   fid_aux_release(request->server, aux);
   ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
   fid_release(request->server, fid);
@@ -539,7 +556,7 @@ srv_clunk(ServerRequest9P *request)
 internal void
 srv_remove(ServerRequest9P *request)
 {
-  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
 
   if(fs_context->readonly)
   {
@@ -557,7 +574,7 @@ srv_remove(ServerRequest9P *request)
 internal void
 srv_stat(ServerRequest9P *request)
 {
-  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
 
   Dir9P stat = fs9p_stat(request->scratch.arena, fs_context, fid_aux_get_path(aux));
   if(stat.name.size == 0)
@@ -579,7 +596,7 @@ srv_wstat(ServerRequest9P *request)
     return;
   }
 
-  FidAuxiliary9P *aux = get_fid_aux(request->server, request->fid);
+  FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
 
   if(request->in_msg.stat_data.size == 0)
   {
@@ -690,6 +707,7 @@ handle_connection(OS_Handle connection_socket)
     }
   }
 
+  fid_release_all(server);
   os_file_close(connection_socket);
   log_info(str8_lit("9pfs: connection closed\n"));
   log_scope_flush(scratch.arena);

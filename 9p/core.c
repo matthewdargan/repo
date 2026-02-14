@@ -1135,12 +1135,19 @@ read_9p_msg(Arena *arena, u64 fd)
   for(; total_num_bytes_left_to_read > 0;)
   {
     ssize_t read_result = read(fd, len_buf + total_num_bytes_read, total_num_bytes_left_to_read);
-    if(read_result <= 0)
+    if(read_result > 0)
+    {
+      total_num_bytes_read += read_result;
+      total_num_bytes_left_to_read -= read_result;
+    }
+    else if(errno == EINTR)
+    {
+      continue;
+    }
+    else
     {
       return str8_zero();
     }
-    total_num_bytes_read += read_result;
-    total_num_bytes_left_to_read -= read_result;
   }
   u32 msg_size = (u32)from_le_u32(read_u32(len_buf));
   String8 msg = str8_zero();
@@ -1153,12 +1160,19 @@ read_9p_msg(Arena *arena, u64 fd)
   for(; total_num_bytes_left_to_read > 0;)
   {
     ssize_t read_result = read(fd, msg.str + 4 + total_num_bytes_read, total_num_bytes_left_to_read);
-    if(read_result <= 0)
+    if(read_result > 0)
+    {
+      total_num_bytes_read += read_result;
+      total_num_bytes_left_to_read -= read_result;
+    }
+    else if(errno == EINTR)
+    {
+      continue;
+    }
+    else
     {
       return str8_zero();
     }
-    total_num_bytes_read += read_result;
-    total_num_bytes_left_to_read -= read_result;
   }
   return msg;
 }

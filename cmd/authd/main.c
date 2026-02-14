@@ -336,11 +336,18 @@ socket_write_all(OS_Handle socket, String8 data)
   for(u64 written = 0; written < data.size;)
   {
     ssize_t result = write(fd, data.str + written, data.size - written);
-    if(result <= 0)
+    if(result > 0)
+    {
+      written += result;
+    }
+    else if(errno == EINTR)
+    {
+      continue;
+    }
+    else
     {
       break;
     }
-    written += result;
   }
 }
 
@@ -673,7 +680,23 @@ handle_connection(OS_Handle connection_socket)
   log_infof("authd: connection from %S:%u\n", client_ip, client_port);
 
   u8 buffer[read_buffer_size];
-  ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer));
+  ssize_t bytes_read = 0;
+  for(;;)
+  {
+    bytes_read = read(client_fd, buffer, sizeof(buffer));
+    if(bytes_read >= 0)
+    {
+      break;
+    }
+    else if(errno == EINTR)
+    {
+      continue;
+    }
+    else
+    {
+      break;
+    }
+  }
 
   if(bytes_read > 0)
   {

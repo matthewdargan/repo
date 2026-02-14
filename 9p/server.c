@@ -223,7 +223,11 @@ server9p_respond(ServerRequest9P *request, String8 err)
       total_num_bytes_written += write_result;
       total_num_bytes_left_to_write -= write_result;
     }
-    else if(errno != EINTR)
+    else if(errno == EINTR)
+    {
+      continue;
+    }
+    else
     {
       scratch_end(request->scratch);
       request->hash_next = server->request_free_list;

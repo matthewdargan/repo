@@ -143,17 +143,35 @@ entry_point(CmdLine *cmd_line)
           for(;;)
           {
             s64 n = client9p_fid_pread(scratch.arena, fid, buf, P9_DIR_ENTRY_MAX, -1);
-            if(n <= 0)
+            if(n > 0)
             {
-              if(n < 0)
+              b32 write_success = 1;
+              for(u64 written = 0; written < (u64)n;)
               {
-                log_error(str8_lit("9p: read failed\n"));
+                ssize_t result = write(STDOUT_FILENO, buf + written, n - written);
+                if(result > 0)
+                {
+                  written += result;
+                }
+                else if(errno != EINTR)
+                {
+                  log_errorf("9p: write failed: %s\n", strerror(errno));
+                  write_success = 0;
+                  break;
+                }
               }
+              if(!write_success)
+              {
+                break;
+              }
+            }
+            else if(n == 0)
+            {
               break;
             }
-            if(write(STDOUT_FILENO, buf, n) != n)
+            else
             {
-              log_errorf("9p: write failed: %s\n", strerror(errno));
+              log_error(str8_lit("9p: read failed\n"));
               break;
             }
           }
@@ -179,18 +197,26 @@ entry_point(CmdLine *cmd_line)
           for(;;)
           {
             s64 n = read(STDIN_FILENO, buf, P9_DIR_ENTRY_MAX);
-            if(n <= 0)
+            if(n > 0)
             {
-              if(n < 0)
+              s64 nwrite = client9p_fid_pwrite(scratch.arena, fid, buf, n, -1);
+              if(nwrite != n)
               {
-                log_errorf("9p: read failed: %s\n", strerror(errno));
+                log_error(str8_lit("9p: write failed\n"));
+                break;
               }
+            }
+            else if(n == 0)
+            {
               break;
             }
-            s64 nwrite = client9p_fid_pwrite(scratch.arena, fid, buf, n, -1);
-            if(nwrite != n)
+            else if(errno == EINTR)
             {
-              log_error(str8_lit("9p: write failed\n"));
+              continue;
+            }
+            else
+            {
+              log_errorf("9p: read failed: %s\n", strerror(errno));
               break;
             }
           }
