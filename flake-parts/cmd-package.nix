@@ -8,7 +8,9 @@
     version,
     binaryName ? pname,
     buildInputs ? [],
+    nativeBuildInputs ? [],
     extraLinkFlags ? "",
+    postInstall ? "",
   }: let
     commonMeta = {
       inherit description;
@@ -35,7 +37,7 @@
     in
       pkgs.clangStdenv.mkDerivation (commonAttrs
         // {
-          inherit buildInputs;
+          inherit buildInputs nativeBuildInputs;
           buildPhase = ''
             runHook preBuild
             echo "[${buildMode}]"
@@ -51,6 +53,7 @@
             install -Dm755 ${binaryName} $out/bin/${pname}
             runHook postInstall
           '';
+          inherit postInstall;
         }
         // extraAttrs);
   in {

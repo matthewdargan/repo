@@ -7,6 +7,7 @@
     ./9pfs-test.nix
     ./9p.nix
     ./authd.nix
+    ./media-server.nix
     ./installer-image.nix
     ./neovim.nix
     ./www.nix
