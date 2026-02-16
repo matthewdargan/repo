@@ -1,3 +1,7 @@
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/avutil.h>
+
 #include "base/inc.h"
 #include "http/inc.h"
 #include "base/inc.c"
@@ -6,7 +10,6 @@
 #include <dirent.h>
 #include <string.h>
 #include <signal.h>
-#include <sys/wait.h>
 #include <sys/stat.h>
 
 ////////////////////////////////
@@ -15,22 +18,27 @@
 typedef struct DashCache DashCache;
 struct DashCache
 {
+  Arena *arena;
   String8 file_path;
   String8 cache_dir;
-  pid_t ffmpeg_pid;
   u64 duration_us;
   u64 last_access_us;
   DashCache *hash_next;
+  DashCache *lru_next;
+  DashCache *lru_prev;
 };
 
 typedef struct DashCacheTable DashCacheTable;
 struct DashCacheTable
 {
   Mutex mutex;
-  Arena *arena;
   DashCache **hash_table;
   u64 hash_table_size;
   String8 cache_root;
+  DashCache *lru_head;
+  DashCache *lru_tail;
+  u64 cache_count;
+  u64 max_cache_count;
 };
 
 ////////////////////////////////
@@ -83,11 +91,80 @@ send_error_response(OS_Handle socket, HTTP_Status status, String8 message)
 }
 
 ////////////////////////////////
-//~ Media Inspection (subprocess: ffprobe)
-// NOTE: Future libav integration will replace these subprocess calls with:
-//   - avformat_open_input()
-//   - avformat_find_stream_info()
-//   - av_dict_get(format_ctx->metadata, "duration", NULL, 0)
+//~ Forward Declarations
+
+internal void postprocess_manifest(String8 cache_dir);
+internal void cache_lru_touch(DashCache *cache);
+internal void cache_lru_evict_if_needed(void);
+
+////////////////////////////////
+//~ LRU Cache Management
+
+internal void
+cache_lru_remove(DashCache *cache)
+{
+  if(cache->lru_prev) cache->lru_prev->lru_next = cache->lru_next;
+  else dash_cache->lru_head = cache->lru_next;
+
+  if(cache->lru_next) cache->lru_next->lru_prev = cache->lru_prev;
+  else dash_cache->lru_tail = cache->lru_prev;
+
+  cache->lru_prev = 0;
+  cache->lru_next = 0;
+}
+
+internal void
+cache_lru_add_to_head(DashCache *cache)
+{
+  cache->lru_next = dash_cache->lru_head;
+  cache->lru_prev = 0;
+
+  if(dash_cache->lru_head) dash_cache->lru_head->lru_prev = cache;
+  else dash_cache->lru_tail = cache;
+
+  dash_cache->lru_head = cache;
+}
+
+internal void
+cache_lru_touch(DashCache *cache)
+{
+  if(cache == dash_cache->lru_head) return;
+  cache_lru_remove(cache);
+  cache_lru_add_to_head(cache);
+}
+
+internal void
+cache_lru_evict_if_needed(void)
+{
+  while(dash_cache->cache_count >= dash_cache->max_cache_count && dash_cache->lru_tail)
+  {
+    DashCache *evict = dash_cache->lru_tail;
+    u64 hash = hash_string(evict->file_path);
+    u64 bucket = hash % dash_cache->hash_table_size;
+
+    DashCache **prev_ptr = &dash_cache->hash_table[bucket];
+    for(DashCache *c = *prev_ptr; c != 0; c = c->hash_next)
+    {
+      if(c == evict)
+      {
+        *prev_ptr = c->hash_next;
+        break;
+      }
+      prev_ptr = &c->hash_next;
+    }
+
+    cache_lru_remove(evict);
+    dash_cache->cache_count -= 1;
+
+    log_infof("media-server: LRU evicted %S (cache: %llu/%llu)\n",
+              evict->file_path, dash_cache->cache_count, dash_cache->max_cache_count);
+
+    arena_release(evict->arena);
+  }
+}
+
+////////////////////////////////
+//~ Media Inspection (libav)
 
 internal u64
 probe_duration(Arena *arena, String8 file_path)
@@ -97,207 +174,338 @@ probe_duration(Arena *arena, String8 file_path)
   MemoryCopy(path_cstr, file_path.str, file_path.size);
   path_cstr[file_path.size] = 0;
 
-  int pipe_fds[2];
-  if(pipe(pipe_fds) < 0) { scratch_end(scratch); return 0; }
-
-  pid_t pid = fork();
-  if(pid == 0)
-  {
-    close(pipe_fds[0]);
-    dup2(pipe_fds[1], STDOUT_FILENO);
-    dup2(open("/dev/null", O_WRONLY), STDERR_FILENO);
-    close(pipe_fds[1]);
-    execlp("ffprobe", "ffprobe", "-v", "error",
-           "-show_entries", "format=duration",
-           "-of", "default=noprint_wrappers=1:nokey=1",
-           path_cstr, NULL);
-    _exit(1);
-  }
-  else if(pid < 0) { close(pipe_fds[0]); close(pipe_fds[1]); scratch_end(scratch); return 0; }
-
-  close(pipe_fds[1]);
-  char buffer[64];
-  ssize_t n = read(pipe_fds[0], buffer, sizeof(buffer) - 1);
-  close(pipe_fds[0]);
-
-  int status;
-  waitpid(pid, &status, 0);
-  if(n <= 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
+  AVFormatContext *fmt_ctx = NULL;
+  if(avformat_open_input(&fmt_ctx, path_cstr, NULL, NULL) < 0)
   {
     scratch_end(scratch);
     return 0;
   }
 
-  buffer[n] = 0;
-  f64 duration_seconds = 0.0;
-  for(u64 i = 0; i < (u64)n; i++)
+  if(avformat_find_stream_info(fmt_ctx, NULL) < 0)
   {
-    if((buffer[i] >= '0' && buffer[i] <= '9') || buffer[i] == '.')
-    {
-      char *endptr;
-      duration_seconds = strtod(buffer + i, &endptr);
-      break;
-    }
+    avformat_close_input(&fmt_ctx);
+    scratch_end(scratch);
+    return 0;
   }
 
-  u64 duration_us = (u64)(duration_seconds * 1000000.0);
+  u64 duration_us = (u64)fmt_ctx->duration;
+  f64 duration_seconds = (f64)duration_us / 1000000.0;
+
   log_infof("media-server: detected duration %.2fs (%lluµs) for %S\n",
             duration_seconds, duration_us, file_path);
 
+  avformat_close_input(&fmt_ctx);
   scratch_end(scratch);
   return duration_us;
 }
 
 internal void
-extract_subtitles(Arena *arena, String8 file_path, String8 cache_dir)
+extract_subtitle_stream(String8 input_path, u32 stream_idx, String8 lang, String8 output_path)
 {
-  Temp scratch = scratch_begin(&arena, 1);
-  char *path_cstr = (char *)push_array(scratch.arena, u8, file_path.size + 1);
-  MemoryCopy(path_cstr, file_path.str, file_path.size);
-  path_cstr[file_path.size] = 0;
+  Temp temp = scratch_begin(0, 0);
 
-  int pipe_fds[2];
-  if(pipe(pipe_fds) < 0) { scratch_end(scratch); return; }
+  char in_cstr[4096];
+  MemoryCopy(in_cstr, input_path.str, Min(input_path.size, sizeof(in_cstr) - 1));
+  in_cstr[Min(input_path.size, sizeof(in_cstr) - 1)] = 0;
 
-  pid_t probe_pid = fork();
-  if(probe_pid == 0)
+  char out_cstr[4096];
+  MemoryCopy(out_cstr, output_path.str, Min(output_path.size, sizeof(out_cstr) - 1));
+  out_cstr[Min(output_path.size, sizeof(out_cstr) - 1)] = 0;
+
+  AVFormatContext *in_ctx = NULL;
+  AVCodecContext *dec_ctx = NULL;
+  AVFormatContext *out_ctx = NULL;
+  const AVCodec *enc = NULL;
+  AVCodecContext *enc_ctx = NULL;
+
+  if(avformat_open_input(&in_ctx, in_cstr, NULL, NULL) != 0) goto cleanup;
+  if(avformat_find_stream_info(in_ctx, NULL) != 0) goto cleanup;
+
+  AVStream *in_stream = in_ctx->streams[stream_idx];
+
+  const AVCodec *dec = avcodec_find_decoder(in_stream->codecpar->codec_id);
+  if(!dec) goto cleanup;
+
+  dec_ctx = avcodec_alloc_context3(dec);
+  if(!dec_ctx) goto cleanup;
+
+  if(avcodec_parameters_to_context(dec_ctx, in_stream->codecpar) != 0) goto cleanup;
+  if(avcodec_open2(dec_ctx, dec, NULL) != 0) goto cleanup;
+
+  enc = avcodec_find_encoder_by_name("webvtt");
+  if(!enc) goto cleanup;
+
+  enc_ctx = avcodec_alloc_context3(enc);
+  if(!enc_ctx) goto cleanup;
+
+  enc_ctx->time_base = in_stream->time_base;
+
+  const char *webvtt_header = "WEBVTT\n\n";
+  enc_ctx->subtitle_header_size = strlen(webvtt_header);
+  enc_ctx->subtitle_header = av_malloc(enc_ctx->subtitle_header_size + 1);
+  if(enc_ctx->subtitle_header)
   {
-    close(pipe_fds[0]);
-    dup2(pipe_fds[1], STDOUT_FILENO);
-    dup2(open("/dev/null", O_WRONLY), STDERR_FILENO);
-    close(pipe_fds[1]);
-    execlp("ffprobe", "ffprobe", "-v", "error",
-           "-select_streams", "s",
-           "-show_entries", "stream=index:stream_tags=language",
-           "-of", "csv=p=0", path_cstr, NULL);
-    _exit(1);
+    MemoryCopy(enc_ctx->subtitle_header, webvtt_header, enc_ctx->subtitle_header_size + 1);
   }
-  else if(probe_pid < 0) { close(pipe_fds[0]); close(pipe_fds[1]); scratch_end(scratch); return; }
 
-  close(pipe_fds[1]);
-  char buffer[4096];
-  ssize_t n = read(pipe_fds[0], buffer, sizeof(buffer) - 1);
-  close(pipe_fds[0]);
+  if(avcodec_open2(enc_ctx, enc, NULL) != 0) goto cleanup;
 
-  int status;
-  waitpid(probe_pid, &status, 0);
-  if(n <= 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
+  if(avformat_alloc_output_context2(&out_ctx, NULL, "webvtt", out_cstr) != 0) goto cleanup;
+
+  AVStream *out_stream = avformat_new_stream(out_ctx, NULL);
+  if(!out_stream) goto cleanup;
+  if(avcodec_parameters_from_context(out_stream->codecpar, enc_ctx) != 0) goto cleanup;
+  out_stream->time_base = in_stream->time_base;
+
+  if(avio_open(&out_ctx->pb, out_cstr, AVIO_FLAG_WRITE) != 0) goto cleanup;
+  if(avformat_write_header(out_ctx, NULL) != 0) goto cleanup;
+
+  AVPacket *pkt = av_packet_alloc();
+  AVPacket *enc_pkt = av_packet_alloc();
+  AVSubtitle sub;
+
+  while(av_read_frame(in_ctx, pkt) >= 0)
   {
-    scratch_end(scratch);
+    if(pkt->stream_index == (int)stream_idx)
+    {
+      int got_sub = 0;
+      if(avcodec_decode_subtitle2(dec_ctx, &sub, &got_sub, pkt) >= 0 && got_sub)
+      {
+        b32 has_ass_subtitle = 0;
+        for(u32 i = 0; i < sub.num_rects; i++)
+        {
+          if(sub.rects[i]->type == SUBTITLE_ASS)
+          {
+            has_ass_subtitle = 1;
+            break;
+          }
+        }
+
+        if(has_ass_subtitle)
+        {
+          u8 buf[4096];
+          int size = avcodec_encode_subtitle(enc_ctx, buf, sizeof(buf), &sub);
+          if(size > 0)
+          {
+            enc_pkt->data = buf;
+            enc_pkt->size = size;
+            enc_pkt->pts = pkt->pts;
+            enc_pkt->dts = pkt->dts;
+            enc_pkt->duration = pkt->duration;
+            enc_pkt->stream_index = 0;
+            av_interleaved_write_frame(out_ctx, enc_pkt);
+          }
+        }
+        avsubtitle_free(&sub);
+      }
+    }
+    av_packet_unref(pkt);
+  }
+
+  av_packet_free(&enc_pkt);
+  av_packet_free(&pkt);
+  av_write_trailer(out_ctx);
+
+  log_infof("media-server: extracted subtitle stream %u (lang: %S)\n", stream_idx, lang);
+
+cleanup:
+  if(out_ctx)
+  {
+    if(out_ctx->pb) avio_closep(&out_ctx->pb);
+    avformat_free_context(out_ctx);
+  }
+  if(enc_ctx) avcodec_free_context(&enc_ctx);
+  if(dec_ctx) avcodec_free_context(&dec_ctx);
+  if(in_ctx) avformat_close_input(&in_ctx);
+  scratch_end(temp);
+}
+
+internal void
+extract_subtitles(String8 file_path, String8 cache_dir)
+{
+  Temp temp = scratch_begin(0, 0);
+
+  char path_cstr[4096];
+  MemoryCopy(path_cstr, file_path.str, Min(file_path.size, sizeof(path_cstr) - 1));
+  path_cstr[Min(file_path.size, sizeof(path_cstr) - 1)] = 0;
+
+  AVFormatContext *fmt = NULL;
+  if(avformat_open_input(&fmt, path_cstr, NULL, NULL) != 0)
+  {
+    scratch_end(temp);
     return;
   }
 
-  buffer[n] = 0;
-  String8 output = str8((u8 *)buffer, n);
-  String8List lines = str8_split(scratch.arena, output, (u8 *)"\n", 1, 0);
-
-  for(String8Node *node = lines.first; node != 0; node = node->next)
+  if(avformat_find_stream_info(fmt, NULL) != 0)
   {
-    String8 line = node->string;
-    if(line.size == 0) continue;
-
-    u64 comma = str8_find_needle(line, 0, str8_lit(","), 0);
-    if(comma >= line.size) continue;
-
-    String8 index_str = str8_prefix(line, comma);
-    String8 lang = str8_skip(line, comma + 1);
-    if(lang.size == 0) lang = str8_lit("und");
-
-    String8 vtt_path = str8f(scratch.arena, "%S/subtitle.%S.vtt", cache_dir, lang);
-    char *vtt_cstr = (char *)push_array(scratch.arena, u8, vtt_path.size + 1);
-    MemoryCopy(vtt_cstr, vtt_path.str, vtt_path.size);
-    vtt_cstr[vtt_path.size] = 0;
-
-    pid_t extract_pid = fork();
-    if(extract_pid == 0)
-    {
-      int devnull = open("/dev/null", O_WRONLY);
-      dup2(devnull, STDOUT_FILENO);
-      dup2(devnull, STDERR_FILENO);
-      close(devnull);
-
-      char index_cstr[32];
-      MemoryCopy(index_cstr, index_str.str, index_str.size);
-      index_cstr[index_str.size] = 0;
-
-      char map_arg[64];
-      snprintf(map_arg, sizeof(map_arg), "0:%s", index_cstr);
-
-      execlp("ffmpeg", "ffmpeg", "-i", path_cstr,
-             "-map", map_arg, "-c:s", "webvtt", "-y", vtt_cstr, NULL);
-      _exit(1);
-    }
-
-    log_infof("media-server: extracting subtitle %S (lang: %S)\n", index_str, lang);
+    avformat_close_input(&fmt);
+    scratch_end(temp);
+    return;
   }
 
-  scratch_end(scratch);
+  for(u32 i = 0; i < fmt->nb_streams; i++)
+  {
+    if(fmt->streams[i]->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) continue;
+
+    if(fmt->streams[i]->codecpar->codec_id == AV_CODEC_ID_HDMV_PGS_SUBTITLE ||
+       fmt->streams[i]->codecpar->codec_id == AV_CODEC_ID_DVD_SUBTITLE ||
+       fmt->streams[i]->codecpar->codec_id == AV_CODEC_ID_DVB_SUBTITLE)
+    {
+      continue;
+    }
+
+    String8 lang = str8_lit("und");
+    AVDictionaryEntry *e = av_dict_get(fmt->streams[i]->metadata, "language", NULL, 0);
+    if(e && e->value)
+    {
+      lang = str8_cstring(e->value);
+    }
+
+    String8 vtt_path = str8f(temp.arena, "%S/subtitle.%S.vtt", cache_dir, lang);
+    extract_subtitle_stream(file_path, i, lang, vtt_path);
+  }
+
+  avformat_close_input(&fmt);
+  scratch_end(temp);
 }
 
 ////////////////////////////////
-//~ DASH Generation (subprocess: ffmpeg -f dash)
-// NOTE: Future libav integration will replace this with:
-//   - avformat_alloc_output_context2(&ctx, NULL, "dash", output_path)
-//   - avformat_new_stream() for each audio/video stream
-//   - avcodec_parameters_copy() to copy stream parameters
-//   - av_write_frame() to mux packets
+//~ DASH Generation (libav)
+
+internal b32
+generate_dash(String8 input_path, String8 output_path)
+{
+  Temp temp = scratch_begin(0, 0);
+
+  char in_cstr[4096];
+  MemoryCopy(in_cstr, input_path.str, Min(input_path.size, sizeof(in_cstr) - 1));
+  in_cstr[Min(input_path.size, sizeof(in_cstr) - 1)] = 0;
+
+  char out_cstr[4096];
+  MemoryCopy(out_cstr, output_path.str, Min(output_path.size, sizeof(out_cstr) - 1));
+  out_cstr[Min(output_path.size, sizeof(out_cstr) - 1)] = 0;
+
+  AVFormatContext *in_ctx = NULL;
+  AVFormatContext *out_ctx = NULL;
+  b32 success = 0;
+
+  if(avformat_open_input(&in_ctx, in_cstr, NULL, NULL) != 0) goto cleanup;
+  if(avformat_find_stream_info(in_ctx, NULL) != 0) goto cleanup;
+
+  if(avformat_alloc_output_context2(&out_ctx, NULL, "dash", out_cstr) != 0) goto cleanup;
+
+  int *stream_map = push_array(temp.arena, int, in_ctx->nb_streams);
+  for(u32 i = 0; i < in_ctx->nb_streams; i++) stream_map[i] = -1;
+
+  u32 stream_idx = 0;
+  for(u32 i = 0; i < in_ctx->nb_streams; i++)
+  {
+    AVStream *in_stream = in_ctx->streams[i];
+    AVCodecParameters *codecpar = in_stream->codecpar;
+
+    if(codecpar->codec_type != AVMEDIA_TYPE_VIDEO &&
+       codecpar->codec_type != AVMEDIA_TYPE_AUDIO)
+    {
+      continue;
+    }
+
+    AVStream *out_stream = avformat_new_stream(out_ctx, NULL);
+    if(!out_stream) goto cleanup;
+
+    if(avcodec_parameters_copy(out_stream->codecpar, codecpar) != 0) goto cleanup;
+    out_stream->codecpar->codec_tag = 0;
+    out_stream->time_base = in_stream->time_base;
+    av_dict_copy(&out_stream->metadata, in_stream->metadata, 0);
+
+    stream_map[i] = stream_idx++;
+  }
+
+  AVDictionary *opts = NULL;
+  av_dict_set(&opts, "seg_duration", "4", 0);
+  av_dict_set(&opts, "use_timeline", "1", 0);
+  av_dict_set(&opts, "use_template", "1", 0);
+  av_dict_set(&opts, "single_file", "0", 0);
+  av_dict_set(&opts, "streaming", "0", 0);
+
+  if(avformat_write_header(out_ctx, &opts) != 0)
+  {
+    av_dict_free(&opts);
+    goto cleanup;
+  }
+  av_dict_free(&opts);
+
+  AVPacket *pkt = av_packet_alloc();
+  while(av_read_frame(in_ctx, pkt) >= 0)
+  {
+    if(stream_map[pkt->stream_index] >= 0)
+    {
+      AVStream *in_stream = in_ctx->streams[pkt->stream_index];
+      AVStream *out_stream = out_ctx->streams[stream_map[pkt->stream_index]];
+
+      pkt->stream_index = stream_map[pkt->stream_index];
+      av_packet_rescale_ts(pkt, in_stream->time_base, out_stream->time_base);
+      pkt->pos = -1;
+
+      if(av_interleaved_write_frame(out_ctx, pkt) != 0) break;
+    }
+    av_packet_unref(pkt);
+  }
+  av_packet_free(&pkt);
+
+  av_write_trailer(out_ctx);
+  success = 1;
+
+cleanup:
+  if(out_ctx)
+  {
+    if(!(out_ctx->oformat->flags & AVFMT_NOFILE)) avio_closep(&out_ctx->pb);
+    avformat_free_context(out_ctx);
+  }
+  if(in_ctx) avformat_close_input(&in_ctx);
+  scratch_end(temp);
+  return success;
+}
 
 internal DashCache *
-start_dash_generation(Arena *arena, String8 file_path, String8 cache_root)
+start_dash_generation(String8 file_path, String8 cache_root)
 {
-  Temp scratch = scratch_begin(&arena, 1);
+  Arena *cache_arena = arena_alloc();
+  Temp scratch = scratch_begin(&cache_arena, 1);
   u64 hash = hash_string(file_path);
-  String8 cache_dir = str8f(arena, "%S/%llu", cache_root, hash);
+  String8 cache_dir = str8f(cache_arena, "%S/%llu", cache_root, hash);
 
   char *cache_dir_cstr = (char *)push_array(scratch.arena, u8, cache_dir.size + 1);
   MemoryCopy(cache_dir_cstr, cache_dir.str, cache_dir.size);
   cache_dir_cstr[cache_dir.size] = 0;
   mkdir(cache_dir_cstr, 0755);
 
+  u64 duration_us = probe_duration(cache_arena, file_path);
+  extract_subtitles(file_path, cache_dir);
+
   String8 manifest_path = str8f(scratch.arena, "%S/manifest.mpd", cache_dir);
-  char *file_cstr = (char *)push_array(scratch.arena, u8, file_path.size + 1);
-  MemoryCopy(file_cstr, file_path.str, file_path.size);
-  file_cstr[file_path.size] = 0;
-  char *manifest_cstr = (char *)push_array(scratch.arena, u8, manifest_path.size + 1);
-  MemoryCopy(manifest_cstr, manifest_path.str, manifest_path.size);
-  manifest_cstr[manifest_path.size] = 0;
 
-  u64 duration_us = probe_duration(arena, file_path);
-  extract_subtitles(arena, file_path, cache_dir);
+  log_infof("media-server: generating DASH for %S\n", file_path);
 
-  pid_t pid = fork();
-  if(pid == 0)
+  if(!generate_dash(file_path, manifest_path))
   {
-    execlp("ffmpeg", "ffmpeg",
-           "-i", file_cstr,
-           "-map", "0:v",
-           "-map", "0:a",
-           "-c", "copy",
-           "-f", "dash",
-           "-seg_duration", "4",
-           "-use_timeline", "1",
-           "-use_template", "1",
-           "-single_file", "0",
-           "-streaming", "0",
-           manifest_cstr,
-           NULL);
-    _exit(1);
-  }
-  else if(pid < 0)
-  {
-    log_errorf("media-server: fork failed for %S\n", file_path);
+    log_errorf("media-server: DASH generation failed for %S\n", file_path);
     scratch_end(scratch);
     return 0;
   }
 
-  DashCache *cache = push_array(arena, DashCache, 1);
-  cache->file_path = str8_copy(arena, file_path);
+  log_infof("media-server: DASH generation complete for %S\n", file_path);
+
+  postprocess_manifest(cache_dir);
+
+  DashCache *cache = push_array(cache_arena, DashCache, 1);
+  cache->arena = cache_arena;
+  cache->file_path = str8_copy(cache_arena, file_path);
   cache->cache_dir = cache_dir;
-  cache->ffmpeg_pid = pid;
   cache->duration_us = duration_us;
   cache->last_access_us = os_now_microseconds();
+  cache->lru_next = 0;
+  cache->lru_prev = 0;
 
-  log_infof("media-server: started DASH generation (pid=%d) for %S\n", pid, file_path);
   scratch_end(scratch);
   return cache;
 }
@@ -316,6 +524,7 @@ get_or_create_cache(String8 file_path)
       if(str8_match(c->file_path, file_path, 0))
       {
         c->last_access_us = os_now_microseconds();
+        cache_lru_touch(c);
         result = c;
         break;
       }
@@ -323,11 +532,15 @@ get_or_create_cache(String8 file_path)
 
     if(result == 0)
     {
-      result = start_dash_generation(dash_cache->arena, file_path, dash_cache->cache_root);
+      cache_lru_evict_if_needed();
+
+      result = start_dash_generation(file_path, dash_cache->cache_root);
       if(result != 0)
       {
         result->hash_next = dash_cache->hash_table[bucket];
         dash_cache->hash_table[bucket] = result;
+        cache_lru_add_to_head(result);
+        dash_cache->cache_count += 1;
       }
     }
   }
@@ -389,19 +602,10 @@ line_contains_any(String8 line, String8 *patterns, u64 pattern_count)
 }
 
 internal void
-check_ffmpeg_completion(DashCache *cache)
+postprocess_manifest(String8 cache_dir)
 {
-  if(cache->ffmpeg_pid == 0) return;
-
-  int status;
-  pid_t result = waitpid(cache->ffmpeg_pid, &status, WNOHANG);
-  if(result <= 0) return;
-
-  cache->ffmpeg_pid = 0;
-  log_infof("media-server: ffmpeg completed for %S\n", cache->file_path);
-
   Temp scratch = scratch_begin(0, 0);
-  String8 manifest = read_cache_file(scratch.arena, cache->cache_dir, str8_lit("manifest.mpd"));
+  String8 manifest = read_cache_file(scratch.arena, cache_dir, str8_lit("manifest.mpd"));
   if(manifest.size == 0) { scratch_end(scratch); return; }
 
   String8 dynamic_attrs[] = {
@@ -431,7 +635,7 @@ check_ffmpeg_completion(DashCache *cache)
   }
 
   String8 final = str8_list_join(scratch.arena, lines, 0);
-  String8 manifest_path = str8f(scratch.arena, "%S/manifest.mpd", cache->cache_dir);
+  String8 manifest_path = str8f(scratch.arena, "%S/manifest.mpd", cache_dir);
   char *path_cstr = (char *)push_array(scratch.arena, u8, manifest_path.size + 1);
   MemoryCopy(path_cstr, manifest_path.str, manifest_path.size);
   path_cstr[manifest_path.size] = 0;
@@ -441,7 +645,6 @@ check_ffmpeg_completion(DashCache *cache)
   {
     write(fd, final.str, final.size);
     close(fd);
-    log_infof("media-server: converted manifest to static\n");
   }
 
   scratch_end(scratch);
@@ -496,19 +699,12 @@ handle_manifest(OS_Handle socket, String8 file_path)
     return;
   }
 
-  check_ffmpeg_completion(cache);
-
   String8 manifest = read_cache_file(scratch.arena, cache->cache_dir, str8_lit("manifest.mpd"));
   if(manifest.size == 0)
   {
-    send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("Manifest not ready"));
+    send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("Manifest not found"));
     scratch_end(scratch);
     return;
-  }
-
-  if(cache->ffmpeg_pid > 0 && cache->duration_us > 0)
-  {
-    manifest = inject_duration_into_manifest(scratch.arena, manifest, cache->duration_us);
   }
 
   HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_200_OK);
@@ -519,8 +715,7 @@ handle_manifest(OS_Handle socket, String8 file_path)
   res->body = manifest;
 
   socket_write_all(socket, http_response_serialize(scratch.arena, res));
-  log_infof("media-server: served manifest (%llu bytes, %s)\n",
-            manifest.size, cache->ffmpeg_pid > 0 ? "generating" : "complete");
+  log_infof("media-server: served manifest (%llu bytes)\n", manifest.size);
 
   scratch_end(scratch);
 }
@@ -539,17 +734,7 @@ handle_segment(OS_Handle socket, String8 file_path, String8 segment_name)
     return;
   }
 
-  String8 segment = str8_zero();
-  for(u64 attempt = 0; attempt < 10; attempt += 1)
-  {
-    segment = read_cache_file(scratch.arena, cache->cache_dir, segment_name);
-    if(segment.size > 0) break;
-    if(cache->ffmpeg_pid > 0 && attempt < 9)
-    {
-      os_sleep_milliseconds(500);
-    }
-  }
-
+  String8 segment = read_cache_file(scratch.arena, cache->cache_dir, segment_name);
   if(segment.size == 0)
   {
     send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("Segment not found"));
@@ -623,10 +808,13 @@ entry_point(CmdLine *cmd_line)
 
   dash_cache = push_array(arena, DashCacheTable, 1);
   dash_cache->mutex = mutex_alloc();
-  dash_cache->arena = arena_alloc();
   dash_cache->hash_table_size = 256;
-  dash_cache->hash_table = push_array(dash_cache->arena, DashCache *, dash_cache->hash_table_size);
+  dash_cache->hash_table = push_array(arena, DashCache *, dash_cache->hash_table_size);
   dash_cache->cache_root = cache_root_path;
+  dash_cache->lru_head = 0;
+  dash_cache->lru_tail = 0;
+  dash_cache->cache_count = 0;
+  dash_cache->max_cache_count = 16;
 
   {
     Temp temp = scratch_begin(&arena, 1);

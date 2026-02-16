@@ -8,14 +8,10 @@
   in {
     packages = cmdPackage.mkCmdPackage {
       pname = "media-server";
-      description = "DASH media server using FFmpeg subprocess";
+      description = "DASH media server with pure libav integration";
       version = "0.2.0";
-      buildInputs = [];
-      nativeBuildInputs = [pkgs.makeWrapper];
-      postInstall = ''
-        wrapProgram $out/bin/media-server \
-          --prefix PATH : ${lib.makeBinPath [pkgs.ffmpeg]}
-      '';
+      buildInputs = [pkgs.ffmpeg.dev];
+      extraLinkFlags = "-lavformat -lavcodec -lavutil";
     };
   };
 }
