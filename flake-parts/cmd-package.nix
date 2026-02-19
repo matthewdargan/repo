@@ -10,6 +10,7 @@
     buildInputs ? [],
     nativeBuildInputs ? [],
     extraLinkFlags ? "",
+    postPatch ? "",
     postInstall ? "",
   }: let
     commonMeta = {
@@ -37,7 +38,7 @@
     in
       pkgs.clangStdenv.mkDerivation (commonAttrs
         // {
-          inherit buildInputs nativeBuildInputs;
+          inherit buildInputs nativeBuildInputs postPatch;
           buildPhase = ''
             runHook preBuild
             echo "[${buildMode}]"

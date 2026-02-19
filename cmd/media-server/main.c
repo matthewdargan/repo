@@ -82,6 +82,18 @@ socket_write_all(OS_Handle socket, String8 data)
 }
 
 internal void
+send_response(OS_Handle socket, Arena *arena, String8 content_type, String8 body)
+{
+  HTTP_Response *res = http_response_alloc(arena, HTTP_Status_200_OK);
+  http_header_add(arena, &res->headers, str8_lit("Content-Type"), content_type);
+  http_header_add(arena, &res->headers, str8_lit("Access-Control-Allow-Origin"), str8_lit("*"));
+  http_header_add(arena, &res->headers, str8_lit("Content-Length"),
+                  str8_from_u64(arena, body.size, 10, 0, 0));
+  res->body = body;
+  socket_write_all(socket, http_response_serialize(arena, res));
+}
+
+internal void
 send_error_response(OS_Handle socket, HTTP_Status status, String8 message)
 {
   Temp scratch = scratch_begin(0, 0);
@@ -184,8 +196,6 @@ transmux_queue_job(String8 file_path, String8 cache_dir, u64 file_hash)
       u64 bucket = file_hash % transmux_queue->hash_table_size;
       job->hash_next = transmux_queue->hash_table[bucket];
       transmux_queue->hash_table[bucket] = job;
-
-      log_infof("media-server: queued transmux for %S\n", file_path);
     }
   }
 }
@@ -272,21 +282,6 @@ read_small_file(Arena *arena, String8 file_path, u64 max_size)
 ////////////////////////////////
 //~ Manifest
 
-internal String8
-str8_replace(Arena *arena, String8 str, String8 old, String8 new)
-{
-  u64 pos = str8_find_needle(str, 0, old, 0);
-  if(pos >= str.size) return str;
-
-  String8 before = str8_prefix(str, pos);
-  String8 after = str8_skip(str, pos + old.size);
-  String8List parts = {0};
-  str8_list_push(arena, &parts, before);
-  str8_list_push(arena, &parts, new);
-  str8_list_push(arena, &parts, after);
-  return str8_list_join(arena, parts, 0);
-}
-
 internal b32
 line_contains_any(String8 line, String8 *patterns, u64 pattern_count)
 {
@@ -302,7 +297,7 @@ internal void
 postprocess_manifest(String8 cache_dir)
 {
   Temp scratch = scratch_begin(0, 0);
-  String8 manifest_path = str8f(scratch.arena, "%S/manifest.mpd", cache_dir);
+  String8 manifest_path = str8f(scratch.arena, "%S/manifest.mpd.tmp", cache_dir);
   String8 manifest = read_small_file(scratch.arena, manifest_path, MB(1));
   if(manifest.size == 0) { scratch_end(scratch); return; }
 
@@ -313,26 +308,58 @@ postprocess_manifest(String8 cache_dir)
     str8_lit("publishTime"),
   };
 
-  String8List lines = {0};
-  u64 pos = 0;
+  u8 *out = push_array(scratch.arena, u8, manifest.size * 2);
+  u64 out_pos = 0;
+  u64 in_pos = 0;
+
   for(;;)
   {
-    u64 newline = str8_find_needle(manifest, pos, str8_lit("\n"), 0);
+    u64 newline = str8_find_needle(manifest, in_pos, str8_lit("\n"), 0);
     if(newline >= manifest.size) break;
 
-    String8 line = str8_substr(manifest, rng_1u64(pos, newline));
-    if(!line_contains_any(line, dynamic_attrs, ArrayCount(dynamic_attrs)))
+    String8 line = str8_substr(manifest, rng_1u64(in_pos, newline));
+    b32 has_dynamic_attrs = line_contains_any(line, dynamic_attrs, ArrayCount(dynamic_attrs));
+    b32 has_type_attr = str8_find_needle(line, 0, str8_lit("type="), 0) < line.size;
+
+    if(!has_dynamic_attrs || has_type_attr)
     {
-      line = str8_replace(scratch.arena, line, str8_lit("type=\"dynamic\""), str8_lit("type=\"static\""));
-      line = str8_replace(scratch.arena, line, str8_lit("codecs=\"hev1\""), str8_lit("codecs=\"hev1.1.6.L93.B0\""));
-      line = str8_replace(scratch.arena, line, str8_lit("codecs=\"hvc1\""), str8_lit("codecs=\"hvc1.1.6.L93.B0\""));
-      str8_list_push(scratch.arena, &lines, line);
-      str8_list_push(scratch.arena, &lines, str8_lit("\n"));
+      for(u64 i = 0; i < line.size; i += 1)
+      {
+        if(i + 14 <= line.size && MemoryMatch(line.str + i, "type=\"dynamic\"", 14))
+        {
+          MemoryCopy(out + out_pos, "type=\"static\" ", 14);
+          out_pos += 14;
+          i += 13;
+        }
+        else if(i + 13 <= line.size && MemoryMatch(line.str + i, "codecs=\"hev1\"", 13))
+        {
+          MemoryCopy(out + out_pos, "codecs=\"hev1.1.6.L93.B0\"", 24);
+          out_pos += 24;
+          i += 12;
+        }
+        else if(i + 13 <= line.size && MemoryMatch(line.str + i, "codecs=\"hvc1\"", 13))
+        {
+          MemoryCopy(out + out_pos, "codecs=\"hvc1.1.6.L93.B0\"", 24);
+          out_pos += 24;
+          i += 12;
+        }
+        else
+        {
+          out[out_pos++] = line.str[i];
+        }
+      }
+      out[out_pos++] = '\n';
     }
-    pos = newline + 1;
+    in_pos = newline + 1;
   }
 
-  String8 final = str8_list_join(scratch.arena, lines, 0);
+  if(in_pos < manifest.size)
+  {
+    u64 remaining = manifest.size - in_pos;
+    MemoryCopy(out + out_pos, manifest.str + in_pos, remaining);
+    out_pos += remaining;
+  }
+
   char *path_cstr = (char *)push_array(scratch.arena, u8, manifest_path.size + 1);
   MemoryCopy(path_cstr, manifest_path.str, manifest_path.size);
   path_cstr[manifest_path.size] = 0;
@@ -340,7 +367,7 @@ postprocess_manifest(String8 cache_dir)
   int fd = open(path_cstr, O_WRONLY | O_TRUNC);
   if(fd >= 0)
   {
-    write(fd, final.str, final.size);
+    write(fd, out, out_pos);
     close(fd);
   }
 
@@ -752,11 +779,12 @@ generate_dash_to_cache(String8 file_path, String8 cache_dir, u64 file_hash)
 
   extract_subtitles(file_path, cache_dir);
 
-  String8 manifest_path = str8f(scratch.arena, "%S/manifest.mpd", cache_dir);
+  String8 manifest_temp = str8f(scratch.arena, "%S/manifest.mpd.tmp", cache_dir);
+  String8 manifest_final = str8f(scratch.arena, "%S/manifest.mpd", cache_dir);
 
   log_infof("media-server: generating DASH for %S\n", file_path);
 
-  if(!generate_dash(file_path, manifest_path))
+  if(!generate_dash(file_path, manifest_temp))
   {
     log_errorf("media-server: DASH generation failed for %S\n", file_path);
     scratch_end(scratch);
@@ -766,6 +794,16 @@ generate_dash_to_cache(String8 file_path, String8 cache_dir, u64 file_hash)
   log_infof("media-server: DASH generation complete for %S\n", file_path);
 
   postprocess_manifest(cache_dir);
+
+  char *temp_cstr = (char *)push_array(scratch.arena, u8, manifest_temp.size + 1);
+  MemoryCopy(temp_cstr, manifest_temp.str, manifest_temp.size);
+  temp_cstr[manifest_temp.size] = 0;
+
+  char *final_cstr = (char *)push_array(scratch.arena, u8, manifest_final.size + 1);
+  MemoryCopy(final_cstr, manifest_final.str, manifest_final.size);
+  final_cstr[manifest_final.size] = 0;
+
+  rename(temp_cstr, final_cstr);
 
   scratch_end(scratch);
   return 1;
@@ -794,6 +832,75 @@ get_or_create_cache(Arena *arena, String8 file_path, b32 *out_processing)
   transmux_queue_job(file_path, result.cache_dir, file_hash);
   *out_processing = 1;
   return result;
+}
+
+////////////////////////////////
+//~ URL Encoding/Decoding
+
+internal u8
+hex_to_byte(u8 h)
+{
+  if(h >= '0' && h <= '9') return h - '0';
+  if(h >= 'A' && h <= 'F') return h - 'A' + 10;
+  if(h >= 'a' && h <= 'f') return h - 'a' + 10;
+  return 0;
+}
+
+internal String8
+url_decode(Arena *arena, String8 str)
+{
+  u8 *result = push_array(arena, u8, str.size);
+  u64 result_size = 0;
+
+  for(u64 i = 0; i < str.size; i += 1)
+  {
+    if(str.str[i] == '%' && i + 2 < str.size)
+    {
+      u8 high = hex_to_byte(str.str[i + 1]);
+      u8 low = hex_to_byte(str.str[i + 2]);
+      result[result_size++] = (high << 4) | low;
+      i += 2;
+    }
+    else if(str.str[i] == '+')
+    {
+      result[result_size++] = ' ';
+    }
+    else
+    {
+      result[result_size++] = str.str[i];
+    }
+  }
+
+  return str8(result, result_size);
+}
+
+internal String8
+url_encode(Arena *arena, String8 str)
+{
+  String8List parts = {0};
+  u8 hex[] = "0123456789ABCDEF";
+
+  for(u64 i = 0; i < str.size; i += 1)
+  {
+    u8 c = str.str[i];
+    // Unreserved characters (RFC 3986)
+    if((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+       (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+       c == '.' || c == '~' || c == '/')
+    {
+      str8_list_push(arena, &parts, str8(&str.str[i], 1));
+    }
+    else
+    {
+      u8 *encoded = push_array(arena, u8, 3);
+      encoded[0] = '%';
+      encoded[1] = hex[(c >> 4) & 0xF];
+      encoded[2] = hex[c & 0xF];
+      str8_list_push(arena, &parts, str8(encoded, 3));
+    }
+  }
+
+  return str8_list_join(arena, parts, 0);
 }
 
 ////////////////////////////////
@@ -829,313 +936,375 @@ find_subtitle_files(Arena *arena, String8 cache_dir)
 }
 
 internal void
-handle_player(OS_Handle socket, String8 file_param)
+handle_player(OS_Handle socket, String8 file_param, Arena *arena)
 {
-  Temp scratch = scratch_begin(0, 0);
-
-  String8 video_path = str8f(scratch.arena, "%S/%S", media_root_path, file_param);
+  String8 video_path = str8f(arena, "%S/%S", media_root_path, file_param);
   u64 hash = hash_string(video_path);
-  String8 cache_dir = str8f(scratch.arena, "%S/%llu", cache_root_path, hash);
+  String8 cache_dir = str8f(arena, "%S/%llu", cache_root_path, hash);
 
-  String8List subtitle_files = find_subtitle_files(scratch.arena, cache_dir);
-
-  String8List subtitle_json = {0};
-  str8_list_push(scratch.arena, &subtitle_json, str8_lit("["));
-  b32 first = 1;
-  for(String8Node *n = subtitle_files.first; n != 0; n = n->next)
-  {
-    if(first == 0) str8_list_push(scratch.arena, &subtitle_json, str8_lit(","));
-    first = 0;
-    str8_list_push(scratch.arena, &subtitle_json, str8_lit("\""));
-    str8_list_push(scratch.arena, &subtitle_json, n->string);
-    str8_list_push(scratch.arena, &subtitle_json, str8_lit("\""));
-  }
-  str8_list_push(scratch.arena, &subtitle_json, str8_lit("]"));
-  String8 subtitle_json_str = str8_list_join(scratch.arena, subtitle_json, 0);
-
-  String8 html = str8f(scratch.arena,
+  String8 html = str8f(arena,
     "<!DOCTYPE html>\n"
     "<html>\n"
     "<head>\n"
     "  <meta charset=\"UTF-8\">\n"
-    "  <title>Media Player</title>\n"
-    "  <script src=\"https://cdn.dashjs.org/latest/dash.all.min.js\"></script>\n"
+    "  <title>%S</title>\n"
+    "  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n"
+    "  <script>\n"
+    "@@DASHJS@@\n"
+    "  </script>\n"
     "  <style>\n"
     "    * { margin: 0; padding: 0; box-sizing: border-box; }\n"
-    "    body { font-family: sans-serif; background: #000; color: #fff; }\n"
-    "    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }\n"
-    "    video { width: 100%%; background: #000; border-radius: 8px; }\n"
-    "    #track-controls { margin-top: 15px; padding: 15px; background: #1a1a1a; border-radius: 4px; display: flex; gap: 20px; flex-wrap: wrap; }\n"
-    "    #track-controls label { display: flex; align-items: center; gap: 8px; font-size: 14px; }\n"
-    "    #track-controls select { padding: 5px 10px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; min-width: 150px; }\n"
-    "    #track-controls select:hover { background: #444; }\n"
-    "    #debug { margin-top: 20px; padding: 10px; background: #222; border-radius: 4px; font-family: monospace; font-size: 12px; }\n"
-    "    .error { color: #f44; }\n"
-    "    .info { color: #4f4; }\n"
+    "    body {\n"
+    "      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n"
+    "      background: #000;\n"
+    "      color: #fff;\n"
+    "      line-height: 1.5;\n"
+    "    }\n"
+    "    header {\n"
+    "      background: #111;\n"
+    "      border-bottom: 1px solid #333;\n"
+    "      padding: 1rem 2rem;\n"
+    "      display: flex;\n"
+    "      justify-content: space-between;\n"
+    "      align-items: center;\n"
+    "    }\n"
+    "    header h1 {\n"
+    "      font-size: 1.25rem;\n"
+    "      font-weight: 500;\n"
+    "      color: #fff;\n"
+    "    }\n"
+    "    header .back {\n"
+    "      color: #6699cc;\n"
+    "      text-decoration: none;\n"
+    "      font-size: 0.9rem;\n"
+    "    }\n"
+    "    header .back:hover {\n"
+    "      text-decoration: underline;\n"
+    "    }\n"
+    "    main {\n"
+    "      padding: 2rem;\n"
+    "      max-width: 1600px;\n"
+    "      margin: 0 auto;\n"
+    "    }\n"
+    "    .title {\n"
+    "      margin-bottom: 1rem;\n"
+    "      font-size: 1.1rem;\n"
+    "      color: #fff;\n"
+    "      word-break: break-word;\n"
+    "    }\n"
+    "    #status {\n"
+    "      background: #1a1a1a;\n"
+    "      border: 1px solid #333;\n"
+    "      border-radius: 4px;\n"
+    "      padding: 1.5rem;\n"
+    "      text-align: center;\n"
+    "      margin-bottom: 1rem;\n"
+    "    }\n"
+    "    #status.transmuxing {\n"
+    "      border-color: #cc9966;\n"
+    "      color: #cc9966;\n"
+    "    }\n"
+    "    #status.error {\n"
+    "      border-color: #cc6666;\n"
+    "      color: #cc6666;\n"
+    "    }\n"
+    "    .spinner {\n"
+    "      display: inline-block;\n"
+    "      width: 1rem;\n"
+    "      height: 1rem;\n"
+    "      border: 2px solid #333;\n"
+    "      border-top-color: #cc9966;\n"
+    "      border-radius: 50%%;\n"
+    "      animation: spin 0.8s linear infinite;\n"
+    "      margin-right: 0.5rem;\n"
+    "      vertical-align: middle;\n"
+    "    }\n"
+    "    @keyframes spin {\n"
+    "      to { transform: rotate(360deg); }\n"
+    "    }\n"
+    "    #player-container {\n"
+    "      display: none;\n"
+    "    }\n"
+    "    #player-container.ready {\n"
+    "      display: block;\n"
+    "    }\n"
+    "    video {\n"
+    "      width: 100%%;\n"
+    "      background: #000;\n"
+    "      display: block;\n"
+    "    }\n"
     "  </style>\n"
     "</head>\n"
     "<body>\n"
-    "  <div class=\"container\">\n"
-    "    <h1>%S</h1>\n"
-    "    <video id=\"video\" controls></video>\n"
-    "    <div id=\"track-controls\">\n"
-    "      <label>🎬 Video: <select id=\"video-select\"></select></label>\n"
-    "      <label>🔊 Audio: <select id=\"audio-select\"></select></label>\n"
-    "      <label>📝 Subtitles: <select id=\"subtitle-select\"></select></label>\n"
+    "  <header>\n"
+    "    <h1>Media Library</h1>\n"
+    "    <a href=\"/\" class=\"back\">\u2190 Back to Library</a>\n"
+    "  </header>\n"
+    "  <main>\n"
+    "    <div class=\"title\">%S</div>\n"
+    "    <div id=\"status\" class=\"transmuxing\">\n"
+    "      <div class=\"spinner\"></div>\n"
+    "      <span id=\"status-text\">Checking manifest...</span>\n"
     "    </div>\n"
-    "    <div id=\"debug\"></div>\n"
-    "  </div>\n"
+    "    <div id=\"player-container\">\n"
+    "      <video id=\"video\" controls></video>\n"
+    "    </div>\n"
+    "  </main>\n"
     "  <script>\n"
-    "    var debug = document.getElementById('debug');\n"
-    "    function log(msg, isError) {\n"
-    "      var div = document.createElement('div');\n"
-    "      div.className = isError ? 'error' : 'info';\n"
-    "      div.textContent = new Date().toISOString().substr(11,12) + ' ' + msg;\n"
-    "      debug.appendChild(div);\n"
-    "      console.log(msg);\n"
-    "    }\n"
+    "    var statusEl = document.getElementById('status');\n"
+    "    var statusText = document.getElementById('status-text');\n"
+    "    var playerContainer = document.getElementById('player-container');\n"
     "    var video = document.querySelector('#video');\n"
-    "    var player = dashjs.MediaPlayer().create();\n"
-    "    var retryCount = 0;\n"
-    "    player.on(dashjs.MediaPlayer.events.ERROR, function(e) {\n"
-    "      log('ERROR: ' + JSON.stringify(e.error), true);\n"
-    "      if(e.error.code === 10 && retryCount < 1) {\n"
-    "        retryCount++;\n"
-    "        log('Manifest incomplete - will retry in 3 seconds...');\n"
-    "        setTimeout(function() { window.location.reload(); }, 3000);\n"
-    "      }\n"
-    "    });\n"
-    "    player.on(dashjs.MediaPlayer.events.PLAYBACK_ERROR, function(e) {\n"
-    "      log('PLAYBACK_ERROR: ' + JSON.stringify(e.error), true);\n"
-    "    });\n"
-    "    player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, function() {\n"
-    "      log('Stream initialized');\n"
+    "    var player = null;\n"
+    "    var manifestUrl = '/media/%S/manifest.mpd';\n"
+    "    var checkInterval = null;\n"
+    "    \n"
+    "    function checkManifest() {\n"
+    "      fetch(manifestUrl, {method: 'HEAD'})\n"
+    "        .then(function(response) {\n"
+    "          if(response.status === 200) {\n"
+    "            clearInterval(checkInterval);\n"
+    "            startPlayer();\n"
+    "          } else if(response.status === 202) {\n"
+    "            statusText.textContent = 'Transmuxing video... (this may take a few minutes)';\n"
+    "          } else {\n"
+    "            statusEl.className = 'error';\n"
+    "            statusText.textContent = 'Error: Manifest not found';\n"
+    "            clearInterval(checkInterval);\n"
+    "          }\n"
+    "        })\n"
+    "        .catch(function() {\n"
+    "          statusEl.className = 'error';\n"
+    "          statusText.textContent = 'Error: Failed to check manifest';\n"
+    "          clearInterval(checkInterval);\n"
+    "        });\n"
+    "    }\n"
+    "    \n"
+    "    function startPlayer() {\n"
+    "      statusEl.style.display = 'none';\n"
+    "      playerContainer.className = 'ready';\n"
+    "      \n"
+    "      fetch('/media/%S/subtitles.txt')\n"
+    "        .then(function(r) { return r.ok ? r.text() : ''; })\n"
+    "        .then(function(text) {\n"
+    "          var lines = text.split('\\n');\n"
+    "          for(var i = 0; i < lines.length; i++) {\n"
+    "            var parts = lines[i].split(' ');\n"
+    "            if(parts.length === 2) {\n"
+    "              var track = document.createElement('track');\n"
+    "              track.kind = 'subtitles';\n"
+    "              track.src = parts[1];\n"
+    "              track.srclang = parts[0];\n"
+    "              track.label = parts[0].toUpperCase();\n"
+    "              video.appendChild(track);\n"
+    "            }\n"
+    "          }\n"
+    "        })\n"
+    "        .catch(function() {})\n"
+    "        .finally(function() { initPlayer(); });\n"
+    "    }\n"
+    "    \n"
+    "    function initPlayer() {\n"
+    "      player = dashjs.MediaPlayer().create();\n"
+    "      \n"
+    "      player.on(dashjs.MediaPlayer.events.ERROR, function(e) {\n"
+    "        if(e.error.code === 10) {\n"
+    "          statusEl.style.display = 'block';\n"
+    "          statusEl.className = 'transmuxing';\n"
+    "          statusText.textContent = 'Manifest incomplete, retrying...';\n"
+    "          playerContainer.className = '';\n"
+    "          setTimeout(checkManifest, 3000);\n"
+    "        }\n"
+    "      });\n"
+    "      \n"
+    "      player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, function() {\n"
+    "        var urlParams = new URLSearchParams(window.location.search);\n"
+    "        var requestedLang = urlParams.get('lang') || 'en';\n"
+    "        var audioTracks = player.getTracksFor('audio');\n"
+    "        \n"
+    "        for(var i = 0; i < audioTracks.length; i++) {\n"
+    "          if(audioTracks[i].lang === requestedLang) {\n"
+    "            player.setCurrentTrack(audioTracks[i]);\n"
+    "            break;\n"
+    "          }\n"
+    "        }\n"
+    "        \n"
+    "        setupAudioTracksUI();\n"
+    "      });\n"
     "      \n"
     "      var urlParams = new URLSearchParams(window.location.search);\n"
-    "      var requestedLang = urlParams.get('lang') || 'en';\n"
-    "      var audioTracks = player.getTracksFor('audio');\n"
-    "      \n"
-    "      for(var i = 0; i < audioTracks.length; i++) {\n"
-    "        if(audioTracks[i].lang === requestedLang) {\n"
-    "          player.setCurrentTrack(audioTracks[i]);\n"
-    "          log('Switched to requested audio track: ' + requestedLang);\n"
-    "          break;\n"
-    "        }\n"
-    "      }\n"
-    "      \n"
-    "      setTimeout(populateTrackSelects, 100);\n"
-    "    });\n"
-    "    function populateTrackSelects() {\n"
-    "      try {\n"
-    "        log('Populating track selects...');\n"
-    "        var videoSelect = document.getElementById('video-select');\n"
-    "        var audioSelect = document.getElementById('audio-select');\n"
-    "        var subtitleSelect = document.getElementById('subtitle-select');\n"
-    "        \n"
-    "        var urlParams = new URLSearchParams(window.location.search);\n"
-    "        var currentLang = urlParams.get('lang') || 'en';\n"
-    "        \n"
-    "        videoSelect.innerHTML = '';\n"
-    "        var opt = document.createElement('option');\n"
-    "        opt.textContent = '1920x1080 HEVC';\n"
-    "        videoSelect.appendChild(opt);\n"
-    "        \n"
-    "        var audioTracks = player.getTracksFor('audio');\n"
-    "        log('Audio tracks found: ' + audioTracks.length);\n"
-    "        audioSelect.innerHTML = '';\n"
-    "        \n"
-    "        if(audioTracks.length === 0) {\n"
-    "          log('WARNING: No audio tracks detected', true);\n"
-    "          var opt = document.createElement('option');\n"
-    "          opt.textContent = 'Audio (' + currentLang + ')';\n"
-    "          audioSelect.appendChild(opt);\n"
-    "        } else {\n"
-    "          audioTracks.forEach(function(track, i) {\n"
-    "            var opt = document.createElement('option');\n"
-    "            var lang = track.lang || 'track' + i;\n"
-    "            var channels = track.audioChannelConfiguration && track.audioChannelConfiguration[0] ? \n"
-    "              (track.audioChannelConfiguration[0].value == 6 ? ' (5.1)' : ' (2.0)') : '';\n"
-    "            opt.textContent = lang + channels;\n"
-    "            opt.value = lang;\n"
-    "            if(lang === currentLang) {\n"
-    "              opt.selected = true;\n"
-    "              log('Currently playing: ' + lang + channels);\n"
-    "            }\n"
-    "            audioSelect.appendChild(opt);\n"
-    "          });\n"
-    "        }\n"
-    "        \n"
-    "        subtitleSelect.innerHTML = '';\n"
-    "        subtitleSelect.disabled = false;\n"
-    "        var noneOpt = document.createElement('option');\n"
-    "        noneOpt.textContent = 'None';\n"
-    "        noneOpt.value = '';\n"
-    "        subtitleSelect.appendChild(noneOpt);\n"
-    "        \n"
-    "        loadedSubtitles.forEach(function(sub) {\n"
-    "          var opt = document.createElement('option');\n"
-    "          opt.textContent = sub.lang.toUpperCase();\n"
-    "          opt.value = sub.url;\n"
-    "          subtitleSelect.appendChild(opt);\n"
-    "        });\n"
-    "        \n"
-    "        if(loadedSubtitles.length === 0) {\n"
-    "          var opt = document.createElement('option');\n"
-    "          opt.textContent = 'None available';\n"
-    "          opt.disabled = true;\n"
-    "          subtitleSelect.appendChild(opt);\n"
-    "        }\n"
-    "        \n"
-    "        log('Tracks ready: ' + audioTracks.length + ' audio options');\n"
-    "      } catch(e) {\n"
-    "        log('ERROR populating tracks: ' + e.message, true);\n"
-    "      }\n"
+    "      var selectedLang = urlParams.get('lang') || 'en';\n"
+    "      player.updateSettings({streaming: {initialSettings: {audio: {lang: selectedLang}}}});\n"
+    "      player.initialize(video, manifestUrl, true);\n"
     "    }\n"
-    "    document.getElementById('audio-select').addEventListener('change', function(e) {\n"
-    "      var selectedLang = e.target.value;\n"
-    "      if(!selectedLang) return;\n"
+    "    \n"
+    "    function setupAudioTracksUI() {\n"
+    "      var audioTracks = player.getTracksFor('audio');\n"
+    "      if(audioTracks.length <= 1) return;\n"
+    "      \n"
+    "      video.addEventListener('contextmenu', function(e) {\n"
+    "        if(audioTracks.length > 1) {\n"
+    "          e.preventDefault();\n"
+    "          showAudioMenu(e.clientX, e.clientY);\n"
+    "        }\n"
+    "      });\n"
+    "    }\n"
+    "    \n"
+    "    function showAudioMenu(x, y) {\n"
+    "      var existingMenu = document.getElementById('audio-track-menu');\n"
+    "      if(existingMenu) existingMenu.remove();\n"
+    "      \n"
+    "      var menu = document.createElement('div');\n"
+    "      menu.id = 'audio-track-menu';\n"
+    "      menu.style.cssText = 'position:fixed;left:'+x+'px;top:'+y+'px;background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:4px 0;font-family:sans-serif;font-size:14px;z-index:10000;min-width:150px;box-shadow:0 2px 8px rgba(0,0,0,0.5)';\n"
     "      \n"
     "      var audioTracks = player.getTracksFor('audio');\n"
-    "      for(var i = 0; i < audioTracks.length; i++) {\n"
-    "        if(audioTracks[i].lang === selectedLang) {\n"
-    "          player.setCurrentTrack(audioTracks[i]);\n"
-    "          log('Switched to audio language: ' + selectedLang);\n"
-    "          return;\n"
-    "        }\n"
-    "      }\n"
-    "      log('Audio track not found: ' + selectedLang, true);\n"
-    "    });\n"
-    "    \n"
-    "    document.getElementById('video-select').addEventListener('change', function(e) {\n"
-    "      e.target.selectedIndex = 0;\n"
-    "      log('Video quality switching not supported with codec copy');\n"
-    "    });\n"
-    "    \n"
-    "    document.getElementById('subtitle-select').addEventListener('change', function(e) {\n"
-    "      var url = e.target.value;\n"
+    "      var currentTrack = audioTracks.find(function(t) { return t.enabled; });\n"
     "      \n"
-    "      for(var i = 0; i < video.textTracks.length; i++) {\n"
-    "        video.textTracks[i].mode = 'disabled';\n"
-    "      }\n"
+    "      audioTracks.forEach(function(track) {\n"
+    "        var item = document.createElement('div');\n"
+    "        var lang = (track.lang || 'unknown').toUpperCase();\n"
+    "        var label = track.labels && track.labels[0] ? track.labels[0].text : lang;\n"
+    "        item.textContent = (track.enabled ? '✓ ' : '  ') + label;\n"
+    "        item.style.cssText = 'padding:8px 16px;cursor:pointer;color:#ededed';\n"
+    "        item.onmouseover = function() { this.style.background = '#2a2a2a'; };\n"
+    "        item.onmouseout = function() { this.style.background = 'transparent'; };\n"
+    "        item.onclick = function() {\n"
+    "          player.setCurrentTrack(track);\n"
+    "          menu.remove();\n"
+    "        };\n"
+    "        menu.appendChild(item);\n"
+    "      });\n"
     "      \n"
-    "      var existingTracks = video.querySelectorAll('track');\n"
-    "      existingTracks.forEach(function(track) { track.remove(); });\n"
+    "      document.body.appendChild(menu);\n"
     "      \n"
-    "      if(url) {\n"
-    "        var track = document.createElement('track');\n"
-    "        track.kind = 'subtitles';\n"
-    "        track.src = url;\n"
-    "        track.srclang = e.target.options[e.target.selectedIndex].textContent.toLowerCase();\n"
-    "        track.label = e.target.options[e.target.selectedIndex].textContent;\n"
-    "        track.default = false;\n"
-    "        video.appendChild(track);\n"
-    "        \n"
-    "        track.addEventListener('load', function() {\n"
-    "          track.track.mode = 'showing';\n"
-    "          log('Enabled subtitles: ' + track.label);\n"
-    "        });\n"
-    "        track.addEventListener('error', function(e) {\n"
-    "          log('Subtitle load error: ' + JSON.stringify(e), true);\n"
-    "        });\n"
-    "        \n"
-    "        track.track.mode = 'showing';\n"
-    "      } else {\n"
-    "        log('Subtitles disabled');\n"
-    "      }\n"
-    "    });\n"
-    "    player.on(dashjs.MediaPlayer.events.CAN_PLAY, function() {\n"
-    "      log('Can play');\n"
-    "    });\n"
-    "    player.on(dashjs.MediaPlayer.events.PLAYBACK_PLAYING, function() {\n"
-    "      log('Playing - video size: ' + video.videoWidth + 'x' + video.videoHeight);\n"
-    "    });\n"
-    "    player.on(dashjs.MediaPlayer.events.BUFFER_LOADED, function(e) {\n"
-    "      log('Buffer loaded: ' + e.mediaType);\n"
-    "    });\n"
-    "    video.addEventListener('loadedmetadata', function() {\n"
-    "      log('Video metadata loaded: ' + video.videoWidth + 'x' + video.videoHeight + ', duration: ' + video.duration);\n"
-    "      if(video.videoWidth === 0 && video.videoHeight === 0 && retryCount < 1) {\n"
-    "        retryCount++;\n"
-    "        log('Video track not loaded - retrying in 2 seconds...');\n"
-    "        setTimeout(function() { window.location.reload(); }, 2000);\n"
-    "      }\n"
-    "    });\n"
-    "    video.addEventListener('error', function(e) {\n"
-    "      log('Video element error: ' + video.error.message, true);\n"
-    "    });\n"
-    "    var codecs = [\n"
-    "      'video/mp4; codecs=\"avc1.6e0028\"',\n"
-    "      'video/mp4; codecs=\"avc1.64001f\"',\n"
-    "      'video/mp4; codecs=\"avc1.42E01E\"',\n"
-    "      'video/mp4; codecs=\"hev1\"',\n"
-    "      'video/mp4; codecs=\"hvc1\"',\n"
-    "      'video/mp4; codecs=\"hev1.1.6.L93.B0\"',\n"
-    "      'video/mp4; codecs=\"hvc1.1.6.L93.B0\"',\n"
-    "      'audio/mp4; codecs=\"mp4a.40.2\"'\n"
-    "    ];\n"
-    "    codecs.forEach(function(c) {\n"
-    "      var supported = MediaSource.isTypeSupported(c);\n"
-    "      log('Codec ' + c + ': ' + (supported ? 'SUPPORTED' : 'NOT SUPPORTED'), !supported);\n"
-    "    });\n"
-    "    var urlParams = new URLSearchParams(window.location.search);\n"
-    "    var selectedLang = urlParams.get('lang') || 'en';\n"
-    "    log('Pre-selecting audio language: ' + selectedLang);\n"
-    "    player.updateSettings({streaming: {initialSettings: {audio: {lang: selectedLang}}}});\n"
-    "    log('Initializing player with /media/%S/manifest.mpd');\n"
-    "    player.initialize(video, '/media/%S/manifest.mpd', true);\n"
+    "      var closeMenu = function() {\n"
+    "        menu.remove();\n"
+    "        document.removeEventListener('click', closeMenu);\n"
+    "      };\n"
+    "      setTimeout(function() { document.addEventListener('click', closeMenu); }, 0);\n"
+    "    }\n"
     "    \n"
-    "    var videoFile = '%S';\n"
-    "    var subtitleFiles = %S;\n"
-    "    var loadedSubtitles = [];\n"
-    "    subtitleFiles.forEach(function(filename) {\n"
-    "      var parts = filename.split('.');\n"
-    "      if(parts.length >= 3) {\n"
-    "        var lang = parts[parts.length - 2];\n"
-    "        var url = '/media/' + videoFile + '/' + filename;\n"
-    "        loadedSubtitles.push({lang: lang, url: url, filename: filename});\n"
-    "        log('Found subtitle: ' + lang + ' (' + filename + ')');\n"
-    "      }\n"
-    "    });\n"
+    "    checkManifest();\n"
+    "    checkInterval = setInterval(checkManifest, 3000);\n"
     "  </script>\n"
     "</body>\n"
     "</html>\n",
-    file_param, file_param, file_param, file_param, subtitle_json_str);
+    file_param, file_param, file_param, file_param);
 
-  HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_200_OK);
-  http_header_add(scratch.arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/html"));
-  http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"),
-                  str8_from_u64(scratch.arena, html.size, 10, 0, 0));
-  res->body = html;
-
-  socket_write_all(socket, http_response_serialize(scratch.arena, res));
-  scratch_end(scratch);
+  send_response(socket, arena, str8_lit("text/html"), html);
 }
 
 internal void
-handle_directory_listing(OS_Handle socket, String8 dir_path)
+handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
 {
-  Temp scratch = scratch_begin(0, 0);
-
-  String8 full_path = (dir_path.size > 0) ? str8f(scratch.arena, "%S/%S", media_root_path, dir_path) : media_root_path;
-  char *path_cstr = (char *)push_array(scratch.arena, u8, full_path.size + 1);
+  String8 full_path = (dir_path.size > 0) ? str8f(arena, "%S/%S", media_root_path, dir_path) : media_root_path;
+  char *path_cstr = (char *)push_array(arena, u8, full_path.size + 1);
   MemoryCopy(path_cstr, full_path.str, full_path.size);
   path_cstr[full_path.size] = 0;
 
   String8List html = {0};
-  str8_list_push(scratch.arena, &html, str8_lit(
+  str8_list_push(arena, &html, str8_lit(
     "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n"
     "<title>Media Library</title>\n"
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n"
     "<style>\n"
     "* { margin: 0; padding: 0; box-sizing: border-box; }\n"
-    "body { font-family: sans-serif; background: #000; color: #fff; padding: 20px; }\n"
-    ".container { max-width: 1200px; margin: 0 auto; }\n"
-    "h1 { margin-bottom: 20px; }\n"
-    ".file-list { list-style: none; }\n"
-    ".file-item { padding: 12px; margin: 4px 0; background: #1a1a1a; border-radius: 6px; }\n"
-    ".file-item:hover { background: #2a2a2a; }\n"
-    ".file-item a { color: #fff; text-decoration: none; }\n"
-    "</style>\n</head>\n<body>\n<div class=\"container\">\n"
-    "<h1>Media Library</h1>\n<ul class=\"file-list\">\n"));
+    "body {\n"
+    "  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n"
+    "  background: #000;\n"
+    "  color: #fff;\n"
+    "  line-height: 1.5;\n"
+    "}\n"
+    "header {\n"
+    "  background: #111;\n"
+    "  border-bottom: 1px solid #333;\n"
+    "  padding: 1rem 2rem;\n"
+    "  display: flex;\n"
+    "  justify-content: space-between;\n"
+    "  align-items: center;\n"
+    "}\n"
+    "header h1 {\n"
+    "  font-size: 1.25rem;\n"
+    "  font-weight: 500;\n"
+    "  color: #fff;\n"
+    "}\n"
+    "header .user-info {\n"
+    "  font-size: 0.9rem;\n"
+    "  color: #888;\n"
+    "}\n"
+    "main {\n"
+    "  padding: 2rem;\n"
+    "  max-width: 1400px;\n"
+    "  margin: 0 auto;\n"
+    "}\n"
+    ".breadcrumb {\n"
+    "  margin-bottom: 1.5rem;\n"
+    "  font-size: 0.9rem;\n"
+    "  color: #888;\n"
+    "}\n"
+    ".breadcrumb a {\n"
+    "  color: #6699cc;\n"
+    "  text-decoration: none;\n"
+    "}\n"
+    ".breadcrumb a:hover {\n"
+    "  text-decoration: underline;\n"
+    "}\n"
+    "table {\n"
+    "  width: 100%%;\n"
+    "  border-collapse: collapse;\n"
+    "}\n"
+    "thead {\n"
+    "  border-bottom: 1px solid #333;\n"
+    "}\n"
+    "th {\n"
+    "  text-align: left;\n"
+    "  padding: 0.75rem 1rem;\n"
+    "  font-weight: 500;\n"
+    "  font-size: 0.85rem;\n"
+    "  color: #888;\n"
+    "  text-transform: uppercase;\n"
+    "  letter-spacing: 0.05em;\n"
+    "}\n"
+    "tbody tr {\n"
+    "  border-bottom: 1px solid #222;\n"
+    "}\n"
+    "tbody tr:hover {\n"
+    "  background: #111;\n"
+    "}\n"
+    "td {\n"
+    "  padding: 0.75rem 1rem;\n"
+    "}\n"
+    "td a {\n"
+    "  color: #fff;\n"
+    "  text-decoration: none;\n"
+    "  display: flex;\n"
+    "  align-items: center;\n"
+    "  gap: 0.5rem;\n"
+    "}\n"
+    "td a:hover {\n"
+    "  color: #6699cc;\n"
+    "}\n"
+    ".icon {\n"
+    "  width: 1.25rem;\n"
+    "  text-align: center;\n"
+    "  font-size: 1rem;\n"
+    "  opacity: 0.6;\n"
+    "}\n"
+    ".type {\n"
+    "  color: #666;\n"
+    "  font-size: 0.85rem;\n"
+    "  text-transform: uppercase;\n"
+    "}\n"
+    "</style>\n</head>\n<body>\n"
+    "<header>\n"
+    "  <h1>Media Library</h1>\n"
+    "  <div class=\"user-info\"></div>\n"
+    "</header>\n"
+    "<main>\n"
+    "<table>\n"
+    "<thead><tr><th>Name</th><th>Type</th></tr></thead>\n"
+    "<tbody>\n"));
 
   DIR *dir = opendir(path_cstr);
   if(dir != 0)
@@ -1146,14 +1315,16 @@ handle_directory_listing(OS_Handle socket, String8 dir_path)
       if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
 
       String8 name = str8_cstring(entry->d_name);
-      String8 entry_path = str8f(scratch.arena, "%S/%S", full_path, name);
+      String8 entry_path = str8f(arena, "%S/%S", full_path, name);
       b32 is_dir = os_directory_path_exists(entry_path);
 
       if(is_dir != 0)
       {
-        String8 subdir = (dir_path.size > 0) ? str8f(scratch.arena, "%S/%S", dir_path, name) : name;
-        str8_list_pushf(scratch.arena, &html,
-          "<li class=\"file-item\"><a href=\"/?dir=%S\">📁 %S/</a></li>\n", subdir, name);
+        String8 subdir = (dir_path.size > 0) ? str8f(arena, "%S/%S", dir_path, name) : name;
+        String8 encoded_subdir = url_encode(arena, subdir);
+        str8_list_pushf(arena, &html,
+          "<tr><td><a href=\"/?dir=%S\"><span class=\"icon\">\u25B8</span>%S/</a></td><td class=\"type\">folder</td></tr>\n",
+          encoded_subdir, name);
       }
       else
       {
@@ -1164,9 +1335,12 @@ handle_directory_listing(OS_Handle socket, String8 dir_path)
              str8_match(ext, str8_lit(".mp4"), StringMatchFlag_CaseInsensitive) ||
              str8_match(ext, str8_lit(".avi"), StringMatchFlag_CaseInsensitive))
           {
-            String8 file = (dir_path.size > 0) ? str8f(scratch.arena, "%S/%S", dir_path, name) : name;
-            str8_list_pushf(scratch.arena, &html,
-              "<li class=\"file-item\"><a href=\"/player?file=%S\">🎬 %S</a></li>\n", file, name);
+            String8 file = (dir_path.size > 0) ? str8f(arena, "%S/%S", dir_path, name) : name;
+            String8 encoded_file = url_encode(arena, file);
+            String8 ext_upper = str8_skip(name, name.size - 3);
+            str8_list_pushf(arena, &html,
+              "<tr><td><a href=\"/player?file=%S\"><span class=\"icon\">\u25B6</span>%S</a></td><td class=\"type\">%S</td></tr>\n",
+              encoded_file, name, ext_upper);
           }
         }
       }
@@ -1174,232 +1348,220 @@ handle_directory_listing(OS_Handle socket, String8 dir_path)
     closedir(dir);
   }
 
-  str8_list_push(scratch.arena, &html, str8_lit("</ul>\n</div>\n</body>\n</html>\n"));
-  String8 html_str = str8_list_join(scratch.arena, html, 0);
-
-  HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_200_OK);
-  http_header_add(scratch.arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/html"));
-  http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"),
-                  str8_from_u64(scratch.arena, html_str.size, 10, 0, 0));
-  res->body = html_str;
-
-  socket_write_all(socket, http_response_serialize(scratch.arena, res));
-  scratch_end(scratch);
+  str8_list_push(arena, &html, str8_lit("</tbody>\n</table>\n</main>\n</body>\n</html>\n"));
+  String8 html_str = str8_list_join(arena, html, 0);
+  send_response(socket, arena, str8_lit("text/html"), html_str);
 }
 
 ////////////////////////////////
 //~ HTTP
 
 internal void
-handle_manifest(OS_Handle socket, String8 file_path)
+handle_manifest(OS_Handle socket, String8 file_path, Arena *arena)
 {
-  Temp scratch = scratch_begin(0, 0);
-  String8 full_path = str8f(scratch.arena, "%S/%S", media_root_path, file_path);
+  String8 full_path = str8f(arena, "%S/%S", media_root_path, file_path);
   b32 processing = 0;
-  CacheInfo cache = get_or_create_cache(scratch.arena, full_path, &processing);
+  CacheInfo cache = get_or_create_cache(arena, full_path, &processing);
 
   if(processing != 0)
   {
     send_error_response(socket, HTTP_Status_202_Accepted,
                        str8_lit("Transcoding in progress, please retry in a few seconds"));
-    scratch_end(scratch);
     return;
   }
 
   if(cache.cache_dir.size == 0)
   {
     send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("File not found"));
-    scratch_end(scratch);
     return;
   }
 
-  String8 manifest_path = str8f(scratch.arena, "%S/manifest.mpd", cache.cache_dir);
-  String8 manifest = read_small_file(scratch.arena, manifest_path, MB(1));
+  String8 manifest_path = str8f(arena, "%S/manifest.mpd", cache.cache_dir);
+  String8 manifest = read_small_file(arena, manifest_path, MB(1));
   if(manifest.size == 0)
   {
     send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("Manifest not found"));
-    scratch_end(scratch);
     return;
   }
 
-  HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_200_OK);
-  http_header_add(scratch.arena, &res->headers, str8_lit("Content-Type"), str8_lit("application/dash+xml"));
-  http_header_add(scratch.arena, &res->headers, str8_lit("Access-Control-Allow-Origin"), str8_lit("*"));
-  http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"),
-                  str8_from_u64(scratch.arena, manifest.size, 10, 0, 0));
-  res->body = manifest;
-
-  socket_write_all(socket, http_response_serialize(scratch.arena, res));
+  send_response(socket, arena, str8_lit("application/dash+xml"), manifest);
   log_infof("media-server: served manifest (%llu bytes)\n", manifest.size);
-
-  scratch_end(scratch);
 }
 
 internal void
-handle_segment(OS_Handle socket, String8 file_path, String8 segment_name)
+handle_segment(OS_Handle socket, String8 file_path, String8 segment_name, Arena *arena)
 {
-  Temp scratch = scratch_begin(0, 0);
-  String8 full_path = str8f(scratch.arena, "%S/%S", media_root_path, file_path);
+  String8 full_path = str8f(arena, "%S/%S", media_root_path, file_path);
   b32 processing = 0;
-  CacheInfo cache = get_or_create_cache(scratch.arena, full_path, &processing);
+  CacheInfo cache = get_or_create_cache(arena, full_path, &processing);
 
   if(processing != 0)
   {
     send_error_response(socket, HTTP_Status_202_Accepted,
                        str8_lit("Transcoding in progress, please retry in a few seconds"));
-    scratch_end(scratch);
     return;
   }
 
   if(cache.cache_dir.size == 0)
   {
     send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("File not found"));
-    scratch_end(scratch);
     return;
   }
 
-  String8 segment_path = str8f(scratch.arena, "%S/%S", cache.cache_dir, segment_name);
+  String8 segment_path = str8f(arena, "%S/%S", cache.cache_dir, segment_name);
   OS_FileProperties props = os_properties_from_file_path(segment_path);
   if(props.size == 0)
   {
     send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("Segment not found"));
-    scratch_end(scratch);
     return;
   }
 
-  HTTP_Response *res = http_response_alloc(scratch.arena, HTTP_Status_200_OK);
-  http_header_add(scratch.arena, &res->headers, str8_lit("Content-Type"), str8_lit("video/mp4"));
-  http_header_add(scratch.arena, &res->headers, str8_lit("Access-Control-Allow-Origin"), str8_lit("*"));
-  http_header_add(scratch.arena, &res->headers, str8_lit("Content-Length"),
-                  str8_from_u64(scratch.arena, props.size, 10, 0, 0));
+  HTTP_Response *res = http_response_alloc(arena, HTTP_Status_200_OK);
+  http_header_add(arena, &res->headers, str8_lit("Content-Type"), str8_lit("video/mp4"));
+  http_header_add(arena, &res->headers, str8_lit("Access-Control-Allow-Origin"), str8_lit("*"));
+  http_header_add(arena, &res->headers, str8_lit("Content-Length"),
+                  str8_from_u64(arena, props.size, 10, 0, 0));
   res->body = str8_zero();
-
-  socket_write_all(socket, http_response_serialize(scratch.arena, res));
+  socket_write_all(socket, http_response_serialize(arena, res));
   stream_file_to_socket(socket, segment_path, props.size);
-
-  scratch_end(scratch);
 }
 
 internal void
-handle_http_request(HTTP_Request *req, OS_Handle socket)
+handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
 {
   if(str8_match(req->path, str8_lit("/"), 0))
   {
-    Temp scratch = scratch_begin(0, 0);
     String8 dir_param = str8_zero();
     if(req->query.size > 0)
     {
-      String8List parts = str8_split(scratch.arena, req->query, (u8 *)"&", 1, 0);
+      String8List parts = str8_split(arena, req->query, (u8 *)"&", 1, 0);
       for(String8Node *n = parts.first; n != 0; n = n->next)
       {
         u64 eq = str8_find_needle(n->string, 0, str8_lit("="), 0);
         if(eq < n->string.size && str8_match(str8_prefix(n->string, eq), str8_lit("dir"), 0))
         {
-          dir_param = str8_skip(n->string, eq + 1);
+          dir_param = url_decode(arena, str8_skip(n->string, eq + 1));
           break;
         }
       }
     }
-    handle_directory_listing(socket, dir_param);
-    scratch_end(scratch);
+    handle_directory_listing(socket, dir_param, arena);
   }
   else if(str8_match(req->path, str8_lit("/player"), 0))
   {
-    Temp scratch = scratch_begin(0, 0);
     String8 file_param = str8_zero();
     if(req->query.size > 0)
     {
-      String8List parts = str8_split(scratch.arena, req->query, (u8 *)"&", 1, 0);
+      String8List parts = str8_split(arena, req->query, (u8 *)"&", 1, 0);
       for(String8Node *n = parts.first; n != 0; n = n->next)
       {
         u64 eq = str8_find_needle(n->string, 0, str8_lit("="), 0);
         if(eq < n->string.size && str8_match(str8_prefix(n->string, eq), str8_lit("file"), 0))
         {
-          file_param = str8_skip(n->string, eq + 1);
+          file_param = url_decode(arena, str8_skip(n->string, eq + 1));
           break;
         }
       }
     }
     if(file_param.size > 0)
     {
-      handle_player(socket, file_param);
+      handle_player(socket, file_param, arena);
     }
     else
     {
       send_error_response(socket, HTTP_Status_400_BadRequest, str8_lit("Missing file parameter"));
     }
-    scratch_end(scratch);
   }
   else if(str8_match(str8_prefix(req->path, 7), str8_lit("/media/"), 0))
   {
     String8 media_path = str8_skip(req->path, 7);
 
-    u64 slash_pos = str8_find_needle(media_path, 0, str8_lit("/"), 0);
+    // Find the LAST slash to separate file path from resource
+    u64 slash_pos = media_path.size;
+    for(u64 i = media_path.size; i > 0; i -= 1)
+    {
+      if(media_path.str[i - 1] == '/')
+      {
+        slash_pos = i - 1;
+        break;
+      }
+    }
+
     if(slash_pos < media_path.size)
     {
-      String8 file = str8_prefix(media_path, slash_pos);
+      String8 file = url_decode(arena, str8_prefix(media_path, slash_pos));
       String8 resource = str8_skip(media_path, slash_pos + 1);
 
       if(str8_match(resource, str8_lit("manifest.mpd"), 0))
       {
-        handle_manifest(socket, file);
+        handle_manifest(socket, file, arena);
+      }
+      else if(str8_match(resource, str8_lit("subtitles.txt"), 0))
+      {
+        String8 file_path = str8f(arena, "%S/%S", media_root_path, file);
+        u64 hash = hash_string(file_path);
+        String8 cache_dir = str8f(arena, "%S/%llu", cache_root_path, hash);
+        String8List subtitle_files = find_subtitle_files(arena, cache_dir);
+
+        String8List lines = {0};
+        for(String8Node *n = subtitle_files.first; n != 0; n = n->next)
+        {
+          String8 filename = n->string;
+          u64 dot_pos = str8_find_needle(filename, 0, str8_lit("."), 0);
+          if(dot_pos < filename.size)
+          {
+            u64 second_dot = str8_find_needle(filename, dot_pos + 1, str8_lit("."), 0);
+            if(second_dot < filename.size)
+            {
+              String8 lang = str8_substr(filename, rng_1u64(dot_pos + 1, second_dot));
+              String8 encoded_file = url_encode(arena, file);
+              String8 url = str8f(arena, "/media/%S/%S", encoded_file, filename);
+              str8_list_pushf(arena, &lines, "%S %S\n", lang, url);
+            }
+          }
+        }
+        String8 text = str8_list_join(arena, lines, 0);
+        send_response(socket, arena, str8_lit("text/plain; charset=utf-8"), text);
       }
       else if(str8_find_needle(resource, 0, str8_lit(".vtt"), 0) == resource.size - 4)
       {
-        Temp temp = scratch_begin(0, 0);
-        String8 file_path = str8f(temp.arena, "%S/%S", media_root_path, file);
+        String8 file_path = str8f(arena, "%S/%S", media_root_path, file);
         u64 hash = hash_string(file_path);
-        String8 cache_dir = str8f(temp.arena, "%S/%llu", cache_root_path, hash);
-        String8 vtt_path = str8f(temp.arena, "%S/%S", cache_dir, resource);
+        String8 cache_dir = str8f(arena, "%S/%llu", cache_root_path, hash);
+        String8 vtt_path = str8f(arena, "%S/%S", cache_dir, resource);
 
-        String8 subtitle_content = read_small_file(temp.arena, vtt_path, MB(1));
+        String8 subtitle_content = read_small_file(arena, vtt_path, MB(1));
         if(subtitle_content.size > 0)
         {
-          HTTP_Response *res = http_response_alloc(temp.arena, HTTP_Status_200_OK);
-          http_header_add(temp.arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/vtt; charset=utf-8"));
-          http_header_add(temp.arena, &res->headers, str8_lit("Access-Control-Allow-Origin"), str8_lit("*"));
-          http_header_add(temp.arena, &res->headers, str8_lit("Content-Length"),
-                          str8_from_u64(temp.arena, subtitle_content.size, 10, 0, 0));
-          res->body = subtitle_content;
-          socket_write_all(socket, http_response_serialize(temp.arena, res));
+          send_response(socket, arena, str8_lit("text/vtt; charset=utf-8"), subtitle_content);
         }
         else
         {
           send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("Subtitle not found"));
         }
-        scratch_end(temp);
       }
       else
       {
-        handle_segment(socket, file, resource);
+        handle_segment(socket, file, resource, arena);
       }
     }
     else if(str8_find_needle(media_path, 0, str8_lit(".mpd"), 0) == media_path.size - 4)
     {
-      handle_manifest(socket, str8_prefix(media_path, media_path.size - 4));
+      handle_manifest(socket, str8_prefix(media_path, media_path.size - 4), arena);
     }
     else if(str8_find_needle(media_path, 0, str8_lit(".vtt"), 0) == media_path.size - 4)
     {
-      Temp temp = scratch_begin(0, 0);
-      String8 subtitle_path = str8f(temp.arena, "%S/%S", media_root_path, media_path);
+      String8 subtitle_path = str8f(arena, "%S/%S", media_root_path, media_path);
 
-      String8 subtitle_content = read_small_file(temp.arena, subtitle_path, MB(1));
+      String8 subtitle_content = read_small_file(arena, subtitle_path, MB(1));
       if(subtitle_content.size > 0)
       {
-        HTTP_Response *res = http_response_alloc(temp.arena, HTTP_Status_200_OK);
-        http_header_add(temp.arena, &res->headers, str8_lit("Content-Type"), str8_lit("text/vtt; charset=utf-8"));
-        http_header_add(temp.arena, &res->headers, str8_lit("Access-Control-Allow-Origin"), str8_lit("*"));
-        http_header_add(temp.arena, &res->headers, str8_lit("Content-Length"),
-                        str8_from_u64(temp.arena, subtitle_content.size, 10, 0, 0));
-        res->body = subtitle_content;
-        socket_write_all(socket, http_response_serialize(temp.arena, res));
+        send_response(socket, arena, str8_lit("text/vtt; charset=utf-8"), subtitle_content);
       }
       else
       {
         send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("Subtitle not found"));
       }
-
-      scratch_end(temp);
     }
     else
     {
@@ -1428,19 +1590,8 @@ transmux_worker_task(void *params)
       continue;
     }
 
-    log_infof("media-server: processing transmux for %S\n", job->file_path);
-
     b32 success = generate_dash_to_cache(job->file_path, job->cache_dir, job->file_hash);
     transmux_mark_complete(job, success);
-
-    if(success != 0)
-    {
-      log_infof("media-server: transmux complete for %S\n", job->file_path);
-    }
-    else
-    {
-      log_errorf("media-server: transmux failed for %S\n", job->file_path);
-    }
   }
 }
 
@@ -1450,7 +1601,6 @@ transmux_worker_task(void *params)
 internal void
 handle_connection(OS_Handle socket)
 {
-  Temp scratch = scratch_begin(0, 0);
   Arena *arena = arena_alloc();
 
   u8 buffer[KB(16)];
@@ -1468,7 +1618,7 @@ handle_connection(OS_Handle socket)
     HTTP_Request *req = http_request_parse(arena, str8(buffer, (u64)n));
     if(req->method != HTTP_Method_Unknown && req->path.size > 0)
     {
-      handle_http_request(req, socket);
+      handle_http_request(req, socket, arena);
     }
     else
     {
@@ -1478,7 +1628,6 @@ handle_connection(OS_Handle socket)
 
   os_file_close(socket);
   arena_release(arena);
-  scratch_end(scratch);
 }
 
 internal void
@@ -1504,7 +1653,8 @@ entry_point(CmdLine *cmd_line)
 
   media_root_path = cmd_line_string(cmd_line, str8_lit("media-root"));
   if(media_root_path.size == 0) { media_root_path = str8_lit("/tmp/media-server"); }
-  cache_root_path = str8_lit("/tmp/media-server-cache");
+  cache_root_path = cmd_line_string(cmd_line, str8_lit("cache-root"));
+  if(cache_root_path.size == 0) { cache_root_path = str8_lit("/tmp/media-server-cache"); }
 
   transmux_queue = push_array(arena, TransmuxQueue, 1);
   transmux_queue->mutex = mutex_alloc();

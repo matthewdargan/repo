@@ -5,6 +5,7 @@ _: {
     "fish" = ./fish.nix;
     "git-server" = ./git-server.nix;
     "locale" = ./locale.nix;
+    "media-server" = ./media-server.nix;
     "nginx" = ./nginx.nix;
     "nix-config" = ./nix-config.nix;
     "yubikey" = ./yubikey.nix;
