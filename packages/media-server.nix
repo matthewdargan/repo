@@ -17,7 +17,7 @@
       description = "DASH media server with pure libav integration";
       version = "0.2.0";
       buildInputs = [pkgs.ffmpeg.dev];
-      extraLinkFlags = "-lavformat -lavcodec -lavutil";
+      extraLinkFlags = "-lavformat -lavcodec -lavutil -lm";
 
       # Inline dash.js at build time
       postPatch = ''

@@ -12,7 +12,7 @@ in {
 
     mediaRoot = lib.mkOption {
       type = lib.types.str;
-      default = "/var/lib/media-server/media";
+      default = "/var/lib/media-server/media"; # TODO: should this be /var/lib/media-server/n/media? the idea is that these applications will eventually have a union-mount based interface to stitch together their own 9p namespace; remove the example afterwards?
       description = "Root directory for media files";
       example = "/var/lib/media-server/n/media";
     };
@@ -21,6 +21,12 @@ in {
       type = lib.types.str;
       default = "/var/cache/media-server";
       description = "Root directory for transcoded DASH cache";
+    };
+
+    stateRoot = lib.mkOption {
+      type = lib.types.str;
+      default = "/var/lib/media-server/state";
+      description = "Root directory for persistent state (watch progress, etc.)";
     };
 
     port = lib.mkOption {
@@ -104,7 +110,7 @@ in {
       after = ["network.target"] ++ (lib.optionals (cfg.mount9p != null) ["9mount-media-server.service"]);
       description = "DASH media server with FFmpeg integration";
       serviceConfig = {
-        ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.media-server}/bin/media-server --media-root=${cfg.mediaRoot} --cache-root=${cfg.cacheRoot}";
+        ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}.media-server}/bin/media-server --media-root=${cfg.mediaRoot} --cache-root=${cfg.cacheRoot} --state-root=${cfg.stateRoot}";
         User = cfg.user;
         Group = cfg.group;
         Restart = "always";
@@ -117,7 +123,7 @@ in {
         PrivateTmp = true;
         ProtectSystem = "strict";
         ReadOnlyPaths = [cfg.mediaRoot];
-        ReadWritePaths = [cfg.cacheRoot];
+        ReadWritePaths = [cfg.cacheRoot cfg.stateRoot];
         RestrictSUIDSGID = true;
 
         # Resource limits
@@ -130,6 +136,7 @@ in {
 
     systemd.tmpfiles.rules = [
       "d ${cfg.cacheRoot} 0750 ${cfg.user} ${cfg.group} -"
+      "d ${cfg.stateRoot} 0750 ${cfg.user} ${cfg.group} -"
       "d ${lib.dirOf cfg.mediaRoot} 0755 ${cfg.user} ${cfg.group} -"
     ];
 

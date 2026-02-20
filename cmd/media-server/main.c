@@ -44,14 +44,34 @@ struct TransmuxQueue
   u64 hash_table_size;
 };
 
+typedef struct WatchProgress WatchProgress;
+struct WatchProgress
+{
+  String8 file_path;
+  f64 position_seconds;
+  u64 last_watched_timestamp;
+  WatchProgress *next;
+};
+
+typedef struct WatchProgressTable WatchProgressTable;
+struct WatchProgressTable
+{
+  Mutex mutex;
+  Arena *arena;
+  WatchProgress **buckets;
+  u64 bucket_count;
+};
+
 ////////////////////////////////
 //~ Globals
 
 global String8 media_root_path = {0};
 global String8 cache_root_path = {0};
+global String8 state_root_path = {0};
 global WP_Pool *worker_pool = 0;
 global WP_Pool *transmux_pool = 0;
 global TransmuxQueue *transmux_queue = 0;
+global WatchProgressTable *watch_progress = 0;
 
 ////////////////////////////////
 //~ Helpers
@@ -360,11 +380,8 @@ postprocess_manifest(String8 cache_dir)
     out_pos += remaining;
   }
 
-  char *path_cstr = (char *)push_array(scratch.arena, u8, manifest_path.size + 1);
-  MemoryCopy(path_cstr, manifest_path.str, manifest_path.size);
-  path_cstr[manifest_path.size] = 0;
-
-  int fd = open(path_cstr, O_WRONLY | O_TRUNC);
+  String8 path = str8_copy(scratch.arena, manifest_path);
+  int fd = open((char *)path.str, O_WRONLY | O_TRUNC);
   if(fd >= 0)
   {
     write(fd, out, out_pos);
@@ -382,149 +399,54 @@ extract_subtitle_stream(String8 input_path, u32 stream_idx, String8 lang, String
 {
   Temp temp = scratch_begin(0, 0);
 
-  char in_cstr[4096];
-  MemoryCopy(in_cstr, input_path.str, Min(input_path.size, sizeof(in_cstr) - 1));
-  in_cstr[Min(input_path.size, sizeof(in_cstr) - 1)] = 0;
-
-  char out_cstr[4096];
-  MemoryCopy(out_cstr, output_path.str, Min(output_path.size, sizeof(out_cstr) - 1));
-  out_cstr[Min(output_path.size, sizeof(out_cstr) - 1)] = 0;
+  String8 in_path = str8_copy(temp.arena, input_path);
+  String8 out_path = str8_copy(temp.arena, output_path);
 
   AVFormatContext *in_ctx = NULL;
   AVCodecContext *dec_ctx = NULL;
   AVFormatContext *out_ctx = NULL;
-  const AVCodec *enc = NULL;
   AVCodecContext *enc_ctx = NULL;
-  AVStream *in_stream = NULL;
-  AVStream *out_stream = NULL;
-  const AVCodec *dec = NULL;
   AVPacket *pkt = NULL;
   AVPacket *enc_pkt = NULL;
 
-  if(avformat_open_input(&in_ctx, in_cstr, NULL, NULL) != 0) {
-    scratch_end(temp);
-    return;
-  }
+  if(avformat_open_input(&in_ctx, (char *)in_path.str, NULL, NULL) != 0) goto cleanup;
+  if(avformat_find_stream_info(in_ctx, NULL) != 0) goto cleanup;
 
-  if(avformat_find_stream_info(in_ctx, NULL) != 0) {
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
-
-  in_stream = in_ctx->streams[stream_idx];
-
-  dec = avcodec_find_decoder(in_stream->codecpar->codec_id);
-  if(dec == 0) {
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
+  AVStream *in_stream = in_ctx->streams[stream_idx];
+  const AVCodec *dec = avcodec_find_decoder(in_stream->codecpar->codec_id);
+  if(dec == 0) goto cleanup;
 
   dec_ctx = avcodec_alloc_context3(dec);
-  if(dec_ctx == 0) {
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
+  if(dec_ctx == 0) goto cleanup;
+  if(avcodec_parameters_to_context(dec_ctx, in_stream->codecpar) != 0) goto cleanup;
+  if(avcodec_open2(dec_ctx, dec, NULL) != 0) goto cleanup;
 
-  if(avcodec_parameters_to_context(dec_ctx, in_stream->codecpar) != 0) {
-    avcodec_free_context(&dec_ctx);
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
-
-  if(avcodec_open2(dec_ctx, dec, NULL) != 0) {
-    avcodec_free_context(&dec_ctx);
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
-
-  enc = avcodec_find_encoder_by_name("webvtt");
-  if(enc == 0) {
-    avcodec_free_context(&dec_ctx);
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
+  const AVCodec *enc = avcodec_find_encoder_by_name("webvtt");
+  if(enc == 0) goto cleanup;
 
   enc_ctx = avcodec_alloc_context3(enc);
-  if(enc_ctx == 0) {
-    avcodec_free_context(&dec_ctx);
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
+  if(enc_ctx == 0) goto cleanup;
 
   enc_ctx->time_base = in_stream->time_base;
-
+  const char *webvtt_header = "WEBVTT\n\n";
+  enc_ctx->subtitle_header_size = strlen(webvtt_header);
+  enc_ctx->subtitle_header = av_malloc(enc_ctx->subtitle_header_size + 1);
+  if(enc_ctx->subtitle_header)
   {
-    const char *webvtt_header = "WEBVTT\n\n";
-    enc_ctx->subtitle_header_size = strlen(webvtt_header);
-    enc_ctx->subtitle_header = av_malloc(enc_ctx->subtitle_header_size + 1);
-    if(enc_ctx->subtitle_header)
-    {
-      MemoryCopy(enc_ctx->subtitle_header, webvtt_header, enc_ctx->subtitle_header_size + 1);
-    }
+    MemoryCopy(enc_ctx->subtitle_header, webvtt_header, enc_ctx->subtitle_header_size + 1);
   }
 
-  if(avcodec_open2(enc_ctx, enc, NULL) != 0) {
-    avcodec_free_context(&enc_ctx);
-    avcodec_free_context(&dec_ctx);
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
+  if(avcodec_open2(enc_ctx, enc, NULL) != 0) goto cleanup;
+  if(avformat_alloc_output_context2(&out_ctx, NULL, "webvtt", (char *)out_path.str) != 0) goto cleanup;
 
-  if(avformat_alloc_output_context2(&out_ctx, NULL, "webvtt", out_cstr) != 0) {
-    avcodec_free_context(&enc_ctx);
-    avcodec_free_context(&dec_ctx);
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
-
-  out_stream = avformat_new_stream(out_ctx, NULL);
-  if(out_stream == 0) {
-    avformat_free_context(out_ctx);
-    avcodec_free_context(&enc_ctx);
-    avcodec_free_context(&dec_ctx);
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
-
-  if(avcodec_parameters_from_context(out_stream->codecpar, enc_ctx) != 0) {
-    avformat_free_context(out_ctx);
-    avcodec_free_context(&enc_ctx);
-    avcodec_free_context(&dec_ctx);
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
+  AVStream *out_stream = avformat_new_stream(out_ctx, NULL);
+  if(out_stream == 0) goto cleanup;
+  if(avcodec_parameters_from_context(out_stream->codecpar, enc_ctx) != 0) goto cleanup;
 
   out_stream->time_base = in_stream->time_base;
 
-  if(avio_open(&out_ctx->pb, out_cstr, AVIO_FLAG_WRITE) != 0) {
-    avformat_free_context(out_ctx);
-    avcodec_free_context(&enc_ctx);
-    avcodec_free_context(&dec_ctx);
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
-
-  if(avformat_write_header(out_ctx, NULL) != 0) {
-    avio_closep(&out_ctx->pb);
-    avformat_free_context(out_ctx);
-    avcodec_free_context(&enc_ctx);
-    avcodec_free_context(&dec_ctx);
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return;
-  }
+  if(avio_open(&out_ctx->pb, (char *)out_path.str, AVIO_FLAG_WRITE) != 0) goto cleanup;
+  if(avformat_write_header(out_ctx, NULL) != 0) goto cleanup;
 
   pkt = av_packet_alloc();
   enc_pkt = av_packet_alloc();
@@ -574,6 +496,7 @@ extract_subtitle_stream(String8 input_path, u32 stream_idx, String8 lang, String
     log_infof("media-server: extracted subtitle stream %u (lang: %S)\n", stream_idx, lang);
   }
 
+cleanup:
   if(enc_pkt != 0) av_packet_free(&enc_pkt);
   if(pkt != 0) av_packet_free(&pkt);
   if(out_ctx != 0)
@@ -592,12 +515,10 @@ extract_subtitles(String8 file_path, String8 cache_dir)
 {
   Temp temp = scratch_begin(0, 0);
 
-  char path_cstr[4096];
-  MemoryCopy(path_cstr, file_path.str, Min(file_path.size, sizeof(path_cstr) - 1));
-  path_cstr[Min(file_path.size, sizeof(path_cstr) - 1)] = 0;
+  String8 path = str8_copy(temp.arena, file_path);
 
   AVFormatContext *fmt = NULL;
-  if(avformat_open_input(&fmt, path_cstr, NULL, NULL) != 0)
+  if(avformat_open_input(&fmt, (char *)path.str, NULL, NULL) != 0)
   {
     scratch_end(temp);
     return;
@@ -647,13 +568,8 @@ generate_dash(String8 input_path, String8 output_path)
 {
   Temp temp = scratch_begin(0, 0);
 
-  char in_cstr[4096];
-  MemoryCopy(in_cstr, input_path.str, Min(input_path.size, sizeof(in_cstr) - 1));
-  in_cstr[Min(input_path.size, sizeof(in_cstr) - 1)] = 0;
-
-  char out_cstr[4096];
-  MemoryCopy(out_cstr, output_path.str, Min(output_path.size, sizeof(out_cstr) - 1));
-  out_cstr[Min(output_path.size, sizeof(out_cstr) - 1)] = 0;
+  String8 in_path = str8_copy(temp.arena, input_path);
+  String8 out_path = str8_copy(temp.arena, output_path);
 
   AVFormatContext *in_ctx = NULL;
   AVFormatContext *out_ctx = NULL;
@@ -661,22 +577,9 @@ generate_dash(String8 input_path, String8 output_path)
   AVPacket *pkt = NULL;
   b32 success = 0;
 
-  if(avformat_open_input(&in_ctx, in_cstr, NULL, NULL) != 0) {
-    scratch_end(temp);
-    return 0;
-  }
-
-  if(avformat_find_stream_info(in_ctx, NULL) != 0) {
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return 0;
-  }
-
-  if(avformat_alloc_output_context2(&out_ctx, NULL, "dash", out_cstr) != 0) {
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return 0;
-  }
+  if(avformat_open_input(&in_ctx, (char *)in_path.str, NULL, NULL) != 0) goto cleanup;
+  if(avformat_find_stream_info(in_ctx, NULL) != 0) goto cleanup;
+  if(avformat_alloc_output_context2(&out_ctx, NULL, "dash", (char *)out_path.str) != 0) goto cleanup;
 
   int *stream_map = push_array(temp.arena, int, in_ctx->nb_streams);
   for(u32 i = 0; i < in_ctx->nb_streams; i += 1) stream_map[i] = -1;
@@ -694,19 +597,8 @@ generate_dash(String8 input_path, String8 output_path)
     }
 
     AVStream *out_stream = avformat_new_stream(out_ctx, NULL);
-    if(out_stream == 0) {
-      avformat_free_context(out_ctx);
-      avformat_close_input(&in_ctx);
-      scratch_end(temp);
-      return 0;
-    }
-
-    if(avcodec_parameters_copy(out_stream->codecpar, codecpar) != 0) {
-      avformat_free_context(out_ctx);
-      avformat_close_input(&in_ctx);
-      scratch_end(temp);
-      return 0;
-    }
+    if(out_stream == 0) goto cleanup;
+    if(avcodec_parameters_copy(out_stream->codecpar, codecpar) != 0) goto cleanup;
 
     out_stream->codecpar->codec_tag = 0;
     out_stream->time_base = in_stream->time_base;
@@ -722,15 +614,9 @@ generate_dash(String8 input_path, String8 output_path)
   av_dict_set(&opts, "single_file", "0", 0);
   av_dict_set(&opts, "streaming", "0", 0);
 
-  if(avformat_write_header(out_ctx, &opts) != 0)
-  {
-    av_dict_free(&opts);
-    avformat_free_context(out_ctx);
-    avformat_close_input(&in_ctx);
-    scratch_end(temp);
-    return 0;
-  }
+  if(avformat_write_header(out_ctx, &opts) != 0) goto cleanup;
   av_dict_free(&opts);
+  opts = NULL;
 
   pkt = av_packet_alloc();
   if(pkt != 0)
@@ -751,11 +637,13 @@ generate_dash(String8 input_path, String8 output_path)
       av_packet_unref(pkt);
     }
 
-    av_packet_free(&pkt);
     av_write_trailer(out_ctx);
     success = 1;
   }
 
+cleanup:
+  if(pkt != 0) av_packet_free(&pkt);
+  if(opts != 0) av_dict_free(&opts);
   if(out_ctx != 0)
   {
     if(!(out_ctx->oformat->flags & AVFMT_NOFILE)) avio_closep(&out_ctx->pb);
@@ -1136,6 +1024,33 @@ handle_player(OS_Handle socket, String8 file_param, Arena *arena)
     "      var selectedLang = urlParams.get('lang') || 'en';\n"
     "      player.updateSettings({streaming: {initialSettings: {audio: {lang: selectedLang}}}});\n"
     "      player.initialize(video, manifestUrl, true);\n"
+    "      \n"
+    "      var file = urlParams.get('file');\n"
+    "      if(file) {\n"
+    "        fetch('/api/progress?file=' + encodeURIComponent(file))\n"
+    "          .then(function(r) { return r.text(); })\n"
+    "          .then(function(posText) {\n"
+    "            var position = parseFloat(posText);\n"
+    "            if(position > 5) {\n"
+    "              video.addEventListener('loadedmetadata', function() {\n"
+    "                video.currentTime = position;\n"
+    "              }, {once: true});\n"
+    "            }\n"
+    "          })\n"
+    "          .catch(function() {});\n"
+    "      }\n"
+    "      \n"
+    "      var lastSaveTime = 0;\n"
+    "      video.addEventListener('timeupdate', function() {\n"
+    "        var now = Date.now();\n"
+    "        if(now - lastSaveTime > 5000) {\n"
+    "          lastSaveTime = now;\n"
+    "          if(file && video.currentTime > 0) {\n"
+    "            fetch('/api/progress?file=' + encodeURIComponent(file) + '&position=' + video.currentTime)\n"
+    "              .catch(function() {});\n"
+    "          }\n"
+    "        }\n"
+    "      });\n"
     "    }\n"
     "    \n"
     "    function setupAudioTracksUI() {\n"
@@ -1195,13 +1110,159 @@ handle_player(OS_Handle socket, String8 file_param, Arena *arena)
   send_response(socket, arena, str8_lit("text/html"), html);
 }
 
+typedef struct EpisodeInfo EpisodeInfo;
+struct EpisodeInfo
+{
+  b32 is_episode;
+  u32 season;
+  u32 episode;
+  String8 dir_path;
+  String8 filename;
+};
+
+internal EpisodeInfo
+parse_episode_info(Arena *arena, String8 file_path)
+{
+  EpisodeInfo info = {0};
+  (void)arena;
+
+  u64 last_slash = file_path.size;
+  for(u64 i = file_path.size; i > 0; i -= 1)
+  {
+    if(file_path.str[i - 1] == '/')
+    {
+      last_slash = i - 1;
+      break;
+    }
+  }
+
+  if(last_slash < file_path.size)
+  {
+    info.dir_path = str8_prefix(file_path, last_slash);
+    info.filename = str8_skip(file_path, last_slash + 1);
+
+    // Look for S##E## or S##E### pattern (need at least 5 chars: S##E#)
+    if(info.filename.size >= 5)
+    {
+      for(u64 i = 0; i <= info.filename.size - 5; i += 1)
+      {
+        if((info.filename.str[i] == 'S' || info.filename.str[i] == 's') &&
+           char_is_digit(info.filename.str[i + 1], 10) &&
+           char_is_digit(info.filename.str[i + 2], 10))
+        {
+          u64 e_pos = i + 3;
+          if(e_pos < info.filename.size &&
+             (info.filename.str[e_pos] == 'E' || info.filename.str[e_pos] == 'e'))
+          {
+            info.season = (info.filename.str[i + 1] - '0') * 10 + (info.filename.str[i + 2] - '0');
+
+            u64 ep_start = e_pos + 1;
+            u64 ep_end = ep_start;
+            while(ep_end < info.filename.size && char_is_digit(info.filename.str[ep_end], 10))
+            {
+              ep_end += 1;
+            }
+
+            if(ep_end > ep_start)
+            {
+              String8 ep_str = str8_substr(info.filename, rng_1u64(ep_start, ep_end));
+              info.episode = (u32)u64_from_str8(ep_str, 10);
+              info.is_episode = 1;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return info;
+}
+
+internal String8
+find_next_episode(Arena *arena, String8 file_path)
+{
+  String8 result = str8_zero();
+  EpisodeInfo current = parse_episode_info(arena, file_path);
+
+  if(!current.is_episode) return result;
+
+  Temp temp = scratch_begin(&arena, 1);
+  String8 dir_path = str8f(temp.arena, "%S/%S", media_root_path, current.dir_path);
+  String8 dir_path_cstr = str8_copy(temp.arena, dir_path);
+
+  u32 next_episode = current.episode + 1;
+  DIR *dir = opendir((char *)dir_path_cstr.str);
+  if(dir != 0)
+  {
+    struct dirent *entry;
+    while((entry = readdir(dir)) != 0)
+    {
+      String8 filename = str8_cstring(entry->d_name);
+      String8 full_path = str8f(temp.arena, "%S/%S", current.dir_path, filename);
+      EpisodeInfo info = parse_episode_info(temp.arena, full_path);
+
+      if(info.is_episode && info.season == current.season && info.episode == next_episode)
+      {
+        result = str8_copy(arena, full_path);
+        break;
+      }
+    }
+    closedir(dir);
+  }
+
+  scratch_end(temp);
+  return result;
+}
+
+internal WatchProgress **
+watch_progress_get_sorted(Arena *arena, u64 *out_count)
+{
+  Temp temp = scratch_begin(&arena, 1);
+  WatchProgress **all_entries = push_array(temp.arena, WatchProgress *, 1024);
+  u64 count = 0;
+
+  MutexScope(watch_progress->mutex)
+  {
+    for(u64 i = 0; i < watch_progress->bucket_count; i += 1)
+    {
+      for(WatchProgress *entry = watch_progress->buckets[i]; entry != 0; entry = entry->next)
+      {
+        if(count < 1024)
+        {
+          all_entries[count++] = entry;
+        }
+      }
+    }
+  }
+
+  // Bubble sort by timestamp (most recent first)
+  for(u64 i = 0; i < count; i += 1)
+  {
+    for(u64 j = i + 1; j < count; j += 1)
+    {
+      if(all_entries[j]->last_watched_timestamp > all_entries[i]->last_watched_timestamp)
+      {
+        WatchProgress *tmp = all_entries[i];
+        all_entries[i] = all_entries[j];
+        all_entries[j] = tmp;
+      }
+    }
+  }
+
+  WatchProgress **result = push_array(arena, WatchProgress *, count);
+  MemoryCopy(result, all_entries, sizeof(WatchProgress *) * count);
+  *out_count = count;
+
+  scratch_end(temp);
+  return result;
+}
+
 internal void
 handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
 {
   String8 full_path = (dir_path.size > 0) ? str8f(arena, "%S/%S", media_root_path, dir_path) : media_root_path;
-  char *path_cstr = (char *)push_array(arena, u8, full_path.size + 1);
-  MemoryCopy(path_cstr, full_path.str, full_path.size);
-  path_cstr[full_path.size] = 0;
+  String8 path = str8_copy(arena, full_path);
 
   String8List html = {0};
   str8_list_push(arena, &html, str8_lit(
@@ -1301,12 +1362,75 @@ handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
     "  <h1>Media Library</h1>\n"
     "  <div class=\"user-info\"></div>\n"
     "</header>\n"
-    "<main>\n"
+    "<main>\n"));
+
+  // Continue watching section (only on homepage)
+  if(dir_path.size == 0 && watch_progress != 0)
+  {
+    u64 watch_count = 0;
+    WatchProgress **recent = watch_progress_get_sorted(arena, &watch_count);
+
+    if(watch_count > 0)
+    {
+      str8_list_push(arena, &html, str8_lit(
+        "<section style=\"margin-bottom: 2rem;\">\n"
+        "<h2 style=\"font-size: 1.1rem; margin-bottom: 1rem; color: #888;\">Continue Watching</h2>\n"));
+
+      u64 show_count = Min(watch_count, 10);
+      for(u64 i = 0; i < show_count; i += 1)
+      {
+        WatchProgress *entry = recent[i];
+        String8 encoded_file = url_encode(arena, entry->file_path);
+
+        u64 last_slash = entry->file_path.size;
+        for(u64 j = entry->file_path.size; j > 0; j -= 1)
+        {
+          if(entry->file_path.str[j - 1] == '/')
+          {
+            last_slash = j - 1;
+            break;
+          }
+        }
+        String8 display_name = (last_slash < entry->file_path.size) ?
+          str8_skip(entry->file_path, last_slash + 1) : entry->file_path;
+
+        str8_list_pushf(arena, &html,
+          "<div style=\"background: #111; padding: 0.75rem 1rem; margin-bottom: 0.5rem; border-radius: 4px;\">\n"
+          "  <div style=\"display: flex; justify-content: space-between; align-items: center;\">\n"
+          "    <div style=\"flex: 1;\">\n"
+          "      <div style=\"font-size: 0.95rem; margin-bottom: 0.25rem;\">%S</div>\n"
+          "      <div style=\"font-size: 0.8rem; color: #666;\">%S</div>\n"
+          "    </div>\n"
+          "    <div style=\"display: flex; gap: 0.5rem;\">\n"
+          "      <a href=\"/player?file=%S\" style=\"background: #6699cc; color: #fff; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none; font-size: 0.85rem;\">Resume</a>\n",
+          display_name, entry->file_path, encoded_file);
+
+        // Check for next episode
+        String8 next_episode = find_next_episode(arena, entry->file_path);
+        if(next_episode.size > 0)
+        {
+          String8 encoded_next = url_encode(arena, next_episode);
+          str8_list_pushf(arena, &html,
+            "      <a href=\"/player?file=%S\" style=\"background: #333; color: #fff; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none; font-size: 0.85rem;\">Next Episode</a>\n",
+            encoded_next);
+        }
+
+        str8_list_push(arena, &html, str8_lit(
+          "    </div>\n"
+          "  </div>\n"
+          "</div>\n"));
+      }
+
+      str8_list_push(arena, &html, str8_lit("</section>\n"));
+    }
+  }
+
+  str8_list_push(arena, &html, str8_lit(
     "<table>\n"
     "<thead><tr><th>Name</th><th>Type</th></tr></thead>\n"
     "<tbody>\n"));
 
-  DIR *dir = opendir(path_cstr);
+  DIR *dir = opendir((char *)path.str);
   if(dir != 0)
   {
     struct dirent *entry;
@@ -1351,6 +1475,135 @@ handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
   str8_list_push(arena, &html, str8_lit("</tbody>\n</table>\n</main>\n</body>\n</html>\n"));
   String8 html_str = str8_list_join(arena, html, 0);
   send_response(socket, arena, str8_lit("text/html"), html_str);
+}
+
+////////////////////////////////
+//~ Watch Progress
+
+internal void
+watch_progress_load(void)
+{
+  Temp scratch = scratch_begin(0, 0);
+  String8 progress_path = str8f(scratch.arena, "%S/watch-progress.txt", state_root_path);
+  String8 content = read_small_file(scratch.arena, progress_path, MB(1));
+
+  if(content.size > 0)
+  {
+    String8List lines = str8_split(scratch.arena, content, (u8 *)"\n", 1, 0);
+    for(String8Node *n = lines.first; n != 0; n = n->next)
+    {
+      String8 line = str8_skip_chop_whitespace(n->string);
+      if(line.size == 0) continue;
+
+      u64 space1 = str8_find_needle(line, 0, str8_lit(" "), 0);
+      if(space1 < line.size)
+      {
+        String8 file = str8_prefix(line, space1);
+        String8 rest = str8_skip(line, space1 + 1);
+        u64 space2 = str8_find_needle(rest, 0, str8_lit(" "), 0);
+
+        f64 position = f64_from_str8(rest);
+        u64 timestamp = 0;
+        if(space2 < rest.size)
+        {
+          String8 pos_str = str8_prefix(rest, space2);
+          String8 time_str = str8_skip(rest, space2 + 1);
+          position = f64_from_str8(pos_str);
+          timestamp = u64_from_str8(time_str, 10);
+        }
+
+        u64 hash = hash_string(file) % watch_progress->bucket_count;
+        WatchProgress *entry = push_array(watch_progress->arena, WatchProgress, 1);
+        entry->file_path = str8_copy(watch_progress->arena, file);
+        entry->position_seconds = position;
+        entry->last_watched_timestamp = timestamp;
+        entry->next = watch_progress->buckets[hash];
+        watch_progress->buckets[hash] = entry;
+      }
+    }
+  }
+  scratch_end(scratch);
+}
+
+internal void
+watch_progress_save(void)
+{
+  Temp scratch = scratch_begin(0, 0);
+  String8 progress_path = str8f(scratch.arena, "%S/watch-progress.txt", state_root_path);
+  String8List lines = {0};
+
+  MutexScope(watch_progress->mutex)
+  {
+    for(u64 i = 0; i < watch_progress->bucket_count; i += 1)
+    {
+      for(WatchProgress *entry = watch_progress->buckets[i]; entry != 0; entry = entry->next)
+      {
+        str8_list_pushf(scratch.arena, &lines, "%S %.2f %llu\n",
+                       entry->file_path, entry->position_seconds, entry->last_watched_timestamp);
+      }
+    }
+  }
+
+  String8 content = str8_list_join(scratch.arena, lines, 0);
+  OS_Handle file = os_file_open(OS_AccessFlag_Write, progress_path);
+  if(file.u64[0] != 0)
+  {
+    os_file_write(file, rng_1u64(0, content.size), content.str);
+    os_file_close(file);
+  }
+  scratch_end(scratch);
+}
+
+internal f64
+watch_progress_get(String8 file)
+{
+  f64 result = 0.0;
+  u64 hash = hash_string(file) % watch_progress->bucket_count;
+
+  MutexScope(watch_progress->mutex)
+  {
+    for(WatchProgress *entry = watch_progress->buckets[hash]; entry != 0; entry = entry->next)
+    {
+      if(str8_match(entry->file_path, file, 0))
+      {
+        result = entry->position_seconds;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+internal void
+watch_progress_set(String8 file, f64 position)
+{
+  u64 hash = hash_string(file) % watch_progress->bucket_count;
+
+  MutexScope(watch_progress->mutex)
+  {
+    WatchProgress *entry = 0;
+    for(WatchProgress *e = watch_progress->buckets[hash]; e != 0; e = e->next)
+    {
+      if(str8_match(e->file_path, file, 0))
+      {
+        entry = e;
+        break;
+      }
+    }
+
+    if(entry == 0)
+    {
+      entry = push_array(watch_progress->arena, WatchProgress, 1);
+      entry->file_path = str8_copy(watch_progress->arena, file);
+      entry->next = watch_progress->buckets[hash];
+      watch_progress->buckets[hash] = entry;
+    }
+
+    entry->position_seconds = position;
+    entry->last_watched_timestamp = os_now_microseconds() / 1000000;
+  }
+
+  watch_progress_save();
 }
 
 ////////////////////////////////
@@ -1426,46 +1679,62 @@ handle_segment(OS_Handle socket, String8 file_path, String8 segment_name, Arena 
   stream_file_to_socket(socket, segment_path, props.size);
 }
 
+internal String8
+get_query_param(Arena *arena, String8 query, String8 key)
+{
+  String8 result = str8_zero();
+  if(query.size > 0)
+  {
+    String8List parts = str8_split(arena, query, (u8 *)"&", 1, 0);
+    for(String8Node *n = parts.first; n != 0; n = n->next)
+    {
+      u64 eq = str8_find_needle(n->string, 0, str8_lit("="), 0);
+      if(eq < n->string.size && str8_match(str8_prefix(n->string, eq), key, 0))
+      {
+        result = url_decode(arena, str8_skip(n->string, eq + 1));
+        break;
+      }
+    }
+  }
+  return result;
+}
+
 internal void
 handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
 {
   if(str8_match(req->path, str8_lit("/"), 0))
   {
-    String8 dir_param = str8_zero();
-    if(req->query.size > 0)
-    {
-      String8List parts = str8_split(arena, req->query, (u8 *)"&", 1, 0);
-      for(String8Node *n = parts.first; n != 0; n = n->next)
-      {
-        u64 eq = str8_find_needle(n->string, 0, str8_lit("="), 0);
-        if(eq < n->string.size && str8_match(str8_prefix(n->string, eq), str8_lit("dir"), 0))
-        {
-          dir_param = url_decode(arena, str8_skip(n->string, eq + 1));
-          break;
-        }
-      }
-    }
+    String8 dir_param = get_query_param(arena, req->query, str8_lit("dir"));
     handle_directory_listing(socket, dir_param, arena);
   }
   else if(str8_match(req->path, str8_lit("/player"), 0))
   {
-    String8 file_param = str8_zero();
-    if(req->query.size > 0)
-    {
-      String8List parts = str8_split(arena, req->query, (u8 *)"&", 1, 0);
-      for(String8Node *n = parts.first; n != 0; n = n->next)
-      {
-        u64 eq = str8_find_needle(n->string, 0, str8_lit("="), 0);
-        if(eq < n->string.size && str8_match(str8_prefix(n->string, eq), str8_lit("file"), 0))
-        {
-          file_param = url_decode(arena, str8_skip(n->string, eq + 1));
-          break;
-        }
-      }
-    }
+    String8 file_param = get_query_param(arena, req->query, str8_lit("file"));
     if(file_param.size > 0)
     {
       handle_player(socket, file_param, arena);
+    }
+    else
+    {
+      send_error_response(socket, HTTP_Status_400_BadRequest, str8_lit("Missing file parameter"));
+    }
+  }
+  else if(str8_match(req->path, str8_lit("/api/progress"), 0))
+  {
+    String8 file_param = get_query_param(arena, req->query, str8_lit("file"));
+    String8 pos_param = get_query_param(arena, req->query, str8_lit("position"));
+
+    if(file_param.size > 0 && pos_param.size > 0)
+    {
+      f64 position = f64_from_str8(pos_param);
+      watch_progress_set(file_param, position);
+      send_response(socket, arena, str8_lit("text/plain"), str8_lit("ok"));
+    }
+    else if(file_param.size > 0)
+    {
+      f64 position = watch_progress_get(file_param);
+      String8 response = str8f(arena, "%.2f", position);
+      send_response(socket, arena, str8_lit("text/plain"), response);
     }
     else
     {
@@ -1655,6 +1924,8 @@ entry_point(CmdLine *cmd_line)
   if(media_root_path.size == 0) { media_root_path = str8_lit("/tmp/media-server"); }
   cache_root_path = cmd_line_string(cmd_line, str8_lit("cache-root"));
   if(cache_root_path.size == 0) { cache_root_path = str8_lit("/tmp/media-server-cache"); }
+  state_root_path = cmd_line_string(cmd_line, str8_lit("state-root"));
+  if(state_root_path.size == 0) { state_root_path = str8_lit("/tmp/media-server-state"); }
 
   transmux_queue = push_array(arena, TransmuxQueue, 1);
   transmux_queue->mutex = mutex_alloc();
@@ -1666,12 +1937,24 @@ entry_point(CmdLine *cmd_line)
 
   {
     Temp temp = scratch_begin(&arena, 1);
-    char *cache_cstr = (char *)push_array(temp.arena, u8, cache_root_path.size + 1);
-    MemoryCopy(cache_cstr, cache_root_path.str, cache_root_path.size);
-    cache_cstr[cache_root_path.size] = 0;
-    mkdir(cache_cstr, 0755);
+    String8 cache_path = str8_copy(temp.arena, cache_root_path);
+    mkdir((char *)cache_path.str, 0755);
     scratch_end(temp);
   }
+
+  {
+    Temp temp = scratch_begin(&arena, 1);
+    String8 state_path = str8_copy(temp.arena, state_root_path);
+    mkdir((char *)state_path.str, 0755);
+    scratch_end(temp);
+  }
+
+  watch_progress = push_array(arena, WatchProgressTable, 1);
+  watch_progress->mutex = mutex_alloc();
+  watch_progress->arena = arena_alloc();
+  watch_progress->bucket_count = 256;
+  watch_progress->buckets = push_array(arena, WatchProgress *, watch_progress->bucket_count);
+  watch_progress_load();
 
   OS_SystemInfo *sys_info = os_get_system_info();
 
