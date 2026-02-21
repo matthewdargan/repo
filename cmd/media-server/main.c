@@ -6,6 +6,8 @@
 #include "base/inc.c"
 #include "http/inc.c"
 
+#include "player.js.inc"
+
 typedef struct CacheInfo CacheInfo;
 struct CacheInfo
 {
@@ -831,7 +833,13 @@ handle_player(OS_Handle socket, String8 file_param, Arena *arena)
   String8 video_path = str8f(arena, "%S/%S", media_root_path, file_param);
   String8 cache_dir = get_cache_dir(arena, video_path);
 
-  String8 html = str8f(arena,
+  String8 encoded_file = url_encode(arena, file_param);
+  String8 placeholder = str8_lit("{{FILE_PARAM}}");
+  u64 pos1 = str8_find_needle(player_js_template, 0, placeholder, 0);
+  u64 pos2 = str8_find_needle(player_js_template, pos1 + placeholder.size, placeholder, 0);
+
+  String8List html = {0};
+  str8_list_push(arena, &html, str8f(arena,
     "<!DOCTYPE html>\n"
     "<html>\n"
     "<head>\n"
@@ -939,217 +947,21 @@ handle_player(OS_Handle socket, String8 file_param, Arena *arena)
     "      <video id=\"video\" controls></video>\n"
     "    </div>\n"
     "  </main>\n"
-    "  <script>\n"
-    "    var statusEl = document.getElementById('status');\n"
-    "    var statusText = document.getElementById('status-text');\n"
-    "    var playerContainer = document.getElementById('player-container');\n"
-    "    var video = document.querySelector('#video');\n"
-    "    var player = null;\n"
-    "    var manifestUrl = '/media/%S/manifest.mpd';\n"
-    "    var checkInterval = null;\n"
-    "    \n"
-    "    function checkManifest() {\n"
-    "      fetch(manifestUrl, {method: 'HEAD'})\n"
-    "        .then(function(response) {\n"
-    "          if(response.status === 200) {\n"
-    "            clearInterval(checkInterval);\n"
-    "            startPlayer();\n"
-    "          } else if(response.status === 202) {\n"
-    "            statusText.textContent = 'Transmuxing video... (this may take a few minutes)';\n"
-    "          } else {\n"
-    "            statusEl.className = 'error';\n"
-    "            statusText.textContent = 'Error: Manifest not found';\n"
-    "            clearInterval(checkInterval);\n"
-    "          }\n"
-    "        })\n"
-    "        .catch(function() {\n"
-    "          statusEl.className = 'error';\n"
-    "          statusText.textContent = 'Error: Failed to check manifest';\n"
-    "          clearInterval(checkInterval);\n"
-    "        });\n"
-    "    }\n"
-    "    \n"
-    "    function startPlayer() {\n"
-    "      statusEl.style.display = 'none';\n"
-    "      playerContainer.className = 'ready';\n"
-    "      \n"
-    "      fetch('/media/%S/subtitles.txt')\n"
-    "        .then(function(r) { return r.ok ? r.text() : ''; })\n"
-    "        .then(function(text) {\n"
-    "          var lines = text.split('\\n');\n"
-    "          for(var i = 0; i < lines.length; i++) {\n"
-    "            var parts = lines[i].split(' ');\n"
-    "            if(parts.length === 2) {\n"
-    "              var track = document.createElement('track');\n"
-    "              track.kind = 'subtitles';\n"
-    "              track.src = parts[1];\n"
-    "              track.srclang = parts[0];\n"
-    "              track.label = parts[0].toUpperCase();\n"
-    "              video.appendChild(track);\n"
-    "            }\n"
-    "          }\n"
-    "        })\n"
-    "        .catch(function() {})\n"
-    "        .finally(function() { initPlayer(); });\n"
-    "    }\n"
-    "    \n"
-    "    function initPlayer() {\n"
-    "      player = dashjs.MediaPlayer().create();\n"
-    "      \n"
-    "      player.on(dashjs.MediaPlayer.events.ERROR, function(e) {\n"
-    "        if(e.error.code === 10) {\n"
-    "          statusEl.style.display = 'block';\n"
-    "          statusEl.className = 'transmuxing';\n"
-    "          statusText.textContent = 'Manifest incomplete, retrying...';\n"
-    "          playerContainer.className = '';\n"
-    "          setTimeout(checkManifest, 3000);\n"
-    "        }\n"
-    "      });\n"
-    "      \n"
-    "      player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, function() {\n"
-    "        var urlParams = new URLSearchParams(window.location.search);\n"
-    "        var requestedLang = urlParams.get('lang') || 'en';\n"
-    "        var audioTracks = player.getTracksFor('audio');\n"
-    "        \n"
-    "        for(var i = 0; i < audioTracks.length; i++) {\n"
-    "          if(audioTracks[i].lang === requestedLang) {\n"
-    "            player.setCurrentTrack(audioTracks[i]);\n"
-    "            break;\n"
-    "          }\n"
-    "        }\n"
-    "        \n"
-    "        setupAudioTracksUI();\n"
-    "      });\n"
-    "      \n"
-    "      var urlParams = new URLSearchParams(window.location.search);\n"
-    "      var selectedLang = urlParams.get('lang') || 'en';\n"
-    "      player.updateSettings({streaming: {initialSettings: {audio: {lang: selectedLang}}}});\n"
-    "      player.initialize(video, manifestUrl, true);\n"
-    "      \n"
-    "      var file = urlParams.get('file');\n"
-    "      var savedSubtitle = '';\n"
-    "      var savedAudio = '';\n"
-    "      if(file) {\n"
-    "        fetch('/api/progress?file=' + encodeURIComponent(file))\n"
-    "          .then(function(r) { return r.text(); })\n"
-    "          .then(function(text) {\n"
-    "            var parts = text.split(' ');\n"
-    "            var position = parseFloat(parts[0]);\n"
-    "            savedSubtitle = parts[1] && parts[1] !== '-' ? parts[1] : '';\n"
-    "            savedAudio = parts[2] && parts[2] !== '-' ? parts[2] : '';\n"
-    "            if(position > 5) {\n"
-    "              video.addEventListener('loadedmetadata', function() {\n"
-    "                video.currentTime = position;\n"
-    "              }, {once: true});\n"
-    "            }\n"
-    "          })\n"
-    "          .catch(function() {});\n"
-    "      }\n"
-    "      \n"
-    "      player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, function() {\n"
-    "        if(savedAudio) {\n"
-    "          var audioTracks = player.getTracksFor('audio');\n"
-    "          for(var i = 0; i < audioTracks.length; i++) {\n"
-    "            if(audioTracks[i].lang === savedAudio) {\n"
-    "              player.setCurrentTrack(audioTracks[i]);\n"
-    "              break;\n"
-    "            }\n"
-    "          }\n"
-    "        }\n"
-    "        if(savedSubtitle) {\n"
-    "          for(var i = 0; i < video.textTracks.length; i++) {\n"
-    "            if(video.textTracks[i].language === savedSubtitle) {\n"
-    "              video.textTracks[i].mode = 'showing';\n"
-    "            } else {\n"
-    "              video.textTracks[i].mode = 'hidden';\n"
-    "            }\n"
-    "          }\n"
-    "        }\n"
-    "      });\n"
-    "      \n"
-    "      var lastSaveTime = 0;\n"
-    "      video.addEventListener('timeupdate', function() {\n"
-    "        var now = Date.now();\n"
-    "        if(now - lastSaveTime > 5000) {\n"
-    "          lastSaveTime = now;\n"
-    "          if(file && video.currentTime > 0) {\n"
-    "            var url = '/api/progress?file=' + encodeURIComponent(file) + '&position=' + video.currentTime;\n"
-    "            var currentAudio = player.getCurrentTrackFor('audio');\n"
-    "            if(!currentAudio || !currentAudio.lang) {\n"
-    "              var audioTracks = player.getTracksFor('audio');\n"
-    "              if(audioTracks.length === 1) currentAudio = audioTracks[0];\n"
-    "            }\n"
-    "            if(currentAudio && currentAudio.lang) {\n"
-    "              url += '&audio=' + encodeURIComponent(currentAudio.lang);\n"
-    "            }\n"
-    "            for(var i = 0; i < video.textTracks.length; i++) {\n"
-    "              if(video.textTracks[i].mode === 'showing') {\n"
-    "                url += '&subtitle=' + encodeURIComponent(video.textTracks[i].language);\n"
-    "                break;\n"
-    "              }\n"
-    "            }\n"
-    "            fetch(url).catch(function() {});\n"
-    "          }\n"
-    "        }\n"
-    "      });\n"
-    "    }\n"
-    "    \n"
-    "    function setupAudioTracksUI() {\n"
-    "      var audioTracks = player.getTracksFor('audio');\n"
-    "      if(audioTracks.length <= 1) return;\n"
-    "      \n"
-    "      video.addEventListener('contextmenu', function(e) {\n"
-    "        if(audioTracks.length > 1) {\n"
-    "          e.preventDefault();\n"
-    "          showAudioMenu(e.clientX, e.clientY);\n"
-    "        }\n"
-    "      });\n"
-    "    }\n"
-    "    \n"
-    "    function showAudioMenu(x, y) {\n"
-    "      var existingMenu = document.getElementById('audio-track-menu');\n"
-    "      if(existingMenu) existingMenu.remove();\n"
-    "      \n"
-    "      var menu = document.createElement('div');\n"
-    "      menu.id = 'audio-track-menu';\n"
-    "      menu.style.cssText = 'position:fixed;left:'+x+'px;top:'+y+'px;background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:4px 0;font-family:sans-serif;font-size:14px;z-index:10000;min-width:150px;box-shadow:0 2px 8px rgba(0,0,0,0.5)';\n"
-    "      \n"
-    "      var audioTracks = player.getTracksFor('audio');\n"
-    "      var currentTrack = player.getCurrentTrackFor('audio');\n"
-    "      \n"
-    "      audioTracks.forEach(function(track) {\n"
-    "        var item = document.createElement('div');\n"
-    "        var lang = (track.lang || 'unknown').toUpperCase();\n"
-    "        var label = track.labels && track.labels[0] ? track.labels[0].text : lang;\n"
-    "        var isCurrent = currentTrack && track.index === currentTrack.index;\n"
-    "        item.textContent = (isCurrent ? '✓ ' : '  ') + label;\n"
-    "        item.style.cssText = 'padding:8px 16px;cursor:pointer;color:#ededed';\n"
-    "        item.onmouseover = function() { this.style.background = '#2a2a2a'; };\n"
-    "        item.onmouseout = function() { this.style.background = 'transparent'; };\n"
-    "        item.onclick = function() {\n"
-    "          player.setCurrentTrack(track);\n"
-    "          menu.remove();\n"
-    "        };\n"
-    "        menu.appendChild(item);\n"
-    "      });\n"
-    "      \n"
-    "      document.body.appendChild(menu);\n"
-    "      \n"
-    "      var closeMenu = function() {\n"
-    "        menu.remove();\n"
-    "        document.removeEventListener('click', closeMenu);\n"
-    "      };\n"
-    "      setTimeout(function() { document.addEventListener('click', closeMenu); }, 0);\n"
-    "    }\n"
-    "    \n"
-    "    checkManifest();\n"
-    "    checkInterval = setInterval(checkManifest, 3000);\n"
+    "  <script>\n",
+    file_param, file_param));
+
+  str8_list_push(arena, &html, str8_prefix(player_js_template, pos1));
+  str8_list_push(arena, &html, encoded_file);
+  str8_list_push(arena, &html, str8_substr(player_js_template, rng_1u64(pos1 + placeholder.size, pos2)));
+  str8_list_push(arena, &html, encoded_file);
+  str8_list_push(arena, &html, str8_skip(player_js_template, pos2 + placeholder.size));
+
+  str8_list_push(arena, &html, str8_lit(
     "  </script>\n"
     "</body>\n"
-    "</html>\n",
-    file_param, file_param, file_param, file_param);
+    "</html>\n"));
 
-  send_response(socket, arena, str8_lit("text/html"), html);
+  send_response(socket, arena, str8_lit("text/html"), str8_list_join(arena, html, 0));
 }
 
 typedef struct EpisodeInfo EpisodeInfo;
@@ -1163,17 +975,14 @@ struct EpisodeInfo
 };
 
 internal EpisodeInfo
-parse_episode_info(Arena *arena, String8 file_path)
+parse_episode_info(String8 file_path)
 {
   EpisodeInfo info = {0};
-  (void)arena;
-
   info.dir_path = str8_chop_last_slash(file_path);
   info.filename = str8_skip_last_slash(file_path);
 
-  // Look for S##E## or S##E### pattern (need at least 5 chars: S##E#)
   if(info.filename.size >= 5)
-    {
+  {
       for(u64 i = 0; i <= info.filename.size - 5; i += 1)
       {
         if((info.filename.str[i] == 'S' || info.filename.str[i] == 's') &&
@@ -1212,7 +1021,7 @@ internal String8
 find_next_episode(Arena *arena, String8 file_path)
 {
   String8 result = str8_zero();
-  EpisodeInfo current = parse_episode_info(arena, file_path);
+  EpisodeInfo current = parse_episode_info(file_path);
 
   if(!current.is_episode) return result;
 
@@ -1229,7 +1038,7 @@ find_next_episode(Arena *arena, String8 file_path)
     {
       String8 filename = str8_cstring(entry->d_name);
       String8 full_path = str8f(temp.arena, "%S/%S", current.dir_path, filename);
-      EpisodeInfo info = parse_episode_info(temp.arena, full_path);
+      EpisodeInfo info = parse_episode_info(full_path);
 
       if(info.is_episode && info.season == current.season && info.episode == next_episode)
       {
@@ -1265,7 +1074,6 @@ watch_progress_get_sorted(Arena *arena, u64 *out_count)
     }
   }
 
-  // Bubble sort by timestamp (most recent first)
   for(u64 i = 0; i < count; i += 1)
   {
     for(u64 j = i + 1; j < count; j += 1)
@@ -1393,7 +1201,6 @@ handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
     "</header>\n"
     "<main>\n"));
 
-  // Continue watching section (only on homepage)
   if(dir_path.size == 0 && watch_progress != 0)
   {
     u64 watch_count = 0;
@@ -1426,7 +1233,6 @@ handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
           filename, dir_path, encoded_file);
         str8_list_push(arena, &html, card_html);
 
-        // Check for next episode
         String8 next_episode = find_next_episode(arena, entry->file_path);
         if(next_episode.size > 0)
         {
@@ -1638,7 +1444,7 @@ internal void
 watch_progress_set(String8 file, f64 position, String8 subtitle_lang, String8 audio_lang)
 {
   Temp scratch = scratch_begin(0, 0);
-  EpisodeInfo current_ep = parse_episode_info(scratch.arena, file);
+  EpisodeInfo current_ep = parse_episode_info(file);
   u64 hash = hash_string(file) % watch_progress->bucket_count;
 
   MutexScope(watch_progress->mutex)
@@ -1675,7 +1481,7 @@ watch_progress_set(String8 file, f64 position, String8 subtitle_lang, String8 au
         WatchProgress *e = *prev_ptr;
         while(e != 0)
         {
-          EpisodeInfo other_ep = parse_episode_info(scratch.arena, e->file_path);
+          EpisodeInfo other_ep = parse_episode_info(e->file_path);
           b32 should_remove = (other_ep.is_episode &&
                                str8_match(other_ep.dir_path, current_ep.dir_path, 0) &&
                                other_ep.season == current_ep.season &&
