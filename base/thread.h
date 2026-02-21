@@ -46,6 +46,12 @@ struct RWMutex
   u64 u64[1];
 };
 
+typedef struct CondVar CondVar;
+struct CondVar
+{
+  u64 u64[1];
+};
+
 typedef struct Semaphore Semaphore;
 struct Semaphore
 {
@@ -79,6 +85,13 @@ internal void rw_mutex_take(RWMutex mutex, b32 write_mode);
 internal void rw_mutex_drop(RWMutex mutex);
 #define rw_mutex_take_r(m) rw_mutex_take((m), (0))
 #define rw_mutex_take_w(m) rw_mutex_take((m), (1))
+
+//- condition variables
+internal CondVar cond_var_alloc(void);
+internal void cond_var_release(CondVar cv);
+internal void cond_var_wait(CondVar cv, Mutex mutex);
+internal void cond_var_signal(CondVar cv);
+internal void cond_var_broadcast(CondVar cv);
 
 //- cross-process semaphores
 internal Semaphore semaphore_alloc(u32 initial_count, String8 name);

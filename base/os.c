@@ -697,6 +697,28 @@ os_socket_accept(OS_Handle listen_socket)
   return handle;
 }
 
+internal b32
+os_copy_file(OS_Handle out, OS_Handle in, u64 size)
+{
+  int out_fd = (int)out.u64[0];
+  int in_fd = (int)in.u64[0];
+  u64 total_bytes_copied = 0;
+  u64 bytes_left_to_copy = size;
+  for(;bytes_left_to_copy > 0;)
+  {
+    off_t sendfile_off = total_bytes_copied;
+    ssize_t copy_result = sendfile(out_fd, in_fd, &sendfile_off, bytes_left_to_copy);
+    if(copy_result <= 0)
+    {
+      break;
+    }
+    u64 bytes_copied = (u64)copy_result;
+    bytes_left_to_copy -= bytes_copied;
+    total_bytes_copied += bytes_copied;
+  }
+  return bytes_left_to_copy == 0;
+}
+
 ////////////////////////////////
 //~ Time
 

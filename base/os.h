@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/sendfile.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -126,6 +127,7 @@ internal OS_Handle os_socket_connect_unix(String8 path);
 internal OS_Handle os_socket_listen_tcp(u16 port);
 internal OS_Handle os_socket_listen_unix(String8 path);
 internal OS_Handle os_socket_accept(OS_Handle listen_socket);
+internal b32 os_copy_file(OS_Handle out, OS_Handle in, u64 size);
 
 ////////////////////////////////
 //~ Time

@@ -211,6 +211,68 @@ rw_mutex_drop(RWMutex mutex)
   pthread_rwlock_unlock(rwlock);
 }
 
+//- condition variables
+internal CondVar
+cond_var_alloc(void)
+{
+  pthread_cond_t *cond =
+      (pthread_cond_t *)mmap(0, sizeof(*cond), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  AssertAlways(cond != MAP_FAILED);
+
+  int err = pthread_cond_init(cond, 0);
+  AssertAlways(err == 0);
+
+  CondVar result = {(u64)cond};
+  return result;
+}
+
+internal void
+cond_var_release(CondVar cv)
+{
+  if(MemoryIsZeroStruct(&cv))
+  {
+    return;
+  }
+  pthread_cond_t *cond = (pthread_cond_t *)cv.u64[0];
+  pthread_cond_destroy(cond);
+  int err = munmap(cond, sizeof(*cond));
+  AssertAlways(err == 0);
+}
+
+internal void
+cond_var_wait(CondVar cv, Mutex mutex)
+{
+  if(MemoryIsZeroStruct(&cv) || MemoryIsZeroStruct(&mutex))
+  {
+    return;
+  }
+  pthread_cond_t *cond = (pthread_cond_t *)cv.u64[0];
+  pthread_mutex_t *m = (pthread_mutex_t *)mutex.u64[0];
+  pthread_cond_wait(cond, m);
+}
+
+internal void
+cond_var_signal(CondVar cv)
+{
+  if(MemoryIsZeroStruct(&cv))
+  {
+    return;
+  }
+  pthread_cond_t *cond = (pthread_cond_t *)cv.u64[0];
+  pthread_cond_signal(cond);
+}
+
+internal void
+cond_var_broadcast(CondVar cv)
+{
+  if(MemoryIsZeroStruct(&cv))
+  {
+    return;
+  }
+  pthread_cond_t *cond = (pthread_cond_t *)cv.u64[0];
+  pthread_cond_broadcast(cond);
+}
+
 //- cross-process semaphores
 internal Semaphore
 semaphore_alloc(u32 initial_count, String8 name)

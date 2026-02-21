@@ -94,9 +94,18 @@ global WP_Pool *worker_pool = 0;
 global WP_Pool *transmux_pool = 0;
 global TransmuxQueue *transmux_queue = 0;
 global WatchProgressTable *watch_progress = 0;
+global CondVar transmux_cv = {0};
 
 ////////////////////////////////
 //~ Helpers
+
+internal b32
+is_safe_path(String8 path)
+{
+  if(str8_find_needle(path, 0, str8_lit(".."), 0) < path.size) return 0;
+  if(path.size > 0 && path.str[0] == '/') return 0;
+  return 1;
+}
 
 internal u64
 hash_string(String8 str)
@@ -238,27 +247,24 @@ transmux_queue_job(String8 file_path, String8 cache_dir, u64 file_hash)
       u64 bucket = file_hash % transmux_queue->hash_table_size;
       job->hash_next = transmux_queue->hash_table[bucket];
       transmux_queue->hash_table[bucket] = job;
+
+      cond_var_signal(transmux_cv);
     }
   }
 }
 
 internal TransmuxJob *
-transmux_dequeue_job(void)
+transmux_dequeue_job_locked(void)
 {
-  TransmuxJob *job = 0;
-  MutexScope(transmux_queue->mutex)
+  for(TransmuxJob *j = transmux_queue->first; j != 0; j = j->queue_next)
   {
-    for(TransmuxJob *j = transmux_queue->first; j != 0; j = j->queue_next)
+    if(j->state == TransmuxState_Queued)
     {
-      if(j->state == TransmuxState_Queued)
-      {
-        j->state = TransmuxState_Processing;
-        job = j;
-        break;
-      }
+      j->state = TransmuxState_Processing;
+      return j;
     }
   }
-  return job;
+  return 0;
 }
 
 internal void
@@ -276,26 +282,14 @@ transmux_mark_complete(TransmuxJob *job, b32 success)
 internal void
 stream_file_to_socket(OS_Handle socket, String8 file_path, u64 file_size)
 {
-  Temp scratch = scratch_begin(0, 0);
   OS_Handle file = os_file_open(OS_AccessFlag_Read, file_path);
   if(os_handle_match(file, os_handle_zero()))
   {
-    scratch_end(scratch);
     return;
   }
 
-  u8 buffer[KB(64)];
-  for(u64 offset = 0; offset < file_size;)
-  {
-    u64 to_read = Min(sizeof(buffer), file_size - offset);
-    u64 did_read = os_file_read(file, rng_1u64(offset, offset + to_read), buffer);
-    if(did_read == 0) break;
-    socket_write_all(socket, str8(buffer, did_read));
-    offset += did_read;
-  }
-
+  os_copy_file(socket, file, file_size);
   os_file_close(file);
-  scratch_end(scratch);
 }
 
 internal String8
@@ -2039,13 +2033,17 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
   else if(str8_match(req->path, str8_lit("/player"), 0))
   {
     String8 file_param = get_query_param(arena, req->query, str8_lit("file"));
-    if(file_param.size > 0)
+    if(file_param.size == 0)
     {
-      handle_player(socket, file_param, arena);
+      send_error_response(socket, HTTP_Status_400_BadRequest, str8_lit("Missing file parameter"));
+    }
+    else if(!is_safe_path(file_param))
+    {
+      send_error_response(socket, HTTP_Status_403_Forbidden, str8_lit("Invalid path"));
     }
     else
     {
-      send_error_response(socket, HTTP_Status_400_BadRequest, str8_lit("Missing file parameter"));
+      handle_player(socket, file_param, arena);
     }
   }
   else if(str8_match(req->path, str8_lit("/api/progress"), 0))
@@ -2056,18 +2054,26 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
     String8 aud_param = get_query_param(arena, req->query, str8_lit("audio"));
     String8 delete_param = get_query_param(arena, req->query, str8_lit("delete"));
 
-    if(file_param.size > 0 && delete_param.size > 0)
+    if(file_param.size == 0)
+    {
+      send_error_response(socket, HTTP_Status_400_BadRequest, str8_lit("Missing file parameter"));
+    }
+    else if(!is_safe_path(file_param))
+    {
+      send_error_response(socket, HTTP_Status_403_Forbidden, str8_lit("Invalid path"));
+    }
+    else if(delete_param.size > 0)
     {
       watch_progress_delete(file_param);
       send_response(socket, arena, str8_lit("text/plain"), str8_lit("ok"));
     }
-    else if(file_param.size > 0 && pos_param.size > 0)
+    else if(pos_param.size > 0)
     {
       f64 position = f64_from_str8(pos_param);
       watch_progress_set(file_param, position, sub_param, aud_param);
       send_response(socket, arena, str8_lit("text/plain"), str8_lit("ok"));
     }
-    else if(file_param.size > 0)
+    else
     {
       WatchProgress *progress = watch_progress_find(file_param);
       f64 position = progress ? progress->position_seconds : 0.0;
@@ -2075,10 +2081,6 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
       String8 audio = progress && progress->audio_lang.size > 0 ? progress->audio_lang : str8_lit("-");
       String8 response = str8f(arena, "%.2f %S %S", position, subtitle, audio);
       send_response(socket, arena, str8_lit("text/plain"), response);
-    }
-    else
-    {
-      send_error_response(socket, HTTP_Status_400_BadRequest, str8_lit("Missing file parameter"));
     }
   }
   else if(str8_match(str8_prefix(req->path, 7), str8_lit("/media/"), 0))
@@ -2092,7 +2094,11 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
     {
       String8 file = url_decode(arena, file_part);
 
-      if(str8_match(resource, str8_lit("manifest.mpd"), 0))
+      if(!is_safe_path(file))
+      {
+        send_error_response(socket, HTTP_Status_403_Forbidden, str8_lit("Invalid path"));
+      }
+      else if(str8_match(resource, str8_lit("manifest.mpd"), 0))
       {
         handle_manifest(socket, file, arena);
       }
@@ -2206,11 +2212,18 @@ transmux_worker_task(void *params)
   (void)params;
   for(;;)
   {
-    TransmuxJob *job = transmux_dequeue_job();
-    if(job == 0)
+    TransmuxJob *job = 0;
+    MutexScope(transmux_queue->mutex)
     {
-      os_sleep_milliseconds(100);
-      continue;
+      for(;;)
+      {
+        job = transmux_dequeue_job_locked();
+        if(job != 0)
+        {
+          break;
+        }
+        cond_var_wait(transmux_cv, transmux_queue->mutex);
+      }
     }
 
     b32 success = generate_dash_to_cache(job->file_path, job->cache_dir, job->file_hash);
@@ -2288,6 +2301,8 @@ entry_point(CmdLine *cmd_line)
   transmux_queue->hash_table = push_array(arena, TransmuxJob *, transmux_queue->hash_table_size);
   transmux_queue->first = 0;
   transmux_queue->last = 0;
+
+  transmux_cv = cond_var_alloc();
 
   {
     Temp temp = scratch_begin(&arena, 1);
