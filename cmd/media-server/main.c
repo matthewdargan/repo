@@ -1,5 +1,7 @@
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
+#include <libswresample/swresample.h>
+#include <libavutil/opt.h>
 
 #include "base/inc.h"
 #include "http/inc.h"
@@ -64,6 +66,22 @@ struct WatchProgressTable
   Arena *arena;
   WatchProgress **buckets;
   u64 bucket_count;
+};
+
+typedef struct StreamMeta StreamMeta;
+struct StreamMeta
+{
+  u32 stream_idx;
+  u8 is_audio;
+  String8 lang;
+  String8 metadata;
+};
+
+typedef struct StreamMetaArray StreamMetaArray;
+struct StreamMetaArray
+{
+  StreamMeta *items;
+  u64 count;
 };
 
 ////////////////////////////////
@@ -303,6 +321,51 @@ read_small_file(Arena *arena, String8 file_path, u64 max_size)
   return str8_zero();
 }
 
+internal StreamMetaArray
+parse_stream_metadata(Arena *arena, String8 cache_dir)
+{
+  String8 streams_path = str8f(arena, "%S/streams.txt", cache_dir);
+  String8 content = read_small_file(arena, streams_path, KB(64));
+
+  StreamMeta *items = push_array(arena, StreamMeta, 32);
+  u64 count = 0;
+
+  if(content.size > 0)
+  {
+    String8List lines = str8_split(arena, content, (u8 *)"\n", 1, 0);
+    for(String8Node *n = lines.first; n != 0; n = n->next)
+    {
+      String8 line = str8_skip_chop_whitespace(n->string);
+      if(line.size == 0) continue;
+
+      String8List fields = str8_split(arena, line, (u8 *)"\t", 1, 0);
+      if(fields.node_count >= 4)
+      {
+        String8Node *field = fields.first;
+        u32 stream_idx = (u32)u64_from_str8(field->string, 10);
+        field = field->next;
+        String8 type = field->string;
+        field = field->next;
+        String8 lang = field->string;
+        field = field->next;
+        String8 metadata = field->string;
+
+        if(count < 32)
+        {
+          items[count].stream_idx = stream_idx;
+          items[count].is_audio = str8_match(type, str8_lit("audio"), 0);
+          items[count].lang = lang;
+          items[count].metadata = metadata;
+          count++;
+        }
+      }
+    }
+  }
+
+  StreamMetaArray result = {items, count};
+  return result;
+}
+
 ////////////////////////////////
 //~ Manifest
 
@@ -325,6 +388,8 @@ postprocess_manifest(String8 cache_dir)
   String8 manifest = read_small_file(scratch.arena, manifest_path, MB(1));
   if(manifest.size == 0) { scratch_end(scratch); return; }
 
+  StreamMetaArray streams = parse_stream_metadata(scratch.arena, cache_dir);
+
   String8 dynamic_attrs[] = {
     str8_lit("minimumUpdatePeriod"),
     str8_lit("suggestedPresentationDelay"),
@@ -332,7 +397,7 @@ postprocess_manifest(String8 cache_dir)
     str8_lit("publishTime"),
   };
 
-  u8 *out = push_array(scratch.arena, u8, manifest.size * 2);
+  u8 *out = push_array(scratch.arena, u8, manifest.size * 3);
   u64 out_pos = 0;
   u64 in_pos = 0;
 
@@ -347,6 +412,29 @@ postprocess_manifest(String8 cache_dir)
 
     if(!has_dynamic_attrs || has_type_attr)
     {
+      b32 is_audio_adaptation = (str8_find_needle(line, 0, str8_lit("<AdaptationSet"), 0) < line.size &&
+                                  str8_find_needle(line, 0, str8_lit("contentType=\"audio\""), 0) < line.size);
+      u32 audio_stream_id = 0;
+
+      if(is_audio_adaptation)
+      {
+        u64 id_pos = str8_find_needle(line, 0, str8_lit("id=\""), 0);
+        if(id_pos < line.size)
+        {
+          u64 id_start = id_pos + 4;
+          u64 id_end = id_start;
+          while(id_end < line.size && line.str[id_end] >= '0' && line.str[id_end] <= '9')
+          {
+            id_end += 1;
+          }
+          if(id_end > id_start)
+          {
+            String8 id_str = str8_substr(line, rng_1u64(id_start, id_end));
+            audio_stream_id = (u32)u64_from_str8(id_str, 10);
+          }
+        }
+      }
+
       for(u64 i = 0; i < line.size; i += 1)
       {
         if(i + 14 <= line.size && MemoryMatch(line.str + i, "type=\"dynamic\"", 14))
@@ -373,6 +461,23 @@ postprocess_manifest(String8 cache_dir)
         }
       }
       out[out_pos++] = '\n';
+
+      if(is_audio_adaptation && audio_stream_id > 0)
+      {
+        for(u64 i = 0; i < streams.count; i += 1)
+        {
+          StreamMeta *s = &streams.items[i];
+          if(s->is_audio && s->stream_idx == audio_stream_id)
+          {
+            String8 lang_upper = upper_from_str8(scratch.arena, s->lang);
+            String8 label = str8f(scratch.arena, "%S - %S", lang_upper, s->metadata);
+            String8 label_line = str8f(scratch.arena, "\t\t\t<Label>%S</Label>\n", label);
+            MemoryCopy(out + out_pos, label_line.str, label_line.size);
+            out_pos += label_line.size;
+            break;
+          }
+        }
+      }
     }
     in_pos = newline + 1;
   }
@@ -535,6 +640,8 @@ extract_subtitles(String8 file_path, String8 cache_dir)
     return;
   }
 
+  String8List metadata_lines = {0};
+
   for(u32 i = 0; i < fmt->nb_streams; i += 1)
   {
     AVStream *stream = fmt->streams[i];
@@ -550,14 +657,36 @@ extract_subtitles(String8 file_path, String8 cache_dir)
     }
 
     String8 lang = str8_lit("und");
-    AVDictionaryEntry *e = av_dict_get(stream->metadata, "language", NULL, 0);
-    if(e != 0 && e->value != 0)
+    AVDictionaryEntry *lang_entry = av_dict_get(stream->metadata, "language", NULL, 0);
+    if(lang_entry != 0 && lang_entry->value != 0)
     {
-      lang = str8_cstring(e->value);
+      lang = str8_cstring(lang_entry->value);
     }
 
-    String8 vtt_path = str8f(temp.arena, "%S/subtitle.%S.vtt", cache_dir, lang);
+    String8 title = str8_zero();
+    AVDictionaryEntry *title_entry = av_dict_get(stream->metadata, "title", NULL, 0);
+    if(title_entry != 0 && title_entry->value != 0)
+    {
+      title = str8_cstring(title_entry->value);
+    }
+
+    String8 metadata = title.size > 0 ? title : str8_lit("-");
+    str8_list_pushf(temp.arena, &metadata_lines, "%u\tsubtitle\t%S\t%S\n", i, lang, metadata);
+
+    String8 vtt_path = str8f(temp.arena, "%S/subtitle.%u.%S.vtt", cache_dir, i, lang);
     extract_subtitle_stream(file_path, i, lang, vtt_path);
+  }
+
+  if(metadata_lines.node_count > 0)
+  {
+    String8 metadata_content = str8_list_join(temp.arena, metadata_lines, 0);
+    String8 streams_path = str8f(temp.arena, "%S/streams.txt", cache_dir);
+    OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Truncate, streams_path);
+    if(file.u64[0] != 0)
+    {
+      os_file_write(file, rng_1u64(0, metadata_content.size), metadata_content.str);
+      os_file_close(file);
+    }
   }
 
   avformat_close_input(&fmt);
@@ -566,6 +695,34 @@ extract_subtitles(String8 file_path, String8 cache_dir)
 
 ////////////////////////////////
 //~ DASH
+
+typedef struct StreamTranscodeInfo StreamTranscodeInfo;
+struct StreamTranscodeInfo
+{
+  b32 needs_transcode;
+  AVCodecContext *dec_ctx;
+  AVCodecContext *enc_ctx;
+  SwrContext *swr_ctx;
+  AVFrame *dec_frame;
+  AVFrame *enc_frame;
+  s64 next_pts;
+};
+
+internal b32
+audio_codec_needs_transcode(enum AVCodecID codec_id)
+{
+  return (codec_id == AV_CODEC_ID_AC3 ||
+          codec_id == AV_CODEC_ID_EAC3 ||
+          codec_id == AV_CODEC_ID_DTS ||
+          codec_id == AV_CODEC_ID_TRUEHD ||
+          codec_id == AV_CODEC_ID_MLP ||
+          codec_id == AV_CODEC_ID_PCM_S16LE ||
+          codec_id == AV_CODEC_ID_PCM_S24LE ||
+          codec_id == AV_CODEC_ID_PCM_S32LE ||
+          codec_id == AV_CODEC_ID_PCM_S16BE ||
+          codec_id == AV_CODEC_ID_PCM_S24BE ||
+          codec_id == AV_CODEC_ID_PCM_S32BE);
+}
 
 internal b32
 generate_dash(String8 input_path, String8 output_path)
@@ -579,6 +736,7 @@ generate_dash(String8 input_path, String8 output_path)
   AVFormatContext *out_ctx = NULL;
   AVDictionary *opts = NULL;
   AVPacket *pkt = NULL;
+  AVPacket *enc_pkt = NULL;
   b32 success = 0;
 
   if(avformat_open_input(&in_ctx, (char *)in_path.str, NULL, NULL) != 0) goto cleanup;
@@ -586,7 +744,13 @@ generate_dash(String8 input_path, String8 output_path)
   if(avformat_alloc_output_context2(&out_ctx, NULL, "dash", (char *)out_path.str) != 0) goto cleanup;
 
   int *stream_map = push_array(temp.arena, int, in_ctx->nb_streams);
-  for(u32 i = 0; i < in_ctx->nb_streams; i += 1) stream_map[i] = -1;
+  StreamTranscodeInfo *transcode_info = push_array(temp.arena, StreamTranscodeInfo, in_ctx->nb_streams);
+  String8List audio_metadata = {0};
+  for(u32 i = 0; i < in_ctx->nb_streams; i += 1)
+  {
+    stream_map[i] = -1;
+    MemoryZeroStruct(&transcode_info[i]);
+  }
 
   u32 stream_idx = 0;
   for(u32 i = 0; i < in_ctx->nb_streams; i += 1)
@@ -602,11 +766,140 @@ generate_dash(String8 input_path, String8 output_path)
 
     AVStream *out_stream = avformat_new_stream(out_ctx, NULL);
     if(out_stream == 0) goto cleanup;
-    if(avcodec_parameters_copy(out_stream->codecpar, codecpar) != 0) goto cleanup;
 
-    out_stream->codecpar->codec_tag = 0;
-    out_stream->time_base = in_stream->time_base;
+    b32 needs_transcode = (codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
+                           audio_codec_needs_transcode(codecpar->codec_id));
+
+    if(needs_transcode)
+    {
+      log_infof("media-server: stream %u (audio/%s) - transcoding to AAC\n",
+                i, avcodec_get_name(codecpar->codec_id));
+
+      const AVCodec *decoder = avcodec_find_decoder(codecpar->codec_id);
+      if(decoder == 0) goto cleanup;
+
+      AVCodecContext *dec_ctx = avcodec_alloc_context3(decoder);
+      if(dec_ctx == 0) goto cleanup;
+      if(avcodec_parameters_to_context(dec_ctx, codecpar) != 0) goto cleanup;
+      if(avcodec_open2(dec_ctx, decoder, NULL) != 0) goto cleanup;
+
+      const AVCodec *encoder = avcodec_find_encoder(AV_CODEC_ID_AAC);
+      if(encoder == 0) goto cleanup;
+
+      AVCodecContext *enc_ctx = avcodec_alloc_context3(encoder);
+      if(enc_ctx == 0) goto cleanup;
+
+      enc_ctx->sample_rate = dec_ctx->sample_rate;
+      enc_ctx->ch_layout = dec_ctx->ch_layout;
+      enc_ctx->sample_fmt = AV_SAMPLE_FMT_FLTP;
+      enc_ctx->time_base = (AVRational){1, dec_ctx->sample_rate};
+
+      // Set bitrate based on channel count
+      if(enc_ctx->ch_layout.nb_channels <= 2)
+      {
+        enc_ctx->bit_rate = 192000;
+      }
+      else if(enc_ctx->ch_layout.nb_channels <= 6)
+      {
+        enc_ctx->bit_rate = 384000;
+      }
+      else
+      {
+        enc_ctx->bit_rate = 512000;
+      }
+
+      if(avcodec_open2(enc_ctx, encoder, NULL) != 0) goto cleanup;
+      if(avcodec_parameters_from_context(out_stream->codecpar, enc_ctx) != 0) goto cleanup;
+
+      out_stream->time_base = enc_ctx->time_base;
+
+      // Set up audio resampler for format/frame size conversion
+      SwrContext *swr_ctx = swr_alloc();
+      if(swr_ctx == 0) goto cleanup;
+
+      av_opt_set_chlayout(swr_ctx, "in_chlayout", &dec_ctx->ch_layout, 0);
+      av_opt_set_chlayout(swr_ctx, "out_chlayout", &enc_ctx->ch_layout, 0);
+      av_opt_set_int(swr_ctx, "in_sample_rate", dec_ctx->sample_rate, 0);
+      av_opt_set_int(swr_ctx, "out_sample_rate", enc_ctx->sample_rate, 0);
+      av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt", dec_ctx->sample_fmt, 0);
+      av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt", enc_ctx->sample_fmt, 0);
+
+      if(swr_init(swr_ctx) != 0) goto cleanup;
+
+      AVFrame *dec_frame = av_frame_alloc();
+      AVFrame *enc_frame = av_frame_alloc();
+      if(dec_frame == 0 || enc_frame == 0) goto cleanup;
+
+      enc_frame->format = enc_ctx->sample_fmt;
+      enc_frame->ch_layout = enc_ctx->ch_layout;
+      enc_frame->sample_rate = enc_ctx->sample_rate;
+      enc_frame->nb_samples = enc_ctx->frame_size;
+      if(av_frame_get_buffer(enc_frame, 0) != 0) goto cleanup;
+
+      transcode_info[i].needs_transcode = 1;
+      transcode_info[i].dec_ctx = dec_ctx;
+      transcode_info[i].enc_ctx = enc_ctx;
+      transcode_info[i].swr_ctx = swr_ctx;
+      transcode_info[i].dec_frame = dec_frame;
+      transcode_info[i].enc_frame = enc_frame;
+      transcode_info[i].next_pts = 0;
+    }
+    else
+    {
+      if(codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+      {
+        log_infof("media-server: stream %u (video/%s) - copying\n",
+                  i, avcodec_get_name(codecpar->codec_id));
+      }
+      else
+      {
+        log_infof("media-server: stream %u (audio/%s) - copying\n",
+                  i, avcodec_get_name(codecpar->codec_id));
+      }
+
+      if(avcodec_parameters_copy(out_stream->codecpar, codecpar) != 0) goto cleanup;
+      out_stream->codecpar->codec_tag = 0;
+      out_stream->time_base = in_stream->time_base;
+    }
+
     av_dict_copy(&out_stream->metadata, in_stream->metadata, 0);
+
+    if(codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+    {
+      String8 lang = str8_lit("und");
+      AVDictionaryEntry *lang_entry = av_dict_get(in_stream->metadata, "language", NULL, 0);
+      if(lang_entry != 0 && lang_entry->value != 0)
+      {
+        lang = str8_cstring(lang_entry->value);
+      }
+
+      String8 title = str8_zero();
+      AVDictionaryEntry *title_entry = av_dict_get(in_stream->metadata, "title", NULL, 0);
+      if(title_entry != 0 && title_entry->value != 0)
+      {
+        title = str8_cstring(title_entry->value);
+      }
+
+      String8 channels_str = str8_zero();
+      int ch_count = needs_transcode ? transcode_info[i].enc_ctx->ch_layout.nb_channels : codecpar->ch_layout.nb_channels;
+      if(ch_count == 1) channels_str = str8_lit("Mono");
+      else if(ch_count == 2) channels_str = str8_lit("Stereo");
+      else if(ch_count == 6) channels_str = str8_lit("5.1");
+      else if(ch_count == 8) channels_str = str8_lit("7.1");
+      else channels_str = str8f(temp.arena, "%dch", ch_count);
+
+      String8 metadata = str8_zero();
+      if(title.size > 0)
+      {
+        metadata = str8f(temp.arena, "%S (%S)", channels_str, title);
+      }
+      else
+      {
+        metadata = channels_str;
+      }
+
+      str8_list_pushf(temp.arena, &audio_metadata, "%u\taudio\t%S\t%S\n", stream_idx, lang, metadata);
+    }
 
     stream_map[i] = stream_idx;
     stream_idx += 1;
@@ -623,29 +916,166 @@ generate_dash(String8 input_path, String8 output_path)
   opts = NULL;
 
   pkt = av_packet_alloc();
-  if(pkt != 0)
+  enc_pkt = av_packet_alloc();
+  if(pkt != 0 && enc_pkt != 0)
   {
     while(av_read_frame(in_ctx, pkt) >= 0)
     {
       if(stream_map[pkt->stream_index] >= 0)
       {
-        AVStream *in_stream = in_ctx->streams[pkt->stream_index];
-        AVStream *out_stream = out_ctx->streams[stream_map[pkt->stream_index]];
+        u32 in_idx = pkt->stream_index;
+        u32 out_idx = stream_map[in_idx];
+        AVStream *in_stream = in_ctx->streams[in_idx];
+        AVStream *out_stream = out_ctx->streams[out_idx];
 
-        pkt->stream_index = stream_map[pkt->stream_index];
-        av_packet_rescale_ts(pkt, in_stream->time_base, out_stream->time_base);
-        pkt->pos = -1;
+        if(transcode_info[in_idx].needs_transcode)
+        {
+          AVCodecContext *dec_ctx = transcode_info[in_idx].dec_ctx;
+          AVCodecContext *enc_ctx = transcode_info[in_idx].enc_ctx;
+          SwrContext *swr_ctx = transcode_info[in_idx].swr_ctx;
+          AVFrame *dec_frame = transcode_info[in_idx].dec_frame;
+          AVFrame *enc_frame = transcode_info[in_idx].enc_frame;
+          s64 *next_pts = &transcode_info[in_idx].next_pts;
 
-        if(av_interleaved_write_frame(out_ctx, pkt) != 0) break;
+          if(avcodec_send_packet(dec_ctx, pkt) >= 0)
+          {
+            while(avcodec_receive_frame(dec_ctx, dec_frame) >= 0)
+            {
+              // Convert samples to resampler, may not produce output immediately
+              swr_convert(swr_ctx, NULL, 0,
+                         (const uint8_t **)dec_frame->data, dec_frame->nb_samples);
+
+              // Pull out as many complete frames as available
+              while(swr_get_out_samples(swr_ctx, 0) >= enc_ctx->frame_size)
+              {
+                int samples = swr_convert(swr_ctx,
+                                         enc_frame->data, enc_frame->nb_samples,
+                                         NULL, 0);
+
+                if(samples > 0)
+                {
+                  enc_frame->pts = *next_pts;
+                  *next_pts += samples;
+
+                  if(avcodec_send_frame(enc_ctx, enc_frame) >= 0)
+                  {
+                    while(avcodec_receive_packet(enc_ctx, enc_pkt) >= 0)
+                    {
+                      enc_pkt->stream_index = out_idx;
+                      av_packet_rescale_ts(enc_pkt, enc_ctx->time_base, out_stream->time_base);
+                      enc_pkt->pos = -1;
+
+                      if(av_interleaved_write_frame(out_ctx, enc_pkt) != 0) break;
+                      av_packet_unref(enc_pkt);
+                    }
+                  }
+                }
+                else
+                {
+                  break;
+                }
+              }
+              av_frame_unref(dec_frame);
+            }
+          }
+        }
+        else
+        {
+          pkt->stream_index = out_idx;
+          av_packet_rescale_ts(pkt, in_stream->time_base, out_stream->time_base);
+          pkt->pos = -1;
+
+          if(av_interleaved_write_frame(out_ctx, pkt) != 0) break;
+        }
       }
       av_packet_unref(pkt);
     }
 
+    for(u32 i = 0; i < in_ctx->nb_streams; i += 1)
+    {
+      if(transcode_info[i].needs_transcode && stream_map[i] >= 0)
+      {
+        AVCodecContext *enc_ctx = transcode_info[i].enc_ctx;
+        SwrContext *swr_ctx = transcode_info[i].swr_ctx;
+        AVFrame *enc_frame = transcode_info[i].enc_frame;
+        s64 *next_pts = &transcode_info[i].next_pts;
+        u32 out_idx = stream_map[i];
+        AVStream *out_stream = out_ctx->streams[out_idx];
+
+        while(swr_get_out_samples(swr_ctx, 0) > 0)
+        {
+          int samples = swr_convert(swr_ctx,
+                                   enc_frame->data, enc_frame->nb_samples,
+                                   NULL, 0);
+          if(samples > 0)
+          {
+            enc_frame->pts = *next_pts;
+            *next_pts += samples;
+
+            if(avcodec_send_frame(enc_ctx, enc_frame) >= 0)
+            {
+              while(avcodec_receive_packet(enc_ctx, enc_pkt) >= 0)
+              {
+                enc_pkt->stream_index = out_idx;
+                av_packet_rescale_ts(enc_pkt, enc_ctx->time_base, out_stream->time_base);
+                enc_pkt->pos = -1;
+
+                av_interleaved_write_frame(out_ctx, enc_pkt);
+                av_packet_unref(enc_pkt);
+              }
+            }
+          }
+          else
+          {
+            break;
+          }
+        }
+
+        avcodec_send_frame(enc_ctx, NULL);
+        while(avcodec_receive_packet(enc_ctx, enc_pkt) >= 0)
+        {
+          enc_pkt->stream_index = out_idx;
+          av_packet_rescale_ts(enc_pkt, enc_ctx->time_base, out_stream->time_base);
+          enc_pkt->pos = -1;
+
+          av_interleaved_write_frame(out_ctx, enc_pkt);
+          av_packet_unref(enc_pkt);
+        }
+      }
+    }
+
     av_write_trailer(out_ctx);
     success = 1;
+
+    if(audio_metadata.node_count > 0 && success)
+    {
+      String8 cache_dir = str8_chop_last_slash(output_path);
+      String8 streams_path = str8f(temp.arena, "%S/streams.txt", cache_dir);
+      String8 audio_meta_content = str8_list_join(temp.arena, audio_metadata, 0);
+
+      // Append to streams file (subtitle metadata may have been written first)
+      OS_Handle meta_file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append, streams_path);
+      if(meta_file.u64[0] != 0)
+      {
+        os_file_write(meta_file, rng_1u64(0, audio_meta_content.size), audio_meta_content.str);
+        os_file_close(meta_file);
+      }
+    }
   }
 
 cleanup:
+  for(u32 i = 0; i < in_ctx->nb_streams; i += 1)
+  {
+    if(transcode_info[i].needs_transcode)
+    {
+      if(transcode_info[i].enc_frame != 0) av_frame_free(&transcode_info[i].enc_frame);
+      if(transcode_info[i].dec_frame != 0) av_frame_free(&transcode_info[i].dec_frame);
+      if(transcode_info[i].swr_ctx != 0) swr_free(&transcode_info[i].swr_ctx);
+      if(transcode_info[i].enc_ctx != 0) avcodec_free_context(&transcode_info[i].enc_ctx);
+      if(transcode_info[i].dec_ctx != 0) avcodec_free_context(&transcode_info[i].dec_ctx);
+    }
+  }
+  if(enc_pkt != 0) av_packet_free(&enc_pkt);
   if(pkt != 0) av_packet_free(&pkt);
   if(opts != 0) av_dict_free(&opts);
   if(out_ctx != 0)
@@ -1655,7 +2085,6 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
   {
     String8 media_path = str8_skip(req->path, 7);
 
-    // Find the LAST slash to separate file path from resource
     String8 file_part = str8_chop_last_slash(media_path);
     String8 resource = str8_skip_last_slash(media_path);
 
@@ -1673,20 +2102,45 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
         String8 cache_dir = get_cache_dir(arena, file_path);
         String8List subtitle_files = find_subtitle_files(arena, cache_dir);
 
+        StreamMetaArray streams = parse_stream_metadata(arena, cache_dir);
+
         String8List lines = {0};
         for(String8Node *n = subtitle_files.first; n != 0; n = n->next)
         {
           String8 filename = n->string;
-          u64 dot_pos = str8_find_needle(filename, 0, str8_lit("."), 0);
-          if(dot_pos < filename.size)
+          u64 first_dot = str8_find_needle(filename, 0, str8_lit("."), 0);
+          if(first_dot < filename.size)
           {
-            u64 second_dot = str8_find_needle(filename, dot_pos + 1, str8_lit("."), 0);
+            u64 second_dot = str8_find_needle(filename, first_dot + 1, str8_lit("."), 0);
             if(second_dot < filename.size)
             {
-              String8 lang = str8_substr(filename, rng_1u64(dot_pos + 1, second_dot));
+              String8 index_str = str8_substr(filename, rng_1u64(first_dot + 1, second_dot));
+              u32 index = (u32)u64_from_str8(index_str, 10);
+
+              String8 lang = str8_lit("und");
+              String8 title = str8_zero();
+              for(u64 i = 0; i < streams.count; i += 1)
+              {
+                StreamMeta *s = &streams.items[i];
+                if(!s->is_audio && s->stream_idx == index)
+                {
+                  lang = s->lang;
+                  title = s->metadata;
+                  break;
+                }
+              }
+
+              if(str8_match(lang, str8_lit("und"), 0))
+              {
+                u64 third_dot = str8_find_needle(filename, second_dot + 1, str8_lit("."), 0);
+                lang = str8_substr(filename, rng_1u64(second_dot + 1, third_dot));
+              }
+
               String8 encoded_file = url_encode(arena, file);
               String8 url = str8f(arena, "/media/%S/%S", encoded_file, filename);
-              str8_list_pushf(arena, &lines, "%S %S\n", lang, url);
+
+              String8 title_field = title.size > 0 ? title : str8_lit("-");
+              str8_list_pushf(arena, &lines, "%S\t%S\t%S\n", lang, title_field, url);
             }
           }
         }
