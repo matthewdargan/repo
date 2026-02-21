@@ -43,8 +43,7 @@ enum
   OS_AccessFlag_Read = (1 << 0),
   OS_AccessFlag_Write = (1 << 1),
   OS_AccessFlag_Append = (1 << 2),
-  OS_AccessFlag_ShareRead = (1 << 3),
-  OS_AccessFlag_ShareWrite = (1 << 4),
+  OS_AccessFlag_Truncate = (1 << 3),
 };
 
 ////////////////////////////////

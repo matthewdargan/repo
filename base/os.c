@@ -20,7 +20,7 @@ os_handle_match(OS_Handle a, OS_Handle b)
 internal String8
 os_data_from_file_path(Arena *arena, String8 path)
 {
-  OS_Handle file = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
+  OS_Handle file = os_file_open(OS_AccessFlag_Read, path);
   OS_FileProperties props = os_properties_from_file(file);
   String8 data = os_string_from_file_range(arena, file, rng_1u64(0, props.size));
   os_file_close(file);
@@ -220,17 +220,21 @@ os_file_open(OS_AccessFlags flags, String8 path)
   {
     lnx_flags = O_RDWR;
   }
-  else if(flags & OS_AccessFlag_Write)
-  {
-    lnx_flags = O_WRONLY;
-  }
   else if(flags & OS_AccessFlag_Read)
   {
     lnx_flags = O_RDONLY;
   }
+  else if(flags & OS_AccessFlag_Write)
+  {
+    lnx_flags = O_WRONLY;
+  }
   if(flags & OS_AccessFlag_Append)
   {
     lnx_flags |= O_APPEND;
+  }
+  if(flags & OS_AccessFlag_Truncate)
+  {
+    lnx_flags |= O_TRUNC;
   }
   if(flags & (OS_AccessFlag_Write | OS_AccessFlag_Append))
   {

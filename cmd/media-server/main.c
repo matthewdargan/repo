@@ -50,6 +50,8 @@ struct WatchProgress
   String8 file_path;
   f64 position_seconds;
   u64 last_watched_timestamp;
+  String8 subtitle_lang;
+  String8 audio_lang;
   WatchProgress *next;
 };
 
@@ -827,8 +829,7 @@ internal void
 handle_player(OS_Handle socket, String8 file_param, Arena *arena)
 {
   String8 video_path = str8f(arena, "%S/%S", media_root_path, file_param);
-  u64 hash = hash_string(video_path);
-  String8 cache_dir = str8f(arena, "%S/%llu", cache_root_path, hash);
+  String8 cache_dir = get_cache_dir(arena, video_path);
 
   String8 html = str8f(arena,
     "<!DOCTYPE html>\n"
@@ -1026,11 +1027,16 @@ handle_player(OS_Handle socket, String8 file_param, Arena *arena)
     "      player.initialize(video, manifestUrl, true);\n"
     "      \n"
     "      var file = urlParams.get('file');\n"
+    "      var savedSubtitle = '';\n"
+    "      var savedAudio = '';\n"
     "      if(file) {\n"
     "        fetch('/api/progress?file=' + encodeURIComponent(file))\n"
     "          .then(function(r) { return r.text(); })\n"
-    "          .then(function(posText) {\n"
-    "            var position = parseFloat(posText);\n"
+    "          .then(function(text) {\n"
+    "            var parts = text.split(' ');\n"
+    "            var position = parseFloat(parts[0]);\n"
+    "            savedSubtitle = parts[1] && parts[1] !== '-' ? parts[1] : '';\n"
+    "            savedAudio = parts[2] && parts[2] !== '-' ? parts[2] : '';\n"
     "            if(position > 5) {\n"
     "              video.addEventListener('loadedmetadata', function() {\n"
     "                video.currentTime = position;\n"
@@ -1040,14 +1046,49 @@ handle_player(OS_Handle socket, String8 file_param, Arena *arena)
     "          .catch(function() {});\n"
     "      }\n"
     "      \n"
+    "      player.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, function() {\n"
+    "        if(savedAudio) {\n"
+    "          var audioTracks = player.getTracksFor('audio');\n"
+    "          for(var i = 0; i < audioTracks.length; i++) {\n"
+    "            if(audioTracks[i].lang === savedAudio) {\n"
+    "              player.setCurrentTrack(audioTracks[i]);\n"
+    "              break;\n"
+    "            }\n"
+    "          }\n"
+    "        }\n"
+    "        if(savedSubtitle) {\n"
+    "          for(var i = 0; i < video.textTracks.length; i++) {\n"
+    "            if(video.textTracks[i].language === savedSubtitle) {\n"
+    "              video.textTracks[i].mode = 'showing';\n"
+    "            } else {\n"
+    "              video.textTracks[i].mode = 'hidden';\n"
+    "            }\n"
+    "          }\n"
+    "        }\n"
+    "      });\n"
+    "      \n"
     "      var lastSaveTime = 0;\n"
     "      video.addEventListener('timeupdate', function() {\n"
     "        var now = Date.now();\n"
     "        if(now - lastSaveTime > 5000) {\n"
     "          lastSaveTime = now;\n"
     "          if(file && video.currentTime > 0) {\n"
-    "            fetch('/api/progress?file=' + encodeURIComponent(file) + '&position=' + video.currentTime)\n"
-    "              .catch(function() {});\n"
+    "            var url = '/api/progress?file=' + encodeURIComponent(file) + '&position=' + video.currentTime;\n"
+    "            var currentAudio = player.getCurrentTrackFor('audio');\n"
+    "            if(!currentAudio || !currentAudio.lang) {\n"
+    "              var audioTracks = player.getTracksFor('audio');\n"
+    "              if(audioTracks.length === 1) currentAudio = audioTracks[0];\n"
+    "            }\n"
+    "            if(currentAudio && currentAudio.lang) {\n"
+    "              url += '&audio=' + encodeURIComponent(currentAudio.lang);\n"
+    "            }\n"
+    "            for(var i = 0; i < video.textTracks.length; i++) {\n"
+    "              if(video.textTracks[i].mode === 'showing') {\n"
+    "                url += '&subtitle=' + encodeURIComponent(video.textTracks[i].language);\n"
+    "                break;\n"
+    "              }\n"
+    "            }\n"
+    "            fetch(url).catch(function() {});\n"
     "          }\n"
     "        }\n"
     "      });\n"
@@ -1074,13 +1115,14 @@ handle_player(OS_Handle socket, String8 file_param, Arena *arena)
     "      menu.style.cssText = 'position:fixed;left:'+x+'px;top:'+y+'px;background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:4px 0;font-family:sans-serif;font-size:14px;z-index:10000;min-width:150px;box-shadow:0 2px 8px rgba(0,0,0,0.5)';\n"
     "      \n"
     "      var audioTracks = player.getTracksFor('audio');\n"
-    "      var currentTrack = audioTracks.find(function(t) { return t.enabled; });\n"
+    "      var currentTrack = player.getCurrentTrackFor('audio');\n"
     "      \n"
     "      audioTracks.forEach(function(track) {\n"
     "        var item = document.createElement('div');\n"
     "        var lang = (track.lang || 'unknown').toUpperCase();\n"
     "        var label = track.labels && track.labels[0] ? track.labels[0].text : lang;\n"
-    "        item.textContent = (track.enabled ? '✓ ' : '  ') + label;\n"
+    "        var isCurrent = currentTrack && track.index === currentTrack.index;\n"
+    "        item.textContent = (isCurrent ? '✓ ' : '  ') + label;\n"
     "        item.style.cssText = 'padding:8px 16px;cursor:pointer;color:#ededed';\n"
     "        item.onmouseover = function() { this.style.background = '#2a2a2a'; };\n"
     "        item.onmouseout = function() { this.style.background = 'transparent'; };\n"
@@ -1126,23 +1168,11 @@ parse_episode_info(Arena *arena, String8 file_path)
   EpisodeInfo info = {0};
   (void)arena;
 
-  u64 last_slash = file_path.size;
-  for(u64 i = file_path.size; i > 0; i -= 1)
-  {
-    if(file_path.str[i - 1] == '/')
-    {
-      last_slash = i - 1;
-      break;
-    }
-  }
+  info.dir_path = str8_chop_last_slash(file_path);
+  info.filename = str8_skip_last_slash(file_path);
 
-  if(last_slash < file_path.size)
-  {
-    info.dir_path = str8_prefix(file_path, last_slash);
-    info.filename = str8_skip(file_path, last_slash + 1);
-
-    // Look for S##E## or S##E### pattern (need at least 5 chars: S##E#)
-    if(info.filename.size >= 5)
+  // Look for S##E## or S##E### pattern (need at least 5 chars: S##E#)
+  if(info.filename.size >= 5)
     {
       for(u64 i = 0; i <= info.filename.size - 5; i += 1)
       {
@@ -1174,7 +1204,6 @@ parse_episode_info(Arena *arena, String8 file_path)
         }
       }
     }
-  }
 
   return info;
 }
@@ -1382,19 +1411,10 @@ handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
         WatchProgress *entry = recent[i];
         String8 encoded_file = url_encode(arena, entry->file_path);
 
-        u64 last_slash = entry->file_path.size;
-        for(u64 j = entry->file_path.size; j > 0; j -= 1)
-        {
-          if(entry->file_path.str[j - 1] == '/')
-          {
-            last_slash = j - 1;
-            break;
-          }
-        }
-        String8 display_name = (last_slash < entry->file_path.size) ?
-          str8_skip(entry->file_path, last_slash + 1) : entry->file_path;
+        String8 dir_path = str8_chop_last_slash(entry->file_path);
+        String8 filename = str8_skip_last_slash(entry->file_path);
 
-        str8_list_pushf(arena, &html,
+        String8 card_html = str8f(arena,
           "<div style=\"background: #111; padding: 0.75rem 1rem; margin-bottom: 0.5rem; border-radius: 4px;\">\n"
           "  <div style=\"display: flex; justify-content: space-between; align-items: center;\">\n"
           "    <div style=\"flex: 1;\">\n"
@@ -1403,7 +1423,8 @@ handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
           "    </div>\n"
           "    <div style=\"display: flex; gap: 0.5rem;\">\n"
           "      <a href=\"/player?file=%S\" style=\"background: #6699cc; color: #fff; padding: 0.5rem 1rem; border-radius: 4px; text-decoration: none; font-size: 0.85rem;\">Resume</a>\n",
-          display_name, entry->file_path, encoded_file);
+          filename, dir_path, encoded_file);
+        str8_list_push(arena, &html, card_html);
 
         // Check for next episode
         String8 next_episode = find_next_episode(arena, entry->file_path);
@@ -1415,10 +1436,12 @@ handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
             encoded_next);
         }
 
-        str8_list_push(arena, &html, str8_lit(
+        str8_list_pushf(arena, &html,
+          "      <button onclick=\"deleteProgress('%S')\" style=\"background: #333; color: #d33; padding: 0.25rem 0.5rem; border: none; border-radius: 2px; cursor: pointer; font-size: 1rem; line-height: 1;\" title=\"Remove from list\">\u00D7</button>\n"
           "    </div>\n"
           "  </div>\n"
-          "</div>\n"));
+          "</div>\n",
+          encoded_file);
       }
 
       str8_list_push(arena, &html, str8_lit("</section>\n"));
@@ -1472,7 +1495,18 @@ handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
     closedir(dir);
   }
 
-  str8_list_push(arena, &html, str8_lit("</tbody>\n</table>\n</main>\n</body>\n</html>\n"));
+  str8_list_push(arena, &html, str8_lit(
+    "</tbody>\n</table>\n</main>\n"
+    "<script>\n"
+    "function deleteProgress(file) {\n"
+    "  if(confirm('Remove this item from Continue Watching?')) {\n"
+    "    fetch('/api/progress?file=' + file + '&delete=1')\n"
+    "      .then(function() { location.reload(); })\n"
+    "      .catch(function() { alert('Failed to delete'); });\n"
+    "  }\n"
+    "}\n"
+    "</script>\n"
+    "</body>\n</html>\n"));
   String8 html_str = str8_list_join(arena, html, 0);
   send_response(socket, arena, str8_lit("text/html"), html_str);
 }
@@ -1495,28 +1529,28 @@ watch_progress_load(void)
       String8 line = str8_skip_chop_whitespace(n->string);
       if(line.size == 0) continue;
 
-      u64 space1 = str8_find_needle(line, 0, str8_lit(" "), 0);
-      if(space1 < line.size)
+      String8List fields = str8_split(scratch.arena, line, (u8 *)"\t", 1, 0);
+      if(fields.node_count >= 5)
       {
-        String8 file = str8_prefix(line, space1);
-        String8 rest = str8_skip(line, space1 + 1);
-        u64 space2 = str8_find_needle(rest, 0, str8_lit(" "), 0);
+        String8Node *field_node = fields.first;
+        String8 file = field_node->string; field_node = field_node->next;
+        String8 pos_str = field_node->string; field_node = field_node->next;
+        String8 time_str = field_node->string; field_node = field_node->next;
+        String8 sub_str = field_node->string; field_node = field_node->next;
+        String8 aud_str = field_node->string;
 
-        f64 position = f64_from_str8(rest);
-        u64 timestamp = 0;
-        if(space2 < rest.size)
-        {
-          String8 pos_str = str8_prefix(rest, space2);
-          String8 time_str = str8_skip(rest, space2 + 1);
-          position = f64_from_str8(pos_str);
-          timestamp = u64_from_str8(time_str, 10);
-        }
+        f64 position = f64_from_str8(pos_str);
+        u64 timestamp = u64_from_str8(time_str, 10);
+        String8 subtitle_lang = str8_match(sub_str, str8_lit("-"), 0) ? str8_zero() : sub_str;
+        String8 audio_lang = str8_match(aud_str, str8_lit("-"), 0) ? str8_zero() : aud_str;
 
         u64 hash = hash_string(file) % watch_progress->bucket_count;
         WatchProgress *entry = push_array(watch_progress->arena, WatchProgress, 1);
         entry->file_path = str8_copy(watch_progress->arena, file);
         entry->position_seconds = position;
         entry->last_watched_timestamp = timestamp;
+        entry->subtitle_lang = str8_copy(watch_progress->arena, subtitle_lang);
+        entry->audio_lang = str8_copy(watch_progress->arena, audio_lang);
         entry->next = watch_progress->buckets[hash];
         watch_progress->buckets[hash] = entry;
       }
@@ -1538,14 +1572,16 @@ watch_progress_save(void)
     {
       for(WatchProgress *entry = watch_progress->buckets[i]; entry != 0; entry = entry->next)
       {
-        str8_list_pushf(scratch.arena, &lines, "%S %.2f %llu\n",
-                       entry->file_path, entry->position_seconds, entry->last_watched_timestamp);
+        String8 sub = entry->subtitle_lang.size > 0 ? entry->subtitle_lang : str8_lit("-");
+        String8 aud = entry->audio_lang.size > 0 ? entry->audio_lang : str8_lit("-");
+        str8_list_pushf(scratch.arena, &lines, "%S\t%.2f\t%llu\t%S\t%S\n",
+                       entry->file_path, entry->position_seconds, entry->last_watched_timestamp, sub, aud);
       }
     }
   }
 
   String8 content = str8_list_join(scratch.arena, lines, 0);
-  OS_Handle file = os_file_open(OS_AccessFlag_Write, progress_path);
+  OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Truncate, progress_path);
   if(file.u64[0] != 0)
   {
     os_file_write(file, rng_1u64(0, content.size), content.str);
@@ -1554,10 +1590,10 @@ watch_progress_save(void)
   scratch_end(scratch);
 }
 
-internal f64
-watch_progress_get(String8 file)
+internal WatchProgress *
+watch_progress_find(String8 file)
 {
-  f64 result = 0.0;
+  WatchProgress *result = 0;
   u64 hash = hash_string(file) % watch_progress->bucket_count;
 
   MutexScope(watch_progress->mutex)
@@ -1566,7 +1602,7 @@ watch_progress_get(String8 file)
     {
       if(str8_match(entry->file_path, file, 0))
       {
-        result = entry->position_seconds;
+        result = entry;
         break;
       }
     }
@@ -1575,8 +1611,34 @@ watch_progress_get(String8 file)
 }
 
 internal void
-watch_progress_set(String8 file, f64 position)
+watch_progress_delete(String8 file)
 {
+  u64 hash = hash_string(file) % watch_progress->bucket_count;
+
+  MutexScope(watch_progress->mutex)
+  {
+    WatchProgress **prev_ptr = &watch_progress->buckets[hash];
+    WatchProgress *entry = *prev_ptr;
+    while(entry != 0)
+    {
+      if(str8_match(entry->file_path, file, 0))
+      {
+        *prev_ptr = entry->next;
+        break;
+      }
+      prev_ptr = &entry->next;
+      entry = entry->next;
+    }
+  }
+
+  watch_progress_save();
+}
+
+internal void
+watch_progress_set(String8 file, f64 position, String8 subtitle_lang, String8 audio_lang)
+{
+  Temp scratch = scratch_begin(0, 0);
+  EpisodeInfo current_ep = parse_episode_info(scratch.arena, file);
   u64 hash = hash_string(file) % watch_progress->bucket_count;
 
   MutexScope(watch_progress->mutex)
@@ -1601,8 +1663,39 @@ watch_progress_set(String8 file, f64 position)
 
     entry->position_seconds = position;
     entry->last_watched_timestamp = os_now_microseconds() / 1000000;
+    entry->subtitle_lang = str8_copy(watch_progress->arena, subtitle_lang);
+    entry->audio_lang = str8_copy(watch_progress->arena, audio_lang);
+
+    // Clean up earlier episodes in the same season
+    if(current_ep.is_episode)
+    {
+      for(u64 i = 0; i < watch_progress->bucket_count; i += 1)
+      {
+        WatchProgress **prev_ptr = &watch_progress->buckets[i];
+        WatchProgress *e = *prev_ptr;
+        while(e != 0)
+        {
+          EpisodeInfo other_ep = parse_episode_info(scratch.arena, e->file_path);
+          b32 should_remove = (other_ep.is_episode &&
+                               str8_match(other_ep.dir_path, current_ep.dir_path, 0) &&
+                               other_ep.season == current_ep.season &&
+                               other_ep.episode < current_ep.episode);
+          if(should_remove)
+          {
+            *prev_ptr = e->next;
+            e = *prev_ptr;
+          }
+          else
+          {
+            prev_ptr = &e->next;
+            e = e->next;
+          }
+        }
+      }
+    }
   }
 
+  scratch_end(scratch);
   watch_progress_save();
 }
 
@@ -1723,17 +1816,28 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
   {
     String8 file_param = get_query_param(arena, req->query, str8_lit("file"));
     String8 pos_param = get_query_param(arena, req->query, str8_lit("position"));
+    String8 sub_param = get_query_param(arena, req->query, str8_lit("subtitle"));
+    String8 aud_param = get_query_param(arena, req->query, str8_lit("audio"));
+    String8 delete_param = get_query_param(arena, req->query, str8_lit("delete"));
 
-    if(file_param.size > 0 && pos_param.size > 0)
+    if(file_param.size > 0 && delete_param.size > 0)
+    {
+      watch_progress_delete(file_param);
+      send_response(socket, arena, str8_lit("text/plain"), str8_lit("ok"));
+    }
+    else if(file_param.size > 0 && pos_param.size > 0)
     {
       f64 position = f64_from_str8(pos_param);
-      watch_progress_set(file_param, position);
+      watch_progress_set(file_param, position, sub_param, aud_param);
       send_response(socket, arena, str8_lit("text/plain"), str8_lit("ok"));
     }
     else if(file_param.size > 0)
     {
-      f64 position = watch_progress_get(file_param);
-      String8 response = str8f(arena, "%.2f", position);
+      WatchProgress *progress = watch_progress_find(file_param);
+      f64 position = progress ? progress->position_seconds : 0.0;
+      String8 subtitle = progress && progress->subtitle_lang.size > 0 ? progress->subtitle_lang : str8_lit("-");
+      String8 audio = progress && progress->audio_lang.size > 0 ? progress->audio_lang : str8_lit("-");
+      String8 response = str8f(arena, "%.2f %S %S", position, subtitle, audio);
       send_response(socket, arena, str8_lit("text/plain"), response);
     }
     else
@@ -1746,20 +1850,12 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
     String8 media_path = str8_skip(req->path, 7);
 
     // Find the LAST slash to separate file path from resource
-    u64 slash_pos = media_path.size;
-    for(u64 i = media_path.size; i > 0; i -= 1)
-    {
-      if(media_path.str[i - 1] == '/')
-      {
-        slash_pos = i - 1;
-        break;
-      }
-    }
+    String8 file_part = str8_chop_last_slash(media_path);
+    String8 resource = str8_skip_last_slash(media_path);
 
-    if(slash_pos < media_path.size)
+    if(file_part.size > 0)
     {
-      String8 file = url_decode(arena, str8_prefix(media_path, slash_pos));
-      String8 resource = str8_skip(media_path, slash_pos + 1);
+      String8 file = url_decode(arena, file_part);
 
       if(str8_match(resource, str8_lit("manifest.mpd"), 0))
       {
@@ -1768,8 +1864,7 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
       else if(str8_match(resource, str8_lit("subtitles.txt"), 0))
       {
         String8 file_path = str8f(arena, "%S/%S", media_root_path, file);
-        u64 hash = hash_string(file_path);
-        String8 cache_dir = str8f(arena, "%S/%llu", cache_root_path, hash);
+        String8 cache_dir = get_cache_dir(arena, file_path);
         String8List subtitle_files = find_subtitle_files(arena, cache_dir);
 
         String8List lines = {0};
@@ -1795,8 +1890,7 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
       else if(str8_find_needle(resource, 0, str8_lit(".vtt"), 0) == resource.size - 4)
       {
         String8 file_path = str8f(arena, "%S/%S", media_root_path, file);
-        u64 hash = hash_string(file_path);
-        String8 cache_dir = str8f(arena, "%S/%llu", cache_root_path, hash);
+        String8 cache_dir = get_cache_dir(arena, file_path);
         String8 vtt_path = str8f(arena, "%S/%S", cache_dir, resource);
 
         String8 subtitle_content = read_small_file(arena, vtt_path, MB(1));
