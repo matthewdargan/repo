@@ -91,6 +91,8 @@ Modular flake configuration:
 
 ## Coding Standards
 
+### Core Abstractions
+
 When writing code, always use base layer abstractions:
 
 - Arena allocators (`arena_alloc`, `temp_begin`/`temp_end`) instead of malloc/free
@@ -98,6 +100,49 @@ When writing code, always use base layer abstractions:
 - Explicit types (u8, u16, u32, u64, s8, s16, s32, s64, f32, f64, b32) instead of int/long/etc
 - Unity builds - add new files to the layer's `inc.h` (for `.h` files) and `inc.c` (for `.c` files)
 - Follow namespace conventions for the layer you're working in
+
+### Code Formatting
+
+The codebase follows semantic compression principles to maximize information density while maintaining readability. This style emphasizes using horizontal space effectively and minimizing unnecessary vertical whitespace.
+
+**Key formatting rules:**
+
+- **Even spacing between top-level declarations** - Always maintain blank lines between functions, structs, and global declarations
+- **Blank lines separate logical phases** - Use blank lines within functions to separate distinct logical blocks
+- **Align related assignments** - Vertically align struct field initializers and related variable declarations
+- **Condense early returns** - Put simple early returns on one line: `if(condition) { return value; }`
+- **Early returns preferred** - Fail fast and reduce nesting depth (not single return point)
+- **Section headers** - Use `//~` prefix for major section headers, `//-` for sub-sections
+
+**Example:**
+
+```c
+internal Result
+process_data(Arena *arena, Input *input)
+{
+  if(input == 0) { return result_zero(); }
+
+  u32 count      = input->count;
+  u32 capacity   = input->capacity;
+  u8 *buffer     = input->buffer;
+
+  for(u64 i = 0; i < count; i += 1)
+  {
+    Message tx   = msg_zero();
+    tx.type      = Msg_Process;
+    tx.index     = i;
+    tx.data      = buffer + i * MSG_SIZE;
+
+    if(!send_message(arena, tx)) { return result_zero(); }
+  }
+
+  return result;
+}
+```
+
+**References:**
+- [Semantic Compression](https://caseymuratori.com/blog_0015) - Casey Muratori's explanation of the philosophy
+- [RAD Debugger](https://github.com/EpicGamesExt/raddebugger) - Codebase demonstrating this style
 
 ## Development Environment
 

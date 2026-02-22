@@ -46,7 +46,7 @@ struct Auth_Conv
 typedef enum
 {
   Auth_Proto_Ed25519 = 1,
-  Auth_Proto_FIDO2 = 2,
+  Auth_Proto_FIDO2   = 2,
 } Auth_Proto;
 
 ////////////////////////////////

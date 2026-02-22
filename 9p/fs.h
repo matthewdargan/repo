@@ -104,8 +104,7 @@ struct FidAuxiliary9P
 ////////////////////////////////
 //~ Context Management
 
-internal FsContext9P *fs9p_context_alloc(Arena *arena, String8 root_path, String8 tmp_path, b32 readonly,
-                                         StorageBackend9P backend);
+internal FsContext9P *fs9p_context_alloc(Arena *arena, String8 root_path, String8 tmp_path, b32 readonly, StorageBackend9P backend);
 
 ////////////////////////////////
 //~ Path Operations
@@ -137,16 +136,14 @@ internal b32 fs9p_wstat(FsContext9P *ctx, String8 path, Dir9P *dir);
 //~ Directory Operations
 
 internal b32 fs9p_opendir(FsContext9P *ctx, String8 path, DirIterator9P *iter);
-internal String8 fs9p_readdir(Arena *result_arena, Arena *cache_arena, FsContext9P *ctx, DirIterator9P *iter,
-                              String8 *cache, u64 offset, u64 count);
+internal String8 fs9p_readdir(Arena *result_arena, Arena *cache_arena, FsContext9P *ctx, DirIterator9P *iter, String8 *cache, u64 offset, u64 count);
 internal void fs9p_closedir(DirIterator9P *iter);
 
 ////////////////////////////////
 //~ Temporary Storage Helpers
 
 internal TempNode9P *temp9p_node_lookup(TempNode9P *root, String8 path);
-internal TempNode9P *temp9p_node_create(Arena *arena, FsContext9P *ctx, String8 path, String8 name, b32 is_dir,
-                                        u32 mode);
+internal TempNode9P *temp9p_node_create(Arena *arena, FsContext9P *ctx, String8 path, String8 name, b32 is_dir, u32 mode);
 
 ////////////////////////////////
 //~ Temporary Storage Operations

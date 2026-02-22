@@ -42,11 +42,8 @@ struct Auth_Ed25519_VerifyParams
 //~ Ed25519 Operations
 
 internal b32 auth_ed25519_generate_challenge(u8 challenge[32]);
-internal b32 auth_ed25519_register_credential(Arena *arena, Auth_Ed25519_RegisterParams params,
-                                              Auth_Key *out_key, String8 *out_error);
-internal b32 auth_ed25519_sign_challenge(Auth_Ed25519_SignParams *params,
-                                         u8 signature[64], String8 *out_error);
-internal b32 auth_ed25519_verify_signature(Auth_Ed25519_VerifyParams *params,
-                                           String8 *out_error);
+internal b32 auth_ed25519_register_credential(Arena *arena, Auth_Ed25519_RegisterParams params, Auth_Key *out_key, String8 *out_error);
+internal b32 auth_ed25519_sign_challenge(Auth_Ed25519_SignParams *params, u8 signature[64], String8 *out_error);
+internal b32 auth_ed25519_verify_signature(Auth_Ed25519_VerifyParams *params, String8 *out_error);
 
 #endif // AUTH_ED25519_H

@@ -9,25 +9,25 @@ read_only global String8 version_9p = str8_lit_comp("9P2000");
 ////////////////////////////////
 //~ Encoding Sizes
 
-#define P9_MESSAGE_SIZE_FIELD_SIZE 4
-#define P9_MESSAGE_TYPE_FIELD_SIZE 1
-#define P9_MESSAGE_TAG_FIELD_SIZE 2
-#define P9_MESSAGE_MINIMUM_SIZE (P9_MESSAGE_SIZE_FIELD_SIZE + P9_MESSAGE_TYPE_FIELD_SIZE + P9_MESSAGE_TAG_FIELD_SIZE)
-#define P9_QID_ENCODED_SIZE 13
-#define P9_STRING8_SIZE_FIELD_SIZE 2
+#define P9_MESSAGE_SIZE_FIELD_SIZE      4
+#define P9_MESSAGE_TYPE_FIELD_SIZE      1
+#define P9_MESSAGE_TAG_FIELD_SIZE       2
+#define P9_MESSAGE_MINIMUM_SIZE         (P9_MESSAGE_SIZE_FIELD_SIZE + P9_MESSAGE_TYPE_FIELD_SIZE + P9_MESSAGE_TAG_FIELD_SIZE)
+#define P9_QID_ENCODED_SIZE             13
+#define P9_STRING8_SIZE_FIELD_SIZE      2
 
 ////////////////////////////////
 //~ Protocol Limits
 
-#define P9_MAX_WALK_ELEM_COUNT 16
-#define P9_STAT_DATA_FIXED_SIZE (2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4 + 8)
-#define P9_TAG_NONE max_u16
-#define P9_FID_NONE max_u32
-#define P9_OPEN_MODE_NONE max_u32
-#define P9_MESSAGE_HEADER_SIZE 24
-#define P9_IOUNIT_DEFAULT MB(1)
-#define P9_DIR_ENTRY_MAX MB(1)
-#define P9_DIR_BUFFER_MAX (P9_DIR_ENTRY_MAX * 16)
+#define P9_MAX_WALK_ELEM_COUNT          16
+#define P9_STAT_DATA_FIXED_SIZE         (2 + 2 + 4 + 1 + 4 + 8 + 4 + 4 + 4 + 8)
+#define P9_TAG_NONE                     max_u16
+#define P9_FID_NONE                     max_u32
+#define P9_OPEN_MODE_NONE               max_u32
+#define P9_MESSAGE_HEADER_SIZE          24
+#define P9_IOUNIT_DEFAULT               MB(1)
+#define P9_DIR_ENTRY_MAX                MB(1)
+#define P9_DIR_BUFFER_MAX               (P9_DIR_ENTRY_MAX * 16)
 
 ////////////////////////////////
 //~ Protocol Message Types
@@ -109,31 +109,31 @@ enum
 {
   Msg9P_Tversion = 100,
   Msg9P_Rversion = 101,
-  Msg9P_Tauth = 102,
-  Msg9P_Rauth = 103,
-  Msg9P_Tattach = 104,
-  Msg9P_Rattach = 105,
-  Msg9P_Rerror = 107,
-  Msg9P_Tflush = 108,
-  Msg9P_Rflush = 109,
-  Msg9P_Twalk = 110,
-  Msg9P_Rwalk = 111,
-  Msg9P_Topen = 112,
-  Msg9P_Ropen = 113,
-  Msg9P_Tcreate = 114,
-  Msg9P_Rcreate = 115,
-  Msg9P_Tread = 116,
-  Msg9P_Rread = 117,
-  Msg9P_Twrite = 118,
-  Msg9P_Rwrite = 119,
-  Msg9P_Tclunk = 120,
-  Msg9P_Rclunk = 121,
-  Msg9P_Tremove = 122,
-  Msg9P_Rremove = 123,
-  Msg9P_Tstat = 124,
-  Msg9P_Rstat = 125,
-  Msg9P_Twstat = 126,
-  Msg9P_Rwstat = 127,
+  Msg9P_Tauth    = 102,
+  Msg9P_Rauth    = 103,
+  Msg9P_Tattach  = 104,
+  Msg9P_Rattach  = 105,
+  Msg9P_Rerror   = 107,
+  Msg9P_Tflush   = 108,
+  Msg9P_Rflush   = 109,
+  Msg9P_Twalk    = 110,
+  Msg9P_Rwalk    = 111,
+  Msg9P_Topen    = 112,
+  Msg9P_Ropen    = 113,
+  Msg9P_Tcreate  = 114,
+  Msg9P_Rcreate  = 115,
+  Msg9P_Tread    = 116,
+  Msg9P_Rread    = 117,
+  Msg9P_Twrite   = 118,
+  Msg9P_Rwrite   = 119,
+  Msg9P_Tclunk   = 120,
+  Msg9P_Rclunk   = 121,
+  Msg9P_Tremove  = 122,
+  Msg9P_Rremove  = 123,
+  Msg9P_Tstat    = 124,
+  Msg9P_Rstat    = 125,
+  Msg9P_Twstat   = 126,
+  Msg9P_Rwstat   = 127,
 };
 
 ////////////////////////////////
@@ -142,11 +142,11 @@ enum
 typedef u32 P9_OpenFlags;
 enum
 {
-  P9_OpenFlag_Read = 0,
-  P9_OpenFlag_Write = 1,
-  P9_OpenFlag_ReadWrite = 2,
-  P9_OpenFlag_Execute = 3,
-  P9_OpenFlag_Truncate = 16,
+  P9_OpenFlag_Read          = 0,
+  P9_OpenFlag_Write         = 1,
+  P9_OpenFlag_ReadWrite     = 2,
+  P9_OpenFlag_Execute       = 3,
+  P9_OpenFlag_Truncate      = 16,
   P9_OpenFlag_RemoveOnClose = 64,
 };
 
@@ -156,10 +156,10 @@ enum
 typedef u32 P9_AccessFlags;
 enum
 {
-  P9_AccessFlag_Exist = 0,
+  P9_AccessFlag_Exist   = 0,
   P9_AccessFlag_Execute = 1,
-  P9_AccessFlag_Write = 2,
-  P9_AccessFlag_Read = 4,
+  P9_AccessFlag_Write   = 2,
+  P9_AccessFlag_Read    = 4,
 };
 
 ////////////////////////////////

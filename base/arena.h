@@ -5,12 +5,12 @@
 //~ Arena Types
 
 #define ARENA_HEADER_SIZE 128
-#define ARENA_FREE_LIST 1
+#define ARENA_FREE_LIST   1
 
 typedef u64 ArenaFlags;
 enum
 {
-  ArenaFlag_NoChain = (1 << 0),
+  ArenaFlag_NoChain    = (1 << 0),
   ArenaFlag_LargePages = (1 << 1),
 };
 
@@ -53,7 +53,7 @@ struct Temp
 
 read_only global ArenaFlags arena_default_flags = 0;
 read_only global u64 arena_default_reserve_size = MB(64);
-read_only global u64 arena_default_commit_size = KB(64);
+read_only global u64 arena_default_commit_size  = KB(64);
 
 internal Arena *arena_alloc(void);
 internal Arena *arena_alloc_(ArenaParams params);
@@ -67,8 +67,8 @@ internal Temp temp_begin(Arena *arena);
 internal void temp_end(Temp temp);
 
 #define push_array_no_zero_aligned(a, T, c, align) (T *)arena_push((a), sizeof(T) * (c), (align), (0))
-#define push_array_aligned(a, T, c, align) (T *)arena_push((a), sizeof(T) * (c), (align), (1))
-#define push_array_no_zero(a, T, c) push_array_no_zero_aligned((a), T, (c), Max(8, AlignOf(T)))
-#define push_array(a, T, c) push_array_aligned(a, T, c, Max(8, AlignOf(T)))
+#define push_array_aligned(a, T, c, align)         (T *)arena_push((a), sizeof(T) * (c), (align), (1))
+#define push_array_no_zero(a, T, c)                push_array_no_zero_aligned((a), T, (c), Max(8, AlignOf(T)))
+#define push_array(a, T, c)                        push_array_aligned(a, T, c, Max(8, AlignOf(T)))
 
 #endif // ARENA_H

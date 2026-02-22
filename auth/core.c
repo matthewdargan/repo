@@ -4,9 +4,9 @@
 internal String8
 hex_from_bytes(Arena *arena, u8 *bytes, u64 len)
 {
-  String8 result = str8_zero();
-  result.size = len * 2;
-  result.str = push_array(arena, u8, result.size);
+  String8 result          = str8_zero();
+  result.size             = len * 2;
+  result.str              = push_array(arena, u8, result.size);
   for(u64 i = 0; i < len; i += 1)
   {
     result.str[i * 2 + 0] = integer_symbols[(bytes[i] >> 4) & 0xF];
@@ -19,24 +19,22 @@ internal String8
 bytes_from_hex(Arena *arena, String8 hex)
 {
   String8 result = str8_zero();
-  result.size = hex.size / 2;
-  result.str = push_array(arena, u8, result.size);
+  result.size    = hex.size / 2;
+  result.str     = push_array(arena, u8, result.size);
+
   for(u64 i = 0; i < result.size; i += 1)
   {
     u8 hi = hex.str[i * 2 + 0];
     u8 lo = hex.str[i * 2 + 1];
-    if(hi >= 128 || lo >= 128)
-    {
-      return str8_zero();
-    }
+    if(hi >= 128 || lo >= 128) { return str8_zero(); }
+
     u8 hi_val = integer_symbol_reverse[hi];
     u8 lo_val = integer_symbol_reverse[lo];
-    if(hi_val == 0xFF || lo_val == 0xFF)
-    {
-      return str8_zero();
-    }
+    if(hi_val == 0xFF || lo_val == 0xFF) { return str8_zero(); }
+
     result.str[i] = (hi_val << 4) | lo_val;
   }
+
   return result;
 }
 
@@ -46,11 +44,11 @@ bytes_from_hex(Arena *arena, String8 hex)
 internal Auth_Conv *
 auth_conv_alloc(Arena *arena, u64 tag, String8 user, String8 auth_id)
 {
-  Auth_Conv *conv = push_array(arena, Auth_Conv, 1);
-  conv->tag = tag;
-  conv->user = str8_copy(arena, user);
-  conv->auth_id = str8_copy(arena, auth_id);
-  conv->state = Auth_State_None;
+  Auth_Conv *conv  = push_array(arena, Auth_Conv, 1);
+  conv->tag        = tag;
+  conv->user       = str8_copy(arena, user);
+  conv->auth_id    = str8_copy(arena, auth_id);
+  conv->state      = Auth_State_None;
   conv->start_time = os_now_unix();
   return conv;
 }
@@ -62,9 +60,9 @@ internal Auth_KeyRing
 auth_keyring_alloc(Arena *arena, u64 capacity)
 {
   Auth_KeyRing ring = {0};
-  ring.arena = arena;
-  ring.capacity = (capacity > 0) ? capacity : 16;
-  ring.keys = push_array(arena, Auth_Key, ring.capacity);
+  ring.arena        = arena;
+  ring.capacity     = (capacity > 0) ? capacity : 16;
+  ring.keys         = push_array(arena, Auth_Key, ring.capacity);
   return ring;
 }
 
@@ -74,48 +72,42 @@ auth_keyring_add(Auth_KeyRing *ring, Auth_Key *key, String8 *out_error)
   String8 error = str8_zero();
   if(!auth_validate_credential_format(key, &error))
   {
-    if(out_error != 0)
-    {
-      *out_error = error;
-    }
+    if(out_error != 0) { *out_error = error; }
     return 0;
   }
 
   if(ring->count >= ring->capacity)
   {
-    u64 new_cap = ring->capacity * 2;
+    u64 new_cap        = ring->capacity * 2;
     Auth_Key *new_keys = push_array(ring->arena, Auth_Key, new_cap);
     MemoryCopy(new_keys, ring->keys, ring->count * sizeof(Auth_Key));
-    ring->keys = new_keys;
+    ring->keys     = new_keys;
     ring->capacity = new_cap;
   }
 
   Auth_Key *dst = &ring->keys[ring->count];
-  dst->type = key->type;
-  dst->user = str8_copy(ring->arena, key->user);
-  dst->auth_id = str8_copy(ring->arena, key->auth_id);
+  dst->type     = key->type;
+  dst->user     = str8_copy(ring->arena, key->user);
+  dst->auth_id  = str8_copy(ring->arena, key->auth_id);
 
   switch(key->type)
   {
-  case Auth_Proto_Ed25519:
-  {
-    MemoryCopy(dst->ed25519_public_key, key->ed25519_public_key, 32);
-    MemoryCopy(dst->ed25519_private_key, key->ed25519_private_key, 32);
-  }
-  break;
+    case Auth_Proto_Ed25519:
+    {
+      MemoryCopy(dst->ed25519_public_key, key->ed25519_public_key, 32);
+      MemoryCopy(dst->ed25519_private_key, key->ed25519_private_key, 32);
+    }break;
 
-  case Auth_Proto_FIDO2:
-  {
-    dst->credential_id_len = key->credential_id_len;
-    MemoryCopy(dst->credential_id, key->credential_id, key->credential_id_len);
-    dst->public_key_len = key->public_key_len;
-    MemoryCopy(dst->public_key, key->public_key, key->public_key_len);
-  }
-  break;
+    case Auth_Proto_FIDO2:
+    {
+      dst->credential_id_len = key->credential_id_len;
+      MemoryCopy(dst->credential_id, key->credential_id, key->credential_id_len);
+      dst->public_key_len = key->public_key_len;
+      MemoryCopy(dst->public_key, key->public_key, key->public_key_len);
+    }break;
   }
 
   ring->count += 1;
-
   return 1;
 }
 
@@ -125,10 +117,7 @@ auth_keyring_lookup(Auth_KeyRing *ring, String8 user, String8 auth_id)
   for(u64 i = 0; i < ring->count; i += 1)
   {
     Auth_Key *key = &ring->keys[i];
-    if(str8_match(key->user, user, 0) && str8_match(key->auth_id, auth_id, 0))
-    {
-      return key;
-    }
+    if(str8_match(key->user, user, 0) && str8_match(key->auth_id, auth_id, 0)) { return key; }
   }
   return 0;
 }
@@ -141,10 +130,7 @@ auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 auth_id, Auth_Prot
     Auth_Key *key = &ring->keys[i];
     if(str8_match(key->user, user, 0) && str8_match(key->auth_id, auth_id, 0) && key->type == type)
     {
-      if(i < ring->count - 1)
-      {
-        MemoryCopy(&ring->keys[i], &ring->keys[i + 1], (ring->count - i - 1) * sizeof(Auth_Key));
-      }
+      if(i < ring->count - 1) { MemoryCopy(&ring->keys[i], &ring->keys[i + 1], (ring->count - i - 1) * sizeof(Auth_Key)); }
       ring->count -= 1;
       return;
     }
@@ -157,37 +143,32 @@ auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 auth_id, Auth_Prot
 internal String8
 auth_keyring_save(Arena *arena, Auth_KeyRing *ring)
 {
-  Temp scratch = scratch_begin(&arena, 1);
+  Temp scratch     = scratch_begin(&arena, 1);
   String8List list = {0};
 
   for(u64 i = 0; i < ring->count; i += 1)
   {
     Auth_Key *key = &ring->keys[i];
-    String8 line = str8_zero();
+    String8 line  = str8_zero();
 
     switch(key->type)
     {
-    case Auth_Proto_Ed25519:
-    {
-      String8 pubkey_hex = hex_from_bytes(scratch.arena, key->ed25519_public_key, 32);
-      String8 privkey_hex = hex_from_bytes(scratch.arena, key->ed25519_private_key, 32);
-      line = str8f(scratch.arena, "ed25519 %S %S %S %S\n", key->user, key->auth_id, pubkey_hex, privkey_hex);
-    }
-    break;
+      case Auth_Proto_Ed25519:
+      {
+        String8 pubkey_hex  = hex_from_bytes(scratch.arena, key->ed25519_public_key, 32);
+        String8 privkey_hex = hex_from_bytes(scratch.arena, key->ed25519_private_key, 32);
+        line                = str8f(scratch.arena, "ed25519 %S %S %S %S\n", key->user, key->auth_id, pubkey_hex, privkey_hex);
+      }break;
 
-    case Auth_Proto_FIDO2:
-    {
-      String8 cred_hex = hex_from_bytes(scratch.arena, key->credential_id, key->credential_id_len);
-      String8 pubkey_hex = hex_from_bytes(scratch.arena, key->public_key, key->public_key_len);
-      line = str8f(scratch.arena, "fido2 %S %S %S %S\n", key->user, key->auth_id, cred_hex, pubkey_hex);
-    }
-    break;
+      case Auth_Proto_FIDO2:
+      {
+        String8 cred_hex   = hex_from_bytes(scratch.arena, key->credential_id, key->credential_id_len);
+        String8 pubkey_hex = hex_from_bytes(scratch.arena, key->public_key, key->public_key_len);
+        line               = str8f(scratch.arena, "fido2 %S %S %S %S\n", key->user, key->auth_id, cred_hex, pubkey_hex);
+      }break;
     }
 
-    if(line.size > 0)
-    {
-      str8_list_push(scratch.arena, &list, line);
-    }
+    if(line.size > 0) { str8_list_push(scratch.arena, &list, line); }
   }
 
   String8 result = str8_list_join(arena, list, 0);
@@ -198,16 +179,13 @@ auth_keyring_save(Arena *arena, Auth_KeyRing *ring)
 internal b32
 auth_keyring_load(Arena *arena, Auth_KeyRing *ring, String8 data)
 {
-  Temp scratch = scratch_begin(&arena, 1);
+  Temp scratch      = scratch_begin(&arena, 1);
   String8List lines = str8_split(scratch.arena, data, (u8 *)"\n", 1, 0);
 
   for(String8Node *n = lines.first; n != 0; n = n->next)
   {
     String8 line = str8_skip_chop_whitespace(n->string);
-    if(line.size == 0)
-    {
-      continue;
-    }
+    if(line.size == 0) { continue; }
 
     String8List parts = str8_split(scratch.arena, line, (u8 *)" ", 1, 0);
     if(parts.node_count != 5)
@@ -216,23 +194,22 @@ auth_keyring_load(Arena *arena, Auth_KeyRing *ring, String8 data)
       return 0;
     }
 
-    String8Node *type_node = parts.first;
-    String8Node *user_node = type_node->next;
+    String8Node *type_node    = parts.first;
+    String8Node *user_node    = type_node->next;
     String8Node *auth_id_node = user_node->next;
-    String8Node *data1_node = auth_id_node->next;
-    String8Node *data2_node = data1_node->next;
+    String8Node *data1_node   = auth_id_node->next;
+    String8Node *data2_node   = data1_node->next;
 
     Auth_Key key = {0};
-    key.user = str8_copy(arena, user_node->string);
-    key.auth_id = str8_copy(arena, auth_id_node->string);
+    key.user     = str8_copy(arena, user_node->string);
+    key.auth_id  = str8_copy(arena, auth_id_node->string);
 
     if(str8_match(type_node->string, str8_lit("ed25519"), 0))
     {
       key.type = Auth_Proto_Ed25519;
 
-      String8 pub_bytes = bytes_from_hex(scratch.arena, data1_node->string);
+      String8 pub_bytes  = bytes_from_hex(scratch.arena, data1_node->string);
       String8 priv_bytes = bytes_from_hex(scratch.arena, data2_node->string);
-
       if(pub_bytes.size != 32 || priv_bytes.size != 32)
       {
         scratch_end(scratch);
@@ -247,8 +224,7 @@ auth_keyring_load(Arena *arena, Auth_KeyRing *ring, String8 data)
       key.type = Auth_Proto_FIDO2;
 
       String8 cred_bytes = bytes_from_hex(scratch.arena, data1_node->string);
-      String8 pub_bytes = bytes_from_hex(scratch.arena, data2_node->string);
-
+      String8 pub_bytes  = bytes_from_hex(scratch.arena, data2_node->string);
       if(cred_bytes.size == 0 || pub_bytes.size == 0 || cred_bytes.size > 256 || pub_bytes.size > 256)
       {
         scratch_end(scratch);
@@ -260,10 +236,7 @@ auth_keyring_load(Arena *arena, Auth_KeyRing *ring, String8 data)
       key.public_key_len = pub_bytes.size;
       MemoryCopy(key.public_key, pub_bytes.str, pub_bytes.size);
     }
-    else
-    {
-      continue;
-    }
+    else { continue; }
 
     if(!auth_keyring_add(ring, &key, 0))
     {
@@ -287,7 +260,6 @@ auth_validate_identifier(String8 str, String8 *out_error)
     *out_error = str8_lit("auth: identifier cannot be empty");
     return 0;
   }
-
   if(str.size > 256)
   {
     *out_error = str8_lit("auth: identifier too long (max 256 chars)");
@@ -310,49 +282,42 @@ auth_validate_identifier(String8 str, String8 *out_error)
 internal b32
 auth_validate_credential_format(Auth_Key *key, String8 *out_error)
 {
-  if(!auth_validate_identifier(key->user, out_error))
-  {
-    return 0;
-  }
-  if(!auth_validate_identifier(key->auth_id, out_error))
-  {
-    return 0;
-  }
+  if(!auth_validate_identifier(key->user, out_error))    { return 0; }
+  if(!auth_validate_identifier(key->auth_id, out_error)) { return 0; }
 
   switch(key->type)
   {
-  case Auth_Proto_Ed25519: break;
-  case Auth_Proto_FIDO2:
-  {
-    if(key->credential_id_len < 16)
+    case Auth_Proto_Ed25519: break;
+    case Auth_Proto_FIDO2:
     {
-      *out_error = str8_lit("auth: credential_id too short (min 16 bytes)");
-      return 0;
-    }
-    if(key->credential_id_len > 256)
-    {
-      *out_error = str8_lit("auth: credential_id too long (max 256 bytes)");
-      return 0;
-    }
+      if(key->credential_id_len < 16)
+      {
+        *out_error = str8_lit("auth: credential_id too short (min 16 bytes)");
+        return 0;
+      }
+      if(key->credential_id_len > 256)
+      {
+        *out_error = str8_lit("auth: credential_id too long (max 256 bytes)");
+        return 0;
+      }
 
-    if(key->public_key_len < 32)
-    {
-      *out_error = str8_lit("auth: public_key too short (min 32 bytes)");
-      return 0;
-    }
-    if(key->public_key_len > 256)
-    {
-      *out_error = str8_lit("auth: public_key too long (max 256 bytes)");
-      return 0;
-    }
-  }
-  break;
+      if(key->public_key_len < 32)
+      {
+        *out_error = str8_lit("auth: public_key too short (min 32 bytes)");
+        return 0;
+      }
+      if(key->public_key_len > 256)
+      {
+        *out_error = str8_lit("auth: public_key too long (max 256 bytes)");
+        return 0;
+      }
+    }break;
 
-  default:
-  {
-    *out_error = str8_lit("auth: unknown key type");
-    return 0;
-  }
+    default:
+    {
+      *out_error = str8_lit("auth: unknown key type");
+      return 0;
+    }
   }
 
   return 1;

@@ -1,9 +1,9 @@
 ////////////////////////////////
 //~ Globals
 
-global Arena *thread_arena = 0;
-global pthread_mutex_t thread_mutex;
-global ThreadState *thread_state_free = 0;
+global Arena           *thread_arena      = 0;
+global pthread_mutex_t  thread_mutex;
+global ThreadState     *thread_state_free = 0;
 
 ////////////////////////////////
 //~ Thread Functions
@@ -22,14 +22,8 @@ thread_state_alloc(void)
   DeferLoop(pthread_mutex_lock(&thread_mutex), pthread_mutex_unlock(&thread_mutex))
   {
     state = thread_state_free;
-    if(state)
-    {
-      SLLStackPop(thread_state_free);
-    }
-    else
-    {
-      state = push_array_no_zero(thread_arena, ThreadState, 1);
-    }
+    if(state) { SLLStackPop(thread_state_free); }
+    else      { state = push_array_no_zero(thread_arena, ThreadState, 1); }
   }
   MemoryZeroStruct(state);
   return state;
@@ -47,9 +41,9 @@ thread_state_release(ThreadState *state)
 internal void *
 thread_entry_point(void *ptr)
 {
-  ThreadState *state = (ThreadState *)ptr;
+  ThreadState *state                 = (ThreadState *)ptr;
   ThreadEntryPointFunctionType *func = state->func;
-  void *thread_ptr = state->ptr;
+  void *thread_ptr                   = state->ptr;
   supplement_thread_base_entry_point(func, thread_ptr);
   return 0;
 }
@@ -58,8 +52,8 @@ internal Thread
 thread_launch(ThreadEntryPointFunctionType *func, void *ptr)
 {
   ThreadState *state = thread_state_alloc();
-  state->func = func;
-  state->ptr = ptr;
+  state->func        = func;
+  state->ptr         = ptr;
   {
     int pthread_result = pthread_create(&state->handle, 0, thread_entry_point, state);
     if(pthread_result == -1)
@@ -75,26 +69,19 @@ thread_launch(ThreadEntryPointFunctionType *func, void *ptr)
 internal b32
 thread_join(Thread thread)
 {
-  if(MemoryIsZeroStruct(&thread))
-  {
-    return 0;
-  }
+  if(MemoryIsZeroStruct(&thread)) { return 0; }
 
   ThreadState *state = (ThreadState *)thread.u64[0];
-  int join_result = pthread_join(state->handle, 0);
-  b32 result = (join_result == 0);
+  int join_result    = pthread_join(state->handle, 0);
+  b32 result         = (join_result == 0);
   thread_state_release(state);
-
   return result;
 }
 
 internal void
 thread_detach(Thread thread)
 {
-  if(MemoryIsZeroStruct(&thread))
-  {
-    return;
-  }
+  if(MemoryIsZeroStruct(&thread)) { return; }
 
   ThreadState *state = (ThreadState *)thread.u64[0];
   pthread_detach(state->handle);
@@ -108,8 +95,7 @@ thread_detach(Thread thread)
 internal Mutex
 mutex_alloc(void)
 {
-  pthread_mutex_t *mutex =
-      (pthread_mutex_t *)mmap(0, sizeof(*mutex), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  pthread_mutex_t *mutex = (pthread_mutex_t *)mmap(0, sizeof(*mutex), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   AssertAlways(mutex != MAP_FAILED);
 
   int err = pthread_mutex_init(mutex, 0);
@@ -122,10 +108,7 @@ mutex_alloc(void)
 internal void
 mutex_release(Mutex mutex)
 {
-  if(MemoryIsZeroStruct(&mutex))
-  {
-    return;
-  }
+  if(MemoryIsZeroStruct(&mutex)) { return; }
   pthread_mutex_t *m = (pthread_mutex_t *)mutex.u64[0];
   pthread_mutex_destroy(m);
   int err = munmap(m, sizeof(*m));
@@ -135,10 +118,7 @@ mutex_release(Mutex mutex)
 internal void
 mutex_take(Mutex mutex)
 {
-  if(MemoryIsZeroStruct(&mutex))
-  {
-    return;
-  }
+  if(MemoryIsZeroStruct(&mutex)) { return; }
   pthread_mutex_t *m = (pthread_mutex_t *)mutex.u64[0];
   pthread_mutex_lock(m);
 }
@@ -146,10 +126,7 @@ mutex_take(Mutex mutex)
 internal void
 mutex_drop(Mutex mutex)
 {
-  if(MemoryIsZeroStruct(&mutex))
-  {
-    return;
-  }
+  if(MemoryIsZeroStruct(&mutex)) { return; }
   pthread_mutex_t *m = (pthread_mutex_t *)mutex.u64[0];
   pthread_mutex_unlock(m);
 }
@@ -158,8 +135,7 @@ mutex_drop(Mutex mutex)
 internal RWMutex
 rw_mutex_alloc(void)
 {
-  pthread_rwlock_t *rwlock =
-      (pthread_rwlock_t *)mmap(0, sizeof(*rwlock), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  pthread_rwlock_t *rwlock = (pthread_rwlock_t *)mmap(0, sizeof(*rwlock), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   AssertAlways(rwlock != MAP_FAILED);
 
   int err = pthread_rwlock_init(rwlock, 0);
@@ -172,10 +148,7 @@ rw_mutex_alloc(void)
 internal void
 rw_mutex_release(RWMutex mutex)
 {
-  if(MemoryIsZeroStruct(&mutex))
-  {
-    return;
-  }
+  if(MemoryIsZeroStruct(&mutex)) { return; }
   pthread_rwlock_t *rwlock = (pthread_rwlock_t *)mutex.u64[0];
   pthread_rwlock_destroy(rwlock);
   int err = munmap(rwlock, sizeof(*rwlock));
@@ -185,28 +158,16 @@ rw_mutex_release(RWMutex mutex)
 internal void
 rw_mutex_take(RWMutex mutex, b32 write_mode)
 {
-  if(MemoryIsZeroStruct(&mutex))
-  {
-    return;
-  }
+  if(MemoryIsZeroStruct(&mutex)) { return; }
   pthread_rwlock_t *rwlock = (pthread_rwlock_t *)mutex.u64[0];
-  if(write_mode)
-  {
-    pthread_rwlock_wrlock(rwlock);
-  }
-  else
-  {
-    pthread_rwlock_rdlock(rwlock);
-  }
+  if(write_mode) { pthread_rwlock_wrlock(rwlock); }
+  else { pthread_rwlock_rdlock(rwlock); }
 }
 
 internal void
 rw_mutex_drop(RWMutex mutex)
 {
-  if(MemoryIsZeroStruct(&mutex))
-  {
-    return;
-  }
+  if(MemoryIsZeroStruct(&mutex)) { return; }
   pthread_rwlock_t *rwlock = (pthread_rwlock_t *)mutex.u64[0];
   pthread_rwlock_unlock(rwlock);
 }
@@ -215,8 +176,7 @@ rw_mutex_drop(RWMutex mutex)
 internal CondVar
 cond_var_alloc(void)
 {
-  pthread_cond_t *cond =
-      (pthread_cond_t *)mmap(0, sizeof(*cond), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  pthread_cond_t *cond = (pthread_cond_t *)mmap(0, sizeof(*cond), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   AssertAlways(cond != MAP_FAILED);
 
   int err = pthread_cond_init(cond, 0);
@@ -229,10 +189,7 @@ cond_var_alloc(void)
 internal void
 cond_var_release(CondVar cv)
 {
-  if(MemoryIsZeroStruct(&cv))
-  {
-    return;
-  }
+  if(MemoryIsZeroStruct(&cv)) { return; }
   pthread_cond_t *cond = (pthread_cond_t *)cv.u64[0];
   pthread_cond_destroy(cond);
   int err = munmap(cond, sizeof(*cond));
@@ -242,22 +199,16 @@ cond_var_release(CondVar cv)
 internal void
 cond_var_wait(CondVar cv, Mutex mutex)
 {
-  if(MemoryIsZeroStruct(&cv) || MemoryIsZeroStruct(&mutex))
-  {
-    return;
-  }
+  if(MemoryIsZeroStruct(&cv) || MemoryIsZeroStruct(&mutex)) { return; }
   pthread_cond_t *cond = (pthread_cond_t *)cv.u64[0];
-  pthread_mutex_t *m = (pthread_mutex_t *)mutex.u64[0];
+  pthread_mutex_t *m   = (pthread_mutex_t *)mutex.u64[0];
   pthread_cond_wait(cond, m);
 }
 
 internal void
 cond_var_signal(CondVar cv)
 {
-  if(MemoryIsZeroStruct(&cv))
-  {
-    return;
-  }
+  if(MemoryIsZeroStruct(&cv)) { return; }
   pthread_cond_t *cond = (pthread_cond_t *)cv.u64[0];
   pthread_cond_signal(cond);
 }
@@ -265,10 +216,7 @@ cond_var_signal(CondVar cv)
 internal void
 cond_var_broadcast(CondVar cv)
 {
-  if(MemoryIsZeroStruct(&cv))
-  {
-    return;
-  }
+  if(MemoryIsZeroStruct(&cv)) { return; }
   pthread_cond_t *cond = (pthread_cond_t *)cv.u64[0];
   pthread_cond_broadcast(cond);
 }
@@ -298,11 +246,8 @@ semaphore_alloc(u32 initial_count, String8 name)
   {
     sem_t *s = (sem_t *)mmap(0, sizeof(*s), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     AssertAlways(s != MAP_FAILED);
-    int err = sem_init(s, 0, initial_count);
-    if(err == 0)
-    {
-      result.u64[0] = (u64)s;
-    }
+    int err  = sem_init(s, 0, initial_count);
+    if(err == 0) { result.u64[0] = (u64)s; }
   }
   return result;
 }
@@ -328,23 +273,18 @@ semaphore_take(Semaphore semaphore, u64 timeout_us)
         result = 1;
         break;
       }
-      else if(errno == EAGAIN)
-      {
-        continue;
-      }
+      else if(errno == EAGAIN) { continue; }
       break;
     }
   }
   else
   {
-    u64 now_us = os_now_microseconds();
-    u64 end_us = now_us + timeout_us;
-
-    u64 end_sec = end_us / Million(1);
-    u64 end_nsec = (end_us % Million(1)) * Thousand(1);
-
+    u64 now_us          = os_now_microseconds();
+    u64 end_us          = now_us + timeout_us;
+    u64 end_sec         = end_us / Million(1);
+    u64 end_nsec        = (end_us % Million(1)) * Thousand(1);
     struct timespec abs_timeout;
-    abs_timeout.tv_sec = end_sec;
+    abs_timeout.tv_sec  = end_sec;
     abs_timeout.tv_nsec = end_nsec;
 
     for(;;)
@@ -360,10 +300,7 @@ semaphore_take(Semaphore semaphore, u64 timeout_us)
         result = 0;
         break;
       }
-      else if(errno == EAGAIN)
-      {
-        continue;
-      }
+      else if(errno == EAGAIN) { continue; }
       break;
     }
   }
@@ -376,16 +313,10 @@ semaphore_drop(Semaphore semaphore)
   for(;;)
   {
     int err = sem_post((sem_t *)semaphore.u64[0]);
-    if(err == 0)
-    {
-      break;
-    }
+    if(err == 0) { break; }
     else
     {
-      if(errno == EAGAIN)
-      {
-        continue;
-      }
+      if(errno == EAGAIN) { continue; }
       break;
     }
   }

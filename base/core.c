@@ -19,18 +19,24 @@ bswap_u16(u16 x)
 internal u32
 bswap_u32(u32 x)
 {
-  u32 result =
-      (((x & 0xff000000) >> 24) | ((x & 0x00ff0000) >> 8) | ((x & 0x0000ff00) << 8) | ((x & 0x000000ff) << 24));
+  u32 result = (((x & 0xff000000) >> 24) |
+                ((x & 0x00ff0000) >>  8) |
+                ((x & 0x0000ff00) <<  8) |
+                ((x & 0x000000ff) << 24));
   return result;
 }
 
 internal u64
 bswap_u64(u64 x)
 {
-  u64 result =
-      (((x & 0xff00000000000000ull) >> 56) | ((x & 0x00ff000000000000ull) >> 40) | ((x & 0x0000ff0000000000ull) >> 24) |
-       ((x & 0x000000ff00000000ull) >> 8) | ((x & 0x00000000ff000000ull) << 8) | ((x & 0x0000000000ff0000ull) << 24) |
-       ((x & 0x000000000000ff00ull) << 40) | ((x & 0x00000000000000ffull) << 56));
+  u64 result = (((x & 0xff00000000000000ull) >> 56) |
+                ((x & 0x00ff000000000000ull) >> 40) |
+                ((x & 0x0000ff0000000000ull) >> 24) |
+                ((x & 0x000000ff00000000ull) >>  8) |
+                ((x & 0x00000000ff000000ull) <<  8) |
+                ((x & 0x0000000000ff0000ull) << 24) |
+                ((x & 0x000000000000ff00ull) << 40) |
+                ((x & 0x00000000000000ffull) << 56));
   return result;
 }
 
@@ -40,7 +46,7 @@ bswap_u64(u64 x)
 internal u16
 read_u16(void const *ptr)
 {
-  u16 x;
+  u16 x = 0;
   MemoryCopy(&x, ptr, sizeof(x));
   return x;
 }
@@ -48,7 +54,7 @@ read_u16(void const *ptr)
 internal u32
 read_u32(void const *ptr)
 {
-  u32 x;
+  u32 x = 0;
   MemoryCopy(&x, ptr, sizeof(x));
   return x;
 }
@@ -56,28 +62,14 @@ read_u32(void const *ptr)
 internal u64
 read_u64(void const *ptr)
 {
-  u64 x;
+  u64 x = 0;
   MemoryCopy(&x, ptr, sizeof(x));
   return x;
 }
 
-internal void
-write_u16(void *ptr, u16 x)
-{
-  MemoryCopy(ptr, &x, sizeof(x));
-}
-
-internal void
-write_u32(void *ptr, u32 x)
-{
-  MemoryCopy(ptr, &x, sizeof(x));
-}
-
-internal void
-write_u64(void *ptr, u64 x)
-{
-  MemoryCopy(ptr, &x, sizeof(x));
-}
+internal void write_u16(void *ptr, u16 x) { MemoryCopy(ptr, &x, sizeof(x)); }
+internal void write_u32(void *ptr, u32 x) { MemoryCopy(ptr, &x, sizeof(x)); }
+internal void write_u64(void *ptr, u64 x) { MemoryCopy(ptr, &x, sizeof(x)); }
 
 ////////////////////////////////
 //~ Memory Functions
@@ -86,12 +78,9 @@ internal b32
 memory_is_zero(void *ptr, u64 size)
 {
   b32 result = 1;
-
-  // break down size
-  u64 extra = (size & 0x7);
+  u64 extra  = (size & 0x7);
   u64 count8 = (size >> 3);
 
-  // check with 8-byte stride
   u64 *p64 = (u64 *)ptr;
   if(result)
   {
@@ -105,7 +94,6 @@ memory_is_zero(void *ptr, u64 size)
     }
   }
 
-  // check extra
   if(result)
   {
     u8 *p8 = (u8 *)p64;

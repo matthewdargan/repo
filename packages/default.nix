@@ -8,6 +8,7 @@
     ./9p.nix
     ./authd.nix
     ./media-server.nix
+    ./webauth.nix
     ./installer-image.nix
     ./neovim.nix
     ./www.nix

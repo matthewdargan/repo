@@ -83,10 +83,8 @@ struct Auth_Fido2_DeviceList
 
 internal b32 auth_fido2_generate_challenge(u8 challenge[32]);
 internal Auth_Fido2_DeviceList auth_fido2_enumerate_devices(Arena *arena);
-internal b32 auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, Auth_Key *out_key,
-                                            String8 *out_error);
-internal b32 auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params,
-                                      Auth_Fido2_Assertion *out_assertion, String8 *out_error);
+internal b32 auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, Auth_Key *out_key, String8 *out_error);
+internal b32 auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fido2_Assertion *out_assertion, String8 *out_error);
 internal b32 auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, String8 *out_error);
 
 #endif // AUTH_FIDO2_H

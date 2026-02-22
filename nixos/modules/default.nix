@@ -8,6 +8,7 @@ _: {
     "media-server" = ./media-server.nix;
     "nginx" = ./nginx.nix;
     "nix-config" = ./nix-config.nix;
+    "webauth" = ./webauth.nix;
     "yubikey" = ./yubikey.nix;
   };
 }

@@ -9,8 +9,8 @@ global thread_static TCTX *tctx_thread_local = 0;
 internal TCTX *
 tctx_alloc(void)
 {
-  Arena *arena = arena_alloc();
-  TCTX *tctx = push_array(arena, TCTX, 1);
+  Arena *arena    = arena_alloc();
+  TCTX *tctx      = push_array(arena, TCTX, 1);
   tctx->arenas[0] = arena;
   tctx->arenas[1] = arena_alloc();
   return tctx;
@@ -43,13 +43,13 @@ tctx_selected(void)
 internal Arena *
 tctx_get_scratch(Arena **conflicts, u64 count)
 {
-  TCTX *tctx = tctx_selected();
-  Arena *result = 0;
+  TCTX *tctx        = tctx_selected();
+  Arena *result     = 0;
   Arena **arena_ptr = tctx->arenas;
   for(u64 i = 0; i < ArrayCount(tctx->arenas); i += 1, arena_ptr += 1)
   {
     Arena **conflict_ptr = conflicts;
-    b32 has_conflict = 0;
+    b32 has_conflict     = 0;
     for(u64 j = 0; j < count; j += 1, conflict_ptr += 1)
     {
       if(*arena_ptr == *conflict_ptr)

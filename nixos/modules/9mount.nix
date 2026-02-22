@@ -94,7 +94,13 @@ in {
                 ${pkgs.coreutils}/bin/chown "${lib.escapeShellArg m.user}:" ${lib.escapeShellArg m.mountPoint}
               '';
             ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9mount"}/bin/9mount ${args}";
-            ExecStop = "${pkgs.fuse3}/bin/fusermount3 -u ${lib.escapeShellArg m.mountPoint}";
+            ExecStop =
+              "+"
+              + pkgs.writeShellScript "9mount-${m.name}-stop" ''
+                set -euo pipefail
+                ${pkgs.fuse3}/bin/fusermount3 -u ${lib.escapeShellArg m.mountPoint} 2>/dev/null || \
+                ${pkgs.util-linux}/bin/umount -l ${lib.escapeShellArg m.mountPoint} || true
+              '';
             KillMode = "control-group";
             Restart = "on-failure";
             RestartSec = "5s";

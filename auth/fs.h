@@ -46,13 +46,10 @@ struct Auth_FS_State
 
 internal Auth_FS_State *auth_fs_alloc(Arena *arena, Auth_RPC_State *rpc_state, String8 keys_path);
 internal void auth_fs_log(Auth_FS_State *fs, String8 entry);
-
 internal Auth_File_Info auth_fs_lookup(Auth_FS_State *fs, String8 path);
 internal Auth_File_Info auth_fs_stat_root(Auth_FS_State *fs);
 internal String8List auth_fs_readdir(Arena *arena, Auth_File_Type type);
-
-internal String8 auth_fs_read(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Conv *conv, u64 offset,
-                              u64 count);
+internal String8 auth_fs_read(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Conv *conv, u64 offset, u64 count);
 internal b32 auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Conv **conv, String8 data);
 
 #endif // AUTH_FS_H

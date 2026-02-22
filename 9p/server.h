@@ -69,13 +69,13 @@ typedef u32 QidTypeFlags;
 enum
 {
   QidTypeFlag_Directory = 0x80,
-  QidTypeFlag_Append = 0x40,
+  QidTypeFlag_Append    = 0x40,
   QidTypeFlag_Exclusive = 0x20,
-  QidTypeFlag_Mount = 0x10,
-  QidTypeFlag_Auth = 0x08,
+  QidTypeFlag_Mount     = 0x10,
+  QidTypeFlag_Auth      = 0x08,
   QidTypeFlag_Temporary = 0x04,
-  QidTypeFlag_Symlink = 0x02,
-  QidTypeFlag_File = 0x00,
+  QidTypeFlag_Symlink   = 0x02,
+  QidTypeFlag_File      = 0x00,
 };
 
 ////////////////////////////////

@@ -167,8 +167,7 @@ internal String8Node *str8_list_pushf(Arena *arena, String8List *list, char *fmt
 ////////////////////////////////
 //~ String Splitting/Joining
 
-internal String8List str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count,
-                                StringSplitFlags flags);
+internal String8List str8_split(Arena *arena, String8 string, u8 *split_chars, u64 split_char_count, StringSplitFlags flags);
 internal String8 str8_list_join(Arena *arena, String8List list, StringJoin *optional_params);
 
 ////////////////////////////////
@@ -194,5 +193,11 @@ internal String8 indented_from_string(Arena *arena, String8 string);
 //~ Basic String Hashes
 
 internal u64 u64_hash_from_str8(String8 string);
+
+////////////////////////////////
+//~ Base64 Encoding/Decoding
+
+internal String8 str8_base64_encode(Arena *arena, String8 data);
+internal String8 str8_base64_decode(Arena *arena, String8 base64);
 
 #endif // STRING_H

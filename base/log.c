@@ -10,8 +10,8 @@ internal Log *
 log_alloc(void)
 {
   Arena *arena = arena_alloc();
-  Log *log = push_array(arena, Log, 1);
-  log->arena = arena;
+  Log *log     = push_array(arena, Log, 1);
+  log->arena   = arena;
   return log;
 }
 
@@ -63,9 +63,9 @@ log_scope_begin(void)
 {
   if(log_active != 0)
   {
-    u64 pos = arena_pos(log_active->arena);
+    u64 pos         = arena_pos(log_active->arena);
     LogScope *scope = push_array(log_active->arena, LogScope, 1);
-    scope->pos = pos;
+    scope->pos      = pos;
     SLLStackPush(log_active->top_scope, scope);
   }
 }
