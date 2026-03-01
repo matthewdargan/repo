@@ -88,8 +88,11 @@ struct StreamMetaArray
 //~ Globals
 
 global String8 media_root_path            = {0};
+global String8 media_root_path_canonical  = {0};
 global String8 cache_root_path            = {0};
+global String8 cache_root_path_canonical  = {0};
 global String8 state_root_path            = {0};
+global String8 state_root_path_canonical  = {0};
 global WP_Pool *worker_pool               = 0;
 global WP_Pool *transmux_pool             = 0;
 global TransmuxQueue *transmux_queue      = 0;
@@ -155,11 +158,59 @@ get_cache_dir(Arena *arena, String8 file_path)
   return str8f(arena, "%S/%llu", cache_root_path, hash);
 }
 
+////////////////////////////////
+//~ Path Helpers
+
+internal String8
+media_path_join(Arena *arena, String8 file_path)
+{
+  u64 total_size = media_root_path.size + 1 + file_path.size;
+  u8 *buffer     = push_array(arena, u8, total_size + 1);
+  u64 pos        = 0;
+
+  MemoryCopy(buffer + pos, media_root_path.str, media_root_path.size);
+  pos           += media_root_path.size;
+  buffer[pos]    = '/';
+  pos           += 1;
+  MemoryCopy(buffer + pos, file_path.str, file_path.size);
+  buffer[total_size] = 0;
+
+  return str8(buffer, total_size);
+}
+
+internal String8
+cache_manifest_path(Arena *arena, String8 cache_dir)
+{
+  String8 suffix     = str8_lit("/manifest.mpd");
+  u64 total_size     = cache_dir.size + suffix.size;
+  u8 *buffer         = push_array(arena, u8, total_size + 1);
+
+  MemoryCopy(buffer, cache_dir.str, cache_dir.size);
+  MemoryCopy(buffer + cache_dir.size, suffix.str, suffix.size);
+  buffer[total_size] = 0;
+
+  return str8(buffer, total_size);
+}
+
+internal String8
+cache_streams_path(Arena *arena, String8 cache_dir)
+{
+  String8 suffix     = str8_lit("/streams.txt");
+  u64 total_size     = cache_dir.size + suffix.size;
+  u8 *buffer         = push_array(arena, u8, total_size + 1);
+
+  MemoryCopy(buffer, cache_dir.str, cache_dir.size);
+  MemoryCopy(buffer + cache_dir.size, suffix.str, suffix.size);
+  buffer[total_size] = 0;
+
+  return str8(buffer, total_size);
+}
+
 internal b32
 cache_exists(String8 cache_dir)
 {
   Temp scratch          = scratch_begin(0, 0);
-  String8 manifest_path = str8f(scratch.arena, "%S/manifest.mpd", cache_dir);
+  String8 manifest_path = cache_manifest_path(scratch.arena, cache_dir);
   b32 exists            = os_file_path_exists(manifest_path);
   scratch_end(scratch);
   return exists;
@@ -256,7 +307,7 @@ stream_file_to_socket(OS_Handle socket, String8 file_path, u64 file_size)
 internal StreamMetaArray
 parse_stream_metadata(Arena *arena, String8 cache_dir)
 {
-  String8 streams_path = str8f(arena, "%S/streams.txt", cache_dir);
+  String8 streams_path = cache_streams_path(arena, cache_dir);
   String8 content      = os_data_from_file_path(arena, streams_path);
 
   StreamMeta *items = push_array(arena, StreamMeta, 32);
@@ -333,7 +384,7 @@ postprocess_manifest(String8 cache_dir)
     str8_lit("publishTime"),
   };
 
-  u8 *out     = push_array(scratch.arena, u8, manifest.size * 3);
+  u8 *out     = push_array(scratch.arena, u8, manifest.size * 2);
   u64 out_pos = 0;
   u64 in_pos  = 0;
 
@@ -424,8 +475,7 @@ postprocess_manifest(String8 cache_dir)
     out_pos += remaining;
   }
 
-  String8 path = str8_copy(scratch.arena, manifest_path);
-  int fd = open((char *)path.str, O_WRONLY | O_TRUNC);
+  int fd = open((char *)manifest_path.str, O_WRONLY | O_TRUNC);
   if(fd >= 0)
   {
     write(fd, out, out_pos);
@@ -443,8 +493,7 @@ extract_subtitle_stream(String8 input_path, u32 stream_idx, String8 lang, String
 {
   Temp temp = scratch_begin(0, 0);
 
-  String8 in_path  = str8_copy(temp.arena, input_path);
-  String8 out_path = str8_copy(temp.arena, output_path);
+  String8 in_path = str8_copy(temp.arena, input_path);
 
   AVFormatContext *in_ctx  = NULL;
   AVCodecContext *dec_ctx  = NULL;
@@ -477,8 +526,8 @@ extract_subtitle_stream(String8 input_path, u32 stream_idx, String8 lang, String
   enc_ctx->subtitle_header      = av_malloc(enc_ctx->subtitle_header_size + 1);
   if(enc_ctx->subtitle_header) { MemoryCopy(enc_ctx->subtitle_header, webvtt_header, enc_ctx->subtitle_header_size + 1); }
 
-  if(avcodec_open2(enc_ctx, enc, NULL) != 0)                                              { goto cleanup; }
-  if(avformat_alloc_output_context2(&out_ctx, NULL, "webvtt", (char *)out_path.str) != 0) { goto cleanup; }
+  if(avcodec_open2(enc_ctx, enc, NULL) != 0)                                                   { goto cleanup; }
+  if(avformat_alloc_output_context2(&out_ctx, NULL, "webvtt", (char *)output_path.str) != 0) { goto cleanup; }
 
   AVStream *out_stream = avformat_new_stream(out_ctx, NULL);
   if(out_stream == 0)                                                     { goto cleanup; }
@@ -486,7 +535,7 @@ extract_subtitle_stream(String8 input_path, u32 stream_idx, String8 lang, String
 
   out_stream->time_base = in_stream->time_base;
 
-  if(avio_open(&out_ctx->pb, (char *)out_path.str, AVIO_FLAG_WRITE) != 0) { goto cleanup; }
+  if(avio_open(&out_ctx->pb, (char *)output_path.str, AVIO_FLAG_WRITE) != 0) { goto cleanup; }
   if(avformat_write_header(out_ctx, NULL) != 0)                           { goto cleanup; }
 
   pkt     = av_packet_alloc();
@@ -601,7 +650,7 @@ extract_subtitles(String8 file_path, String8 cache_dir)
   if(metadata_lines.node_count > 0)
   {
     String8 metadata_content = str8_list_join(temp.arena, metadata_lines, 0);
-    String8 streams_path = str8f(temp.arena, "%S/streams.txt", cache_dir);
+    String8 streams_path = cache_streams_path(temp.arena, cache_dir);
     OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Truncate, streams_path);
     if(file.u64[0] != 0)
     {
@@ -650,8 +699,7 @@ generate_dash(String8 input_path, String8 output_path)
 {
   Temp temp = scratch_begin(0, 0);
 
-  String8 in_path  = str8_copy(temp.arena, input_path);
-  String8 out_path = str8_copy(temp.arena, output_path);
+  String8 in_path = str8_copy(temp.arena, input_path);
 
   AVFormatContext *in_ctx  = NULL;
   AVFormatContext *out_ctx = NULL;
@@ -660,9 +708,9 @@ generate_dash(String8 input_path, String8 output_path)
   AVPacket *enc_pkt        = NULL;
   b32 success              = 0;
 
-  if(avformat_open_input(&in_ctx, (char *)in_path.str, NULL, NULL) != 0)                { goto cleanup; }
-  if(avformat_find_stream_info(in_ctx, NULL) != 0)                                      { goto cleanup; }
-  if(avformat_alloc_output_context2(&out_ctx, NULL, "dash", (char *)out_path.str) != 0) { goto cleanup; }
+  if(avformat_open_input(&in_ctx, (char *)in_path.str, NULL, NULL) != 0)                    { goto cleanup; }
+  if(avformat_find_stream_info(in_ctx, NULL) != 0)                                          { goto cleanup; }
+  if(avformat_alloc_output_context2(&out_ctx, NULL, "dash", (char *)output_path.str) != 0) { goto cleanup; }
 
   int *stream_map                     = push_array(temp.arena, int, in_ctx->nb_streams);
   StreamTranscodeInfo *transcode_info = push_array(temp.arena, StreamTranscodeInfo, in_ctx->nb_streams);
@@ -687,8 +735,7 @@ generate_dash(String8 input_path, String8 output_path)
     b32 needs_transcode = (codecpar->codec_type == AVMEDIA_TYPE_AUDIO && audio_codec_needs_transcode(codecpar->codec_id));
     if(needs_transcode)
     {
-      log_infof("media-server: stream %u (audio/%s) - transcoding to AAC\n",
-                i, avcodec_get_name(codecpar->codec_id));
+      log_infof("media-server: stream %u (audio/%s) - transcoding to AAC\n", i, avcodec_get_name(codecpar->codec_id));
 
       const AVCodec *decoder = avcodec_find_decoder(codecpar->codec_id);
       if(decoder == 0) { goto cleanup; }
@@ -875,11 +922,11 @@ generate_dash(String8 input_path, String8 output_path)
       if(transcode_info[i].needs_transcode && stream_map[i] >= 0)
       {
         AVCodecContext *enc_ctx = transcode_info[i].enc_ctx;
-        SwrContext *swr_ctx = transcode_info[i].swr_ctx;
-        AVFrame *enc_frame = transcode_info[i].enc_frame;
-        s64 *next_pts = &transcode_info[i].next_pts;
-        u32 out_idx = stream_map[i];
-        AVStream *out_stream = out_ctx->streams[out_idx];
+        SwrContext *swr_ctx     = transcode_info[i].swr_ctx;
+        AVFrame *enc_frame      = transcode_info[i].enc_frame;
+        s64 *next_pts           = &transcode_info[i].next_pts;
+        u32 out_idx             = stream_map[i];
+        AVStream *out_stream    = out_ctx->streams[out_idx];
 
         for(; swr_get_out_samples(swr_ctx, 0) > 0; )
         {
@@ -924,7 +971,7 @@ generate_dash(String8 input_path, String8 output_path)
     if(audio_metadata.node_count > 0 && success)
     {
       String8 cache_dir          = str8_chop_last_slash(output_path);
-      String8 streams_path       = str8f(temp.arena, "%S/streams.txt", cache_dir);
+      String8 streams_path       = cache_streams_path(temp.arena, cache_dir);
       String8 audio_meta_content = str8_list_join(temp.arena, audio_metadata, 0);
 
       OS_Handle meta_file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append, streams_path);
@@ -956,7 +1003,7 @@ cleanup:
     if(!(out_ctx->oformat->flags & AVFMT_NOFILE)) { avio_closep(&out_ctx->pb); }
     avformat_free_context(out_ctx);
   }
-  if(in_ctx != 0) { avformat_close_input(&in_ctx); }
+  if(in_ctx != 0)  { avformat_close_input(&in_ctx); }
   scratch_end(temp);
   return success;
 }
@@ -966,15 +1013,12 @@ generate_dash_to_cache(String8 file_path, String8 cache_dir)
 {
   Temp scratch = scratch_begin(0, 0);
 
-  char *cache_dir_cstr = (char *)push_array(scratch.arena, u8, cache_dir.size + 1);
-  MemoryCopy(cache_dir_cstr, cache_dir.str, cache_dir.size);
-  cache_dir_cstr[cache_dir.size] = 0;
-  mkdir(cache_dir_cstr, 0750);
+  mkdir((char *)cache_dir.str, 0750);
 
   extract_subtitles(file_path, cache_dir);
 
   String8 manifest_temp  = str8f(scratch.arena, "%S/manifest.mpd.tmp", cache_dir);
-  String8 manifest_final = str8f(scratch.arena, "%S/manifest.mpd", cache_dir);
+  String8 manifest_final = cache_manifest_path(scratch.arena, cache_dir);
 
   log_infof("media-server: generating DASH for %S\n", file_path);
 
@@ -989,15 +1033,7 @@ generate_dash_to_cache(String8 file_path, String8 cache_dir)
 
   postprocess_manifest(cache_dir);
 
-  char *temp_cstr = (char *)push_array(scratch.arena, u8, manifest_temp.size + 1);
-  MemoryCopy(temp_cstr, manifest_temp.str, manifest_temp.size);
-  temp_cstr[manifest_temp.size] = 0;
-
-  char *final_cstr = (char *)push_array(scratch.arena, u8, manifest_final.size + 1);
-  MemoryCopy(final_cstr, manifest_final.str, manifest_final.size);
-  final_cstr[manifest_final.size] = 0;
-
-  rename(temp_cstr, final_cstr);
+  rename((char *)manifest_temp.str, (char *)manifest_final.str);
 
   scratch_end(scratch);
   return 1;
@@ -1127,7 +1163,7 @@ find_subtitle_files(Arena *arena, String8 cache_dir)
 internal void
 handle_player(OS_Handle socket, String8 file_param, Arena *arena)
 {
-  String8 video_path = str8f(arena, "%S/%S", media_root_path, file_param);
+  String8 video_path = media_path_join(arena, file_param);
   String8 cache_dir  = get_cache_dir(arena, video_path);
 
   String8 encoded_file = url_encode(arena, file_param);
@@ -1315,12 +1351,11 @@ find_next_episode(Arena *arena, String8 file_path)
   EpisodeInfo current = parse_episode_info(file_path);
   if(!current.is_episode) { return result; }
 
-  Temp temp             = scratch_begin(&arena, 1);
-  String8 dir_path      = str8f(temp.arena, "%S/%S", media_root_path, current.dir_path);
-  String8 dir_path_cstr = str8_copy(temp.arena, dir_path);
+  Temp temp        = scratch_begin(&arena, 1);
+  String8 dir_path = media_path_join(temp.arena, current.dir_path);
 
   u32 next_episode = current.episode + 1;
-  DIR *dir         = opendir((char *)dir_path_cstr.str);
+  DIR *dir         = opendir((char *)dir_path.str);
   if(dir != 0)
   {
     struct dirent *entry;
@@ -1367,14 +1402,19 @@ watch_progress_get_sorted(Arena *arena, u64 *out_count)
 
   for(u64 i = 0; i < count; i += 1)
   {
+    u64 max_idx = i;
     for(u64 j = i + 1; j < count; j += 1)
     {
-      if(all_entries[j]->last_watched_timestamp > all_entries[i]->last_watched_timestamp)
+      if(all_entries[j]->last_watched_timestamp > all_entries[max_idx]->last_watched_timestamp)
       {
-        WatchProgress *tmp = all_entries[i];
-        all_entries[i]     = all_entries[j];
-        all_entries[j]     = tmp;
+        max_idx = j;
       }
+    }
+    if(max_idx != i)
+    {
+      WatchProgress *tmp = all_entries[i];
+      all_entries[i]     = all_entries[max_idx];
+      all_entries[max_idx] = tmp;
     }
   }
 
@@ -1389,8 +1429,7 @@ watch_progress_get_sorted(Arena *arena, u64 *out_count)
 internal void
 handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
 {
-  String8 full_path = (dir_path.size > 0) ? str8f(arena, "%S/%S", media_root_path, dir_path) : media_root_path;
-  String8 path      = str8_copy(arena, full_path);
+  String8 full_path = (dir_path.size > 0) ? media_path_join(arena, dir_path) : media_root_path;
 
   String8List html = {0};
   str8_list_push(arena, &html, str8_lit("<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n"
@@ -1547,7 +1586,7 @@ handle_directory_listing(OS_Handle socket, String8 dir_path, Arena *arena)
                                         "<thead><tr><th>Name</th><th>Type</th></tr></thead>\n"
                                         "<tbody>\n"));
 
-  DIR *dir = opendir((char *)path.str);
+  DIR *dir = opendir((char *)full_path.str);
   if(dir != 0)
   {
     struct dirent *entry;
@@ -1803,7 +1842,7 @@ watch_progress_set(String8 file, f64 position, String8 subtitle_lang, String8 au
 internal void
 handle_manifest(OS_Handle socket, String8 file_path, Arena *arena)
 {
-  String8 full_path = str8f(arena, "%S/%S", media_root_path, file_path);
+  String8 full_path = media_path_join(arena, file_path);
   b32 processing    = 0;
   CacheInfo cache   = get_or_create_cache(arena, full_path, &processing);
 
@@ -1815,7 +1854,7 @@ handle_manifest(OS_Handle socket, String8 file_path, Arena *arena)
 
   if(cache.cache_dir.size == 0) { send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("File not found")); return; }
 
-  String8 manifest_path = str8f(arena, "%S/manifest.mpd", cache.cache_dir);
+  String8 manifest_path = cache_manifest_path(arena, cache.cache_dir);
   String8 manifest      = os_data_from_file_path(arena, manifest_path);
   if(manifest.size == 0) { send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("Manifest not found")); return; }
 
@@ -1826,7 +1865,7 @@ handle_manifest(OS_Handle socket, String8 file_path, Arena *arena)
 internal void
 handle_segment(OS_Handle socket, String8 file_path, String8 segment_name, Arena *arena)
 {
-  String8 full_path = str8f(arena, "%S/%S", media_root_path, file_path);
+  String8 full_path = media_path_join(arena, file_path);
   b32 processing    = 0;
   CacheInfo cache   = get_or_create_cache(arena, full_path, &processing);
 
@@ -1932,7 +1971,7 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
       else if(str8_match(resource, str8_lit("manifest.mpd"), 0)) { handle_manifest(socket, file, arena); }
       else if(str8_match(resource, str8_lit("subtitles.txt"), 0))
       {
-        String8 file_path          = str8f(arena, "%S/%S", media_root_path, file);
+        String8 file_path          = media_path_join(arena, file);
         String8 cache_dir          = get_cache_dir(arena, file_path);
         String8List subtitle_files = find_subtitle_files(arena, cache_dir);
 
@@ -1999,7 +2038,7 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
     }
     else if(str8_find_needle(media_path, 0, str8_lit(".vtt"), 0) == media_path.size - 4)
     {
-      String8 subtitle_path    = str8f(arena, "%S/%S", media_root_path, media_path);
+      String8 subtitle_path    = media_path_join(arena, media_path);
       String8 subtitle_content = os_data_from_file_path(arena, subtitle_path);
       if(subtitle_content.size > 0) { send_response(socket, arena, str8_lit("text/vtt; charset=utf-8"), subtitle_content); }
       else                          { send_error_response(socket, HTTP_Status_404_NotFound, str8_lit("Subtitle not found")); }
@@ -2094,6 +2133,10 @@ entry_point(CmdLine *cmd_line)
   if(cache_root_path.size == 0) { cache_root_path = str8_lit("/tmp/media-server-cache"); }
   if(state_root_path.size == 0) { state_root_path = str8_lit("/tmp/media-server-state"); }
 
+  media_root_path_canonical = os_full_path_from_path(arena, media_root_path);
+  cache_root_path_canonical = os_full_path_from_path(arena, cache_root_path);
+  state_root_path_canonical = os_full_path_from_path(arena, state_root_path);
+
   u64 port         = (port_str.size > 0) ? u64_from_str8(port_str, 10) : 8080;
   u64 worker_count = (threads_str.size > 0) ? u64_from_str8(threads_str, 10) : 0;
 
@@ -2105,14 +2148,8 @@ entry_point(CmdLine *cmd_line)
 
   transmux_cv = cond_var_alloc();
 
-  {
-    Temp temp          = scratch_begin(&arena, 1);
-    String8 cache_path = str8_copy(temp.arena, cache_root_path);
-    String8 state_path = str8_copy(temp.arena, state_root_path);
-    mkdir((char *)cache_path.str, 0755);
-    mkdir((char *)state_path.str, 0755);
-    scratch_end(temp);
-  }
+  mkdir((char *)cache_root_path.str, 0755);
+  mkdir((char *)state_root_path.str, 0755);
 
   watch_progress               = push_array(arena, WatchProgressTable, 1);
   watch_progress->mutex        = mutex_alloc();
