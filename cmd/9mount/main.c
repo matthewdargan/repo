@@ -187,8 +187,7 @@ fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, st
 
     for(DirNode9P *node = list.first; node != 0; node = node->next)
     {
-      String8 name = str8_copy(arena, node->dir.name);
-      filler(buf, (char *)name.str, 0, 0, 0);
+      filler(buf, (char *)node->dir.name.str, 0, 0, 0);
     }
   }
 
@@ -468,10 +467,7 @@ fs_chmod(const char *path, mode_t mode, struct fuse_file_info *fi)
   int result   = 0;
 
   ClientFid9P *fid = walk_path(arena, str8_cstring((char *)path));
-  if(fid == 0)
-  {
-    result = -ENOENT;
-  }
+  if(fid == 0) { result = -ENOENT; }
   else
   {
     Dir9P dir = dir9p_wstat_mask();
@@ -495,10 +491,7 @@ fs_utimens(const char *path, const struct timespec tv[2],
   int result   = 0;
 
   ClientFid9P *fid = walk_path(arena, str8_cstring((char *)path));
-  if(fid == 0)
-  {
-    result = -ENOENT;
-  }
+  if(fid == 0) { result = -ENOENT; }
   else
   {
     Dir9P dir       = dir9p_wstat_mask();

@@ -193,7 +193,7 @@ internal Dir9P dir9p_zero(void);
 
 internal u8 *encode_str8(u8 *ptr, String8 string);
 internal u8 *encode_qid(u8 *ptr, Qid qid);
-internal u8 *decode_str8(u8 *ptr, u8 *end, String8 *out_string);
+internal u8 *decode_str8(Arena *arena, u8 *ptr, u8 *end, String8 *out_string);
 internal u8 *decode_qid(u8 *ptr, u8 *end, Qid *out_qid);
 
 ////////////////////////////////
@@ -201,7 +201,7 @@ internal u8 *decode_qid(u8 *ptr, u8 *end, Qid *out_qid);
 
 internal u32 msg9p_size(Message9P msg);
 internal String8 str8_from_msg9p(Arena *arena, Message9P msg);
-internal Message9P msg9p_from_str8(String8 data);
+internal Message9P msg9p_from_str8(Arena *arena, String8 data);
 
 ////////////////////////////////
 //~ Message Formatting
@@ -213,7 +213,7 @@ internal String8 str8_from_msg9p__fmt(Arena *arena, Message9P msg);
 
 internal u32 dir9p_size(Dir9P dir);
 internal String8 str8_from_dir9p(Arena *arena, Dir9P dir);
-internal Dir9P dir9p_from_str8(String8 data);
+internal Dir9P dir9p_from_str8(Arena *arena, String8 data);
 
 ////////////////////////////////
 //~ Directory List Operations

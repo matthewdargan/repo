@@ -11,15 +11,18 @@ server9p_request_alloc(Server9P *server, u32 tag)
   }
 
   ServerRequest9P *request = server->request_free_list;
-  if(request != 0) { server->request_free_list = request->hash_next; }
-  else             { request = push_array(server->arena, ServerRequest9P, 1); }
+  if(request != 0)
+  {
+    server->request_free_list = request->hash_next;
+    MemoryZeroStruct(request);
+  }
+  else { request = push_array(server->arena, ServerRequest9P, 1); }
 
-  MemoryZeroStruct(request);
   request->tag                = tag;
   request->server             = server;
   request->hash_next          = server->request_table[hash];
   server->request_table[hash] = request;
-  server->request_count += 1;
+  server->request_count      += 1;
 
   return request;
 }
@@ -54,8 +57,14 @@ server9p_alloc(Arena *arena, u64 input_fd, u64 output_fd)
   server->max_message_size  = P9_IOUNIT_DEFAULT + P9_MESSAGE_HEADER_SIZE;
   server->read_buffer       = push_array(arena, u8, server->max_message_size);
   server->write_buffer      = push_array(arena, u8, server->max_message_size);
-  server->max_fid_count     = 4096;
-  server->fid_table         = push_array(arena, ServerFid9P *, server->max_fid_count);
+
+  server->fid_capacity      = 4096;
+  server->fid_hash_capacity = 8192;
+  server->fid_storage       = push_array(arena, ServerFid9P, server->fid_capacity);
+  server->fid_hash_table    = push_array_no_zero(arena, u32, server->fid_hash_capacity);
+  server->fid_count         = 0;
+  MemorySet(server->fid_hash_table, max_u8, server->fid_hash_capacity * sizeof(u32));
+
   server->max_request_count = 4096;
   server->request_table     = push_array(arena, ServerRequest9P *, server->max_request_count);
   server->next_tag          = 1;
@@ -77,7 +86,7 @@ server9p_get_request(Server9P *server)
     return 0;
   }
 
-  Message9P f = msg9p_from_str8(msg);
+  Message9P f = msg9p_from_str8(scratch.arena, msg);
   if(f.type == 0)
   {
     scratch_end(scratch);
@@ -213,33 +222,56 @@ server9p_respond(ServerRequest9P *request, String8 err)
 internal ServerFid9P *
 server9p_fid_alloc(Server9P *server, u32 fid)
 {
-  u32 hash = fid % server->max_fid_count;
-  for(ServerFid9P *check = server->fid_table[hash]; check != 0; check = check->hash_next)
+  if(server9p_fid_lookup(server, fid) != 0) { return 0; }
+
+  u32 slot_idx = max_u32;
+  for(u32 i = 0; i < server->fid_capacity; i += 1)
   {
-    if(check->fid == fid) { return 0; }
+    if(server->fid_storage[i].fid == 0)
+    {
+      slot_idx = i;
+      break;
+    }
+  }
+  if(slot_idx == max_u32) { return 0; }
+
+  ServerFid9P *f = &server->fid_storage[slot_idx];
+  f->fid         = fid;
+  f->qid         = (Qid){0};
+  f->auxiliary   = 0;
+  f->server      = server;
+  f->open_mode   = P9_OPEN_MODE_NONE;
+  f->user_id     = str8_zero();
+  f->offset      = 0;
+
+  u32 hash = fid % server->fid_hash_capacity;
+  for(u32 probe = 0; probe < server->fid_hash_capacity; probe += 1)
+  {
+    u32 idx = (hash + probe) % server->fid_hash_capacity;
+    u32 val = server->fid_hash_table[idx];
+    if(val == FID_HASH_EMPTY || val == FID_HASH_TOMBSTONE)
+    {
+      server->fid_hash_table[idx] = slot_idx;
+      break;
+    }
   }
 
-  ServerFid9P *f = server->fid_free_list;
-  if(f != 0) { server->fid_free_list = f->hash_next; }
-  else       { f = push_array(server->arena, ServerFid9P, 1); }
-
-  MemoryZeroStruct(f);
-  f->fid                  = fid;
-  f->open_mode            = P9_OPEN_MODE_NONE;
-  f->server               = server;
-  f->hash_next            = server->fid_table[hash];
-  server->fid_table[hash] = f;
   server->fid_count += 1;
-
   return f;
 }
 
 internal ServerFid9P *
 server9p_fid_lookup(Server9P *server, u32 fid)
 {
-  u32 hash = fid % server->max_fid_count;
-  for(ServerFid9P *f = server->fid_table[hash]; f != 0; f = f->hash_next)
+  u32 hash = fid % server->fid_hash_capacity;
+  for(u32 probe = 0; probe < server->fid_hash_capacity; probe += 1)
   {
+    u32 idx      = (hash + probe) % server->fid_hash_capacity;
+    u32 slot_idx = server->fid_hash_table[idx];
+    if(slot_idx == FID_HASH_EMPTY)     { return 0; }
+    if(slot_idx == FID_HASH_TOMBSTONE) { continue; }
+
+    ServerFid9P *f = &server->fid_storage[slot_idx];
     if(f->fid == fid) { return f; }
   }
   return 0;
@@ -248,18 +280,22 @@ server9p_fid_lookup(Server9P *server, u32 fid)
 internal ServerFid9P *
 server9p_fid_remove(Server9P *server, u32 fid)
 {
-  u32          hash  = fid % server->max_fid_count;
-  ServerFid9P **prev = &server->fid_table[hash];
-
-  for(ServerFid9P *f = *prev; f != 0; prev = &f->hash_next, f = f->hash_next)
+  u32 hash = fid % server->fid_hash_capacity;
+  for(u32 probe = 0; probe < server->fid_hash_capacity; probe += 1)
   {
+    u32 idx      = (hash + probe) % server->fid_hash_capacity;
+    u32 slot_idx = server->fid_hash_table[idx];
+    if(slot_idx == FID_HASH_EMPTY)     { return 0; }
+    if(slot_idx == FID_HASH_TOMBSTONE) { continue; }
+
+    ServerFid9P *f = &server->fid_storage[slot_idx];
     if(f->fid == fid)
     {
-      *prev = f->hash_next;
-      server->fid_count -= 1;
+      server->fid_hash_table[idx] = FID_HASH_TOMBSTONE;
+      f->fid                      = 0;
+      server->fid_count          -= 1;
       return f;
     }
   }
-
   return 0;
 }

@@ -9,16 +9,6 @@ global b32          require_auth     = 0;
 global String8      auth_daemon_addr = {0};
 global String8      auth_id          = {0};
 
-internal void
-fid_release(Server9P *server, ServerFid9P *fid)
-{
-  if(fid != 0)
-  {
-    fid->hash_next = server->fid_free_list;
-    server->fid_free_list = fid;
-  }
-}
-
 internal FidAuxiliary9P *
 fid_aux_alloc(Server9P *server)
 {
@@ -66,17 +56,17 @@ fid_aux_set_path(FidAuxiliary9P *aux, String8 path)
 internal void
 fid_release_all(Server9P *server)
 {
-  for(u32 i = 0; i < server->max_fid_count; i += 1)
+  for(u32 i = 0; i < server->fid_capacity; i += 1)
   {
-    for(ServerFid9P *fid = server->fid_table[i], *next = 0; fid != 0; fid = next)
+    ServerFid9P *fid = &server->fid_storage[i];
+    if(fid->fid != 0)
     {
-      next = fid->hash_next;
       fid_aux_release(server, (FidAuxiliary9P *)fid->auxiliary);
-      fid->hash_next = server->fid_free_list;
-      server->fid_free_list = fid;
+      fid->fid = 0;
     }
-    server->fid_table[i] = 0;
   }
+
+  MemorySet(server->fid_hash_table, max_u8, server->fid_hash_capacity * sizeof(u32));
   server->fid_count = 0;
 }
 
@@ -195,8 +185,7 @@ srv_walk(ServerRequest9P *request)
       {
         if(request->new_fid != request->fid)
         {
-          ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.new_fid);
-          fid_release(request->server, fid);
+          server9p_fid_remove(request->server, request->in_msg.new_fid);
         }
         server9p_respond(request, res.error);
         return;
@@ -216,8 +205,7 @@ srv_walk(ServerRequest9P *request)
       {
         if(request->new_fid != request->fid)
         {
-          ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.new_fid);
-          fid_release(request->server, fid);
+          server9p_fid_remove(request->server, request->in_msg.new_fid);
         }
         server9p_respond(request, str8_lit("file not found"));
         return;
@@ -409,10 +397,7 @@ srv_clunk(ServerRequest9P *request)
 {
   FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
   fid_aux_release(request->server, aux);
-
-  ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
-  fid_release(request->server, fid);
-
+  server9p_fid_remove(request->server, request->in_msg.fid);
   server9p_respond(request, str8_zero());
 }
 
@@ -424,8 +409,7 @@ srv_remove(ServerRequest9P *request)
 
   fs9p_remove(fs_context, fid_aux_get_path(aux));
   fid_aux_release(request->server, aux);
-  ServerFid9P *fid = server9p_fid_remove(request->server, request->in_msg.fid);
-  fid_release(request->server, fid);
+  server9p_fid_remove(request->server, request->in_msg.fid);
   server9p_respond(request, str8_zero());
 }
 
@@ -448,7 +432,7 @@ srv_wstat(ServerRequest9P *request)
   FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
   if(request->in_msg.stat_data.size == 0) { server9p_respond(request, str8_lit("invalid stat data")); return; }
 
-  Dir9P stat = dir9p_from_str8(request->in_msg.stat_data);
+  Dir9P stat = dir9p_from_str8(request->scratch.arena, request->in_msg.stat_data);
   if(!fs9p_wstat(fs_context, fid_aux_get_path(aux), &stat)) { server9p_respond(request, str8_lit("wstat failed")); return; }
 
   if(stat.name.size > 0)

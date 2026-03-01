@@ -49,7 +49,7 @@ encode_qid(u8 *ptr, Qid qid)
 }
 
 internal u8 *
-decode_str8(u8 *ptr, u8 *end, String8 *out_string)
+decode_str8(Arena *arena, u8 *ptr, u8 *end, String8 *out_string)
 {
   if(ptr + P9_STRING8_SIZE_FIELD_SIZE > end) { return 0; }
 
@@ -58,13 +58,16 @@ decode_str8(u8 *ptr, u8 *end, String8 *out_string)
 
   if(ptr + size > end) { return 0; }
 
-  out_string->size = size;
   if(size > 0)
   {
-    out_string->str = ptr;
-    ptr += size;
+    u8 *buffer       = push_array(arena, u8, size + 1);
+    MemoryCopy(buffer, ptr, size);
+    buffer[size]     = 0;
+    out_string->str  = buffer;
+    out_string->size = size;
+    ptr             += size;
   }
-  else { out_string->str = 0; }
+  else { *out_string = str8_zero(); }
 
   return ptr;
 }
@@ -388,7 +391,7 @@ str8_from_msg9p(Arena *arena, Message9P msg)
 }
 
 internal Message9P
-msg9p_from_str8(String8 data)
+msg9p_from_str8(Arena *arena, String8 data)
 {
   Message9P result = msg9p_zero();
   if(data.size < P9_MESSAGE_MINIMUM_SIZE) { return msg9p_zero(); }
@@ -415,7 +418,7 @@ msg9p_from_str8(String8 data)
     result.max_message_size = from_le_u32(read_u32(ptr));
     ptr += 4;
 
-    ptr = decode_str8(ptr, end, &result.protocol_version);
+    ptr = decode_str8(arena, ptr, end, &result.protocol_version);
     if(ptr == 0) { return msg9p_zero(); }
   }break;
   case Msg9P_Tauth:
@@ -425,10 +428,10 @@ msg9p_from_str8(String8 data)
     result.auth_fid = from_le_u32(read_u32(ptr));
     ptr += 4;
 
-    ptr = decode_str8(ptr, end, &result.user_name);
+    ptr = decode_str8(arena, ptr, end, &result.user_name);
     if(ptr == 0) { return msg9p_zero(); }
 
-    ptr = decode_str8(ptr, end, &result.attach_path);
+    ptr = decode_str8(arena, ptr, end, &result.attach_path);
     if(ptr == 0) { return msg9p_zero(); }
   }break;
   case Msg9P_Rauth:
@@ -438,7 +441,7 @@ msg9p_from_str8(String8 data)
   }break;
   case Msg9P_Rerror:
   {
-    ptr = decode_str8(ptr, end, &result.error_message);
+    ptr = decode_str8(arena, ptr, end, &result.error_message);
     if(ptr == 0) { return msg9p_zero(); }
   }break;
   case Msg9P_Tflush:
@@ -459,10 +462,10 @@ msg9p_from_str8(String8 data)
     result.auth_fid = from_le_u32(read_u32(ptr));
     ptr += 4;
 
-    ptr = decode_str8(ptr, end, &result.user_name);
+    ptr = decode_str8(arena, ptr, end, &result.user_name);
     if(ptr == 0) { return msg9p_zero(); }
 
-    ptr = decode_str8(ptr, end, &result.attach_path);
+    ptr = decode_str8(arena, ptr, end, &result.attach_path);
     if(ptr == 0) { return msg9p_zero(); }
   }break;
   case Msg9P_Rattach:
@@ -487,7 +490,7 @@ msg9p_from_str8(String8 data)
 
     for(u64 i = 0; i < result.walk_name_count; i += 1)
     {
-      ptr = decode_str8(ptr, end, &result.walk_names[i]);
+      ptr = decode_str8(arena, ptr, end, &result.walk_names[i]);
       if(ptr == 0) { return msg9p_zero(); }
     }
   }break;
@@ -533,7 +536,7 @@ msg9p_from_str8(String8 data)
     result.fid = from_le_u32(read_u32(ptr));
     ptr += 4;
 
-    ptr = decode_str8(ptr, end, &result.name);
+    ptr = decode_str8(arena, ptr, end, &result.name);
     if(ptr == 0)      { return msg9p_zero(); }
     if(ptr + 5 > end) { return msg9p_zero(); }
 
@@ -811,7 +814,7 @@ str8_from_dir9p(Arena *arena, Dir9P dir)
 }
 
 internal Dir9P
-dir9p_from_str8(String8 data)
+dir9p_from_str8(Arena *arena, String8 data)
 {
   Dir9P result = dir9p_zero();
   if(data.size < P9_STAT_DATA_FIXED_SIZE) { return dir9p_zero(); }
@@ -849,16 +852,16 @@ dir9p_from_str8(String8 data)
   result.length = from_le_u64(read_u64(ptr));
   ptr += 8;
 
-  ptr = decode_str8(ptr, end, &result.name);
+  ptr = decode_str8(arena, ptr, end, &result.name);
   if(ptr == 0) { return dir9p_zero(); }
 
-  ptr = decode_str8(ptr, end, &result.user_id);
+  ptr = decode_str8(arena, ptr, end, &result.user_id);
   if(ptr == 0) { return dir9p_zero(); }
 
-  ptr = decode_str8(ptr, end, &result.group_id);
+  ptr = decode_str8(arena, ptr, end, &result.group_id);
   if(ptr == 0) { return dir9p_zero(); }
 
-  ptr = decode_str8(ptr, end, &result.modify_user_id);
+  ptr = decode_str8(arena, ptr, end, &result.modify_user_id);
   if(ptr == 0)   { return dir9p_zero(); }
   if(ptr != end) { return dir9p_zero(); }
 

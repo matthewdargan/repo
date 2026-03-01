@@ -229,7 +229,7 @@ client9p_receive(Arena *arena, Client9P *client)
   Message9P result = msg9p_zero();
   String8 rx_msg   = read_9p_msg(arena, client->fd);
   if(rx_msg.size == 0) { return result; }
-  result = msg9p_from_str8(rx_msg);
+  result = msg9p_from_str8(arena, rx_msg);
 #if BUILD_DEBUG
   Temp scratch = scratch_begin(&arena, 1);
   log_infof("9P -> %S\n", str8_from_msg9p__fmt(scratch.arena, result));
@@ -602,7 +602,7 @@ client9p_dir_list_from_str8(Arena *arena, String8 buffer)
     String8 dir_msg = str8_zero();
     dir_msg.str = &buffer.str[offset];
     dir_msg.size = entry_size;
-    Dir9P dir = dir9p_from_str8(dir_msg);
+    Dir9P dir = dir9p_from_str8(arena, dir_msg);
     if(dir.name.size == 0 && entry_size > 2) { return result; }
     dir9p_list_push(arena, &result, dir);
     offset += entry_size;
@@ -642,7 +642,7 @@ client9p_fid_stat(Arena *arena, ClientFid9P *fid)
   tx.fid       = fid->fid;
   Message9P rx = client9p_rpc(arena, fid->client, tx);
   if(rx.type != Msg9P_Rstat) { return result; }
-  result = dir9p_from_str8(rx.stat_data);
+  result = dir9p_from_str8(arena, rx.stat_data);
   return result;
 }
 

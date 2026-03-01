@@ -2,21 +2,27 @@
 #define _9P_SERVER_H
 
 ////////////////////////////////
+//~ Constants
+
+#define FID_HASH_EMPTY     max_u32
+#define FID_HASH_TOMBSTONE (max_u32 - 1)
+
+////////////////////////////////
 //~ Server Types
 
 typedef struct Server9P Server9P;
 typedef struct ServerFid9P ServerFid9P;
 typedef struct FidAuxiliary9P FidAuxiliary9P;
+
 struct ServerFid9P
 {
   u32 fid;
-  u32 open_mode;
   Qid qid;
-  String8 user_id;
-  u64 offset;
   void *auxiliary;
   Server9P *server;
-  ServerFid9P *hash_next;
+  u32 open_mode;
+  String8 user_id;
+  u64 offset;
 };
 
 typedef struct ServerRequest9P ServerRequest9P;
@@ -49,15 +55,19 @@ struct Server9P
   u32 max_message_size;
   u8 *read_buffer;
   u8 *write_buffer;
-  ServerFid9P **fid_table;
+
+  ServerFid9P *fid_storage;
+  u32 *fid_hash_table;
   u32 fid_count;
-  u32 max_fid_count;
-  ServerFid9P *fid_free_list;
+  u32 fid_capacity;
+  u32 fid_hash_capacity;
+
   ServerRequest9P **request_table;
   u32 request_count;
   u32 max_request_count;
   u32 next_tag;
   ServerRequest9P *request_free_list;
+
   FidAuxiliary9P *fid_aux_free_list;
   void *auxiliary;
 };

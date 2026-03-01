@@ -5,6 +5,7 @@
 //~ Includes
 
 #include <grp.h>
+#include <sys/syscall.h>
 
 ////////////////////////////////
 //~ Filesystem Types
@@ -34,10 +35,18 @@ struct TempNode9P
   TempNode9P *parent;
 };
 
+typedef struct IdNamePair9P IdNamePair9P;
+struct IdNamePair9P
+{
+  u32 id;
+  String8 name;
+};
+
 typedef struct FsContext9P FsContext9P;
 struct FsContext9P
 {
   String8 root_path;
+  String8 root_canonical;
   String8 tmp_path;
   Mutex tmp_mutex;
   Arena *tmp_arena;
@@ -47,6 +56,11 @@ struct FsContext9P
   u32 uid_offset;
   u32 gid_offset;
   StorageBackend9P backend;
+
+  IdNamePair9P uid_cache[16];
+  IdNamePair9P gid_cache[16];
+  u32 uid_cache_pos;
+  u32 gid_cache_pos;
 };
 
 typedef struct FsHandle9P FsHandle9P;
@@ -59,6 +73,16 @@ struct FsHandle9P
   b32 is_directory;
   TempNode9P *tmp_node;
   FsContext9P *ctx;
+};
+
+typedef struct LinuxDirEnt64 LinuxDirEnt64;
+struct LinuxDirEnt64
+{
+  u64 d_ino;
+  u64 d_off;
+  u16 d_reclen;
+  u8  d_type;
+  char d_name[];
 };
 
 typedef struct PathResolution9P PathResolution9P;
@@ -160,7 +184,7 @@ internal String8 temp9p_readdir(Arena *arena, TempNode9P *node, TempNode9P **ite
 ////////////////////////////////
 //~ UID/GID Conversion
 
-internal String8 str8_from_uid(Arena *arena, u32 uid);
-internal String8 str8_from_gid(Arena *arena, u32 gid);
+internal String8 str8_from_uid(Arena *arena, FsContext9P *ctx, u32 uid);
+internal String8 str8_from_gid(Arena *arena, FsContext9P *ctx, u32 gid);
 
 #endif // _9P_FS_H

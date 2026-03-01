@@ -50,17 +50,17 @@ fid_aux_get(Server9P *server, ServerFid9P *fid)
 internal void
 fid_release_all(Server9P *server)
 {
-  for(u32 i = 0; i < server->max_fid_count; i += 1)
+  for(u32 i = 0; i < server->fid_capacity; i += 1)
   {
-    for(ServerFid9P *fid = server->fid_table[i], *next = 0; fid != 0; fid = next)
+    ServerFid9P *fid = &server->fid_storage[i];
+    if(fid->fid != 0)
     {
-      next = fid->hash_next;
       fid_aux_release(server, (Auth_FidAuxiliary9P *)fid->auxiliary);
-      fid->hash_next = server->fid_free_list;
-      server->fid_free_list = fid;
+      fid->fid = 0;
     }
-    server->fid_table[i] = 0;
   }
+
+  MemorySet(server->fid_hash_table, max_u8, server->fid_hash_capacity * sizeof(u32));
   server->fid_count = 0;
 }
 
@@ -239,12 +239,7 @@ srv_clunk(ServerRequest9P *request)
 {
   Auth_FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
   fid_aux_release(request->server, aux);
-  ServerFid9P *fid         = server9p_fid_remove(request->server, request->in_msg.fid);
-  if(fid != 0)
-  {
-    fid->hash_next = request->server->fid_free_list;
-    request->server->fid_free_list = fid;
-  }
+  server9p_fid_remove(request->server, request->in_msg.fid);
   server9p_respond(request, str8_zero());
 }
 
