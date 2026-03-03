@@ -7,6 +7,7 @@
     ./9pfs-test.nix
     ./9p.nix
     ./authd.nix
+    ./media-player.nix
     ./media-server.nix
     ./webauth.nix
     ./installer-image.nix

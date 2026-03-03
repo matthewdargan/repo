@@ -9,6 +9,7 @@
     binaryName ? pname,
     buildInputs ? [],
     nativeBuildInputs ? [],
+    runtimeInputs ? [],
     extraLinkFlags ? "",
     postPatch ? "",
     postInstall ? "",
@@ -35,10 +36,15 @@
         if lib.hasInfix "BUILD_DEBUG=1" flags
         then "debug mode"
         else "release mode";
+      hasRuntimeInputs = runtimeInputs != [];
+      actualNativeBuildInputs =
+        nativeBuildInputs
+        ++ lib.optionals hasRuntimeInputs [pkgs.makeWrapper];
     in
       pkgs.clangStdenv.mkDerivation (commonAttrs
         // {
-          inherit buildInputs nativeBuildInputs postPatch;
+          inherit buildInputs postPatch;
+          nativeBuildInputs = actualNativeBuildInputs;
           buildPhase = ''
             runHook preBuild
             echo "[${buildMode}]"
@@ -52,6 +58,10 @@
           installPhase = ''
             runHook preInstall
             install -Dm755 ${binaryName} $out/bin/${pname}
+            ${lib.optionalString hasRuntimeInputs ''
+              wrapProgram $out/bin/${pname} \
+                --prefix PATH : ${lib.makeBinPath runtimeInputs}
+            ''}
             runHook postInstall
           '';
           inherit postInstall;
