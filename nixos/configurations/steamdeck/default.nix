@@ -15,6 +15,7 @@ in {
   ];
   environment.systemPackages = [
     self.packages.${pkgs.stdenv.hostPlatform.system}."9p"
+    self.packages.${pkgs.stdenv.hostPlatform.system}.media-player
   ];
   networking = {
     hostName = "steamdeck";

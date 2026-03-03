@@ -7,7 +7,6 @@ _: {
     "firefox" = ./firefox.nix;
     "ghostty" = ./ghostty.nix;
     "gpg" = ./gpg.nix;
-    "jellyfin" = ./jellyfin.nix;
     "retroarch" = ./retroarch.nix;
   };
 }

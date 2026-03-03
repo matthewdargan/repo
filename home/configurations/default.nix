@@ -24,7 +24,6 @@ in {
       self.homeModules.firefox
       self.homeModules.ghostty
       self.homeModules.gpg
-      self.homeModules.jellyfin
       self.homeModules.retroarch
     ];
 
@@ -32,7 +31,6 @@ in {
       self.homeModules.base
       self.homeModules.firefox
       self.homeModules.ghostty
-      self.homeModules.jellyfin
       self.homeModules.retroarch
     ];
   };

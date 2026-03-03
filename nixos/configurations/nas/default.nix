@@ -28,28 +28,14 @@
     hostId = builtins.substring 0 8 (builtins.hashString "md5" hostName);
     hostName = "nas";
     firewall.interfaces.${config.services.tailscale.interfaceName} = {
-      allowedTCPPorts = [22 5640 8096];
-      allowedUDPPorts = [8096];
+      allowedTCPPorts = [22 5640];
     };
     networkmanager.enable = true;
   };
   services = {
     "9auth" = {
       enable = true;
-      authorizedUsers = ["jellyfin" "media-server" "mpd" "storage"];
-    };
-    "9mount" = {
-      enable = true;
-      mounts = [
-        {
-          name = "media";
-          dial = "tcp!127.0.0.1!5640";
-          mountPoint = "/var/lib/jellyfin/n/media";
-          authId = "nas";
-          dependsOn = ["media-serve.service"];
-          user = "jellyfin";
-        }
-      ];
+      authorizedUsers = ["media-server" "mpd" "storage"];
     };
     btrfs.autoScrub.enable = true;
     git-server = {
@@ -64,7 +50,6 @@
         exec ${pkgs.git}/bin/git push --mirror github 2>&1 || true
       '';
     };
-    jellyfin.enable = true;
     media-server = {
       enable = true;
       mediaRoot = "/var/lib/media-server/n/media";
@@ -95,14 +80,9 @@
         };
         wantedBy = ["multi-user.target"];
       };
-      jellyfin = {
-        after = ["9mount-media.service"];
-        wants = ["9mount-media.service"];
-      };
     };
     tmpfiles.rules = [
       "d /var/lib/git-server 0755 git git -"
-      "d /var/lib/jellyfin/n 0755 jellyfin jellyfin -"
     ];
   };
   system.stateVersion = "25.05";

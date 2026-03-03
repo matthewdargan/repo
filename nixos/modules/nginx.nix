@@ -24,18 +24,6 @@ in {
       description = "Directory for public files";
     };
 
-    jellyfinHost = mkOption {
-      type = types.str;
-      default = "nas";
-      description = "Jellyfin backend hostname";
-    };
-
-    jellyfinPort = mkOption {
-      type = types.port;
-      default = 8096;
-      description = "Jellyfin backend port";
-    };
-
     email = mkOption {
       type = types.str;
       description = "Email address for Let's Encrypt notifications";
@@ -157,27 +145,6 @@ in {
                 proxy_set_header X-Forwarded-Host $http_host;
               '';
             };
-          };
-        };
-
-        "jellyfin.${cfg.domain}" = {
-          forceSSL = true;
-          enableACME = true;
-
-          locations."/" = {
-            proxyPass = "http://${cfg.jellyfinHost}:${toString cfg.jellyfinPort}";
-            proxyWebsockets = true;
-            extraConfig = ''
-              proxy_buffering off;
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-              proxy_set_header X-Forwarded-Host $http_host;
-              proxy_set_header Range $http_range;
-              proxy_set_header If-Range $http_if_range;
-              proxy_redirect off;
-            '';
           };
         };
       };
