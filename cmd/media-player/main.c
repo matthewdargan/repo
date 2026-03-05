@@ -1,18 +1,9 @@
-#include <dirent.h>
-#include <sys/stat.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <sys/wait.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <locale.h>
-#include <signal.h>
 #include <ncurses.h>
 
 #include "base/inc.h"
-#include "9p/inc.h"
 #include "base/inc.c"
-#include "9p/inc.c"
 
 ////////////////////////////////
 //~ Types
@@ -21,44 +12,42 @@ typedef enum PlayerMode PlayerMode;
 enum PlayerMode
 {
   PlayerMode_Home,
-  PlayerMode_Shows,
-  PlayerMode_Movies,
+  PlayerMode_Browsing,
   PlayerMode_Playing,
 };
 
-#define IS_BROWSE_MODE(mode) ((mode) == PlayerMode_Home || (mode) == PlayerMode_Shows || (mode) == PlayerMode_Movies)
+#define IS_BROWSE_MODE(mode) ((mode) == PlayerMode_Home || (mode) == PlayerMode_Browsing)
 
 typedef struct FileEntry FileEntry;
 struct FileEntry
 {
   String8 name;
-  b32 is_directory;
-  u64 size;
-  f64 last_watched_pos;
-  f64 duration;
-  u64 last_watched_time;
-  b32 is_watched;
+  b32     is_directory;
+  f64     last_watched_pos;
+  f64     duration;
+  u64     last_watched_time;
+  b32     is_watched;
 };
 
 typedef struct WatchProgress WatchProgress;
 struct WatchProgress
 {
-  String8 file_path;
-  f64 position_seconds;
-  u64 last_watched_timestamp;
-  String8 subtitle_lang;
-  String8 audio_lang;
-  f64 duration_seconds;
-  b32 is_watched;
+  String8        file_path;
+  f64            position_seconds;
+  u64            last_watched_timestamp;
+  String8        subtitle_lang;
+  String8        audio_lang;
+  f64            duration_seconds;
+  b32            is_watched;
   WatchProgress *next;
 };
 
 typedef struct WatchProgressTable WatchProgressTable;
 struct WatchProgressTable
 {
-  Arena *arena;
+  Arena          *arena;
   WatchProgress **buckets;
-  u64 bucket_count;
+  u64             bucket_count;
 };
 
 internal b32
@@ -68,25 +57,23 @@ is_watched(WatchProgress *wp)
   return wp->is_watched;
 }
 
-//~ MPV IPC Client
 typedef struct MPVClient MPVClient;
 struct MPVClient
 {
-  int socket_fd;
-  int child_pid;
-  Arena *arena;
-  u64 request_id;
-  b32 running;
+  int     socket_fd;
+  int     child_pid;
+  Arena  *arena;
+  u64     request_id;
+  b32     running;
   String8 ipc_path;
 };
 
-//~ Terminal (ncurses UI)
 typedef struct Terminal Terminal;
 struct Terminal
 {
   WINDOW *win;
-  u32 height;
-  u32 width;
+  u32     height;
+  u32     width;
 };
 
 typedef struct ContinueWatchingEntry ContinueWatchingEntry;
@@ -94,35 +81,33 @@ struct ContinueWatchingEntry
 {
   String8 file_path;
   String8 display_name;
-  f64 position_seconds;
-  u64 last_watched_timestamp;
-  b32 is_next_episode;
+  f64     position_seconds;
+  u64     last_watched_timestamp;
 };
 
 typedef struct PlayerState PlayerState;
 struct PlayerState
 {
-  Arena *perm_arena;
+  Arena     *perm_arena;
 
   PlayerMode mode;
-  b32 quit;
-  b32 needs_render;
-  b32 continue_watching_dirty;
+  b32        quit;
+  b32        needs_render;
 
-  String8 current_dir;
-  String8 current_file;
+  String8    current_dir;
+  String8    current_file;
   FileEntry *files;
-  u64 file_count;
-  u64 selected_index;
-  u64 scroll_offset;
+  u64        file_count;
+  u64        selected_index;
+  u64        scroll_offset;
+  u64        current_root_index;
 
   ContinueWatchingEntry *continue_watching;
-  u64 continue_watching_count;
+  u64                    continue_watching_count;
 
   MPVClient *mpv;
-  Terminal *term;
+  Terminal  *term;
 
-  u64 last_poll_time;
   u64 last_position_save;
   f64 last_known_position;
   f64 last_known_duration;
@@ -131,9 +116,16 @@ struct PlayerState
 ////////////////////////////////
 //~ Globals
 
-global String8 g_media_root_path = {0};
-global String8 g_state_dir_path   = {0};
-global Client9P *g_9p_client      = 0;
+typedef struct MediaRoot MediaRoot;
+struct MediaRoot
+{
+  String8 path;
+  String8 name;
+};
+
+global MediaRoot          *g_roots          = 0;
+global u64                 g_root_count     = 0;
+global String8             g_state_dir_path = {0};
 global WatchProgressTable *g_watch_progress = 0;
 
 ////////////////////////////////
@@ -143,10 +135,7 @@ internal u64
 hash_string(String8 str)
 {
   u64 hash = 5381;
-  for(u64 i = 0; i < str.size; i += 1)
-  {
-    hash = ((hash << 5) + hash) + str.str[i];
-  }
+  for(u64 i = 0; i < str.size; i += 1) { hash = ((hash << 5) + hash) + str.str[i]; }
   return hash;
 }
 
@@ -154,10 +143,9 @@ internal WatchProgressTable *
 watch_progress_table_alloc(Arena *arena, u64 bucket_count)
 {
   WatchProgressTable *table = push_array(arena, WatchProgressTable, 1);
-  table->arena        = arena;
-  table->bucket_count = bucket_count;
-  table->buckets      = push_array(arena, WatchProgress *, bucket_count);
-  MemoryZero(table->buckets, bucket_count * sizeof(WatchProgress *));
+  table->arena              = arena;
+  table->bucket_count       = bucket_count;
+  table->buckets            = push_array(arena, WatchProgress *, bucket_count);
   return table;
 }
 
@@ -177,22 +165,25 @@ watch_progress_find(WatchProgressTable *table, String8 file_path)
   return 0;
 }
 
-internal void
+internal WatchProgress *
 watch_progress_update(WatchProgressTable *table, String8 file_path, f64 position, f64 duration)
 {
-  if(table == 0) { return; }
+  if(table == 0) { return 0; }
 
   u64 hash = hash_string(file_path);
   u64 idx  = hash % table->bucket_count;
 
-  WatchProgress *wp = watch_progress_find(table, file_path);
+  WatchProgress *wp = 0;
+  for(WatchProgress *it = table->buckets[idx]; it != 0; it = it->next)
+  {
+    if(str8_match(it->file_path, file_path, 0)) { wp = it; break; }
+  }
+
   if(wp == 0)
   {
-    wp = push_array(table->arena, WatchProgress, 1);
-    wp->file_path     = str8_copy(table->arena, file_path);
-    wp->subtitle_lang = str8_zero();
-    wp->audio_lang    = str8_zero();
-    wp->next          = table->buckets[idx];
+    wp                  = push_array(table->arena, WatchProgress, 1);
+    wp->file_path       = str8_copy(table->arena, file_path);
+    wp->next            = table->buckets[idx];
     table->buckets[idx] = wp;
   }
 
@@ -200,11 +191,9 @@ watch_progress_update(WatchProgressTable *table, String8 file_path, f64 position
   wp->duration_seconds       = duration;
   wp->last_watched_timestamp = os_now_microseconds() / Million(1);
 
-  // Auto-mark as watched if position is near end (90%+)
-  if(duration > 0.0 && (position / duration) > 0.90)
-  {
-    wp->is_watched = 1;
-  }
+  if(duration > 0.0 && (position / duration) > 0.90) { wp->is_watched = 1; }
+
+  return wp;
 }
 
 internal void
@@ -215,20 +204,21 @@ watch_progress_mark_watched(WatchProgressTable *table, String8 file_path)
   u64 hash = hash_string(file_path);
   u64 idx  = hash % table->bucket_count;
 
-  WatchProgress *wp = watch_progress_find(table, file_path);
+  WatchProgress *wp = 0;
+  for(WatchProgress *it = table->buckets[idx]; it != 0; it = it->next)
+  {
+    if(str8_match(it->file_path, file_path, 0)) { wp = it; break; }
+  }
+
   if(wp == 0)
   {
-    wp = push_array(table->arena, WatchProgress, 1);
-    wp->file_path     = str8_copy(table->arena, file_path);
-    wp->subtitle_lang = str8_zero();
-    wp->audio_lang    = str8_zero();
-    wp->position_seconds = 0.0;
-    wp->duration_seconds = 0.0;
-    wp->next          = table->buckets[idx];
+    wp                  = push_array(table->arena, WatchProgress, 1);
+    wp->file_path       = str8_copy(table->arena, file_path);
+    wp->next            = table->buckets[idx];
     table->buckets[idx] = wp;
   }
 
-  wp->is_watched = 1;
+  wp->is_watched             = 1;
   wp->last_watched_timestamp = os_now_microseconds() / Million(1);
 }
 
@@ -242,18 +232,15 @@ watch_progress_load(WatchProgressTable *table, String8 state_file_path)
   OS_Handle file = os_file_open(OS_AccessFlag_Read, state_file_path);
   if(file.u64[0] == 0)
   {
-    log_infof("media-player: no watch progress file found at %S\n", state_file_path);
     scratch_end(scratch);
     return;
   }
 
   OS_FileProperties props = os_properties_from_file(file);
-  u8 *buffer = push_array(scratch.arena, u8, props.size);
+  u8 *buffer              = push_array(scratch.arena, u8, props.size);
   os_file_read(file, rng_1u64(0, props.size), buffer);
-  String8 contents = str8(buffer, props.size);
+  String8 contents        = str8(buffer, props.size);
   os_file_close(file);
-
-  log_infof("media-player: loaded watch progress from %S (%llu bytes)\n", state_file_path, props.size);
 
   String8List lines = str8_split(scratch.arena, contents, (u8 *)"\n", 1, 0);
   for(String8Node *node = lines.first; node != 0; node = node->next)
@@ -261,52 +248,41 @@ watch_progress_load(WatchProgressTable *table, String8 state_file_path)
     String8 line = str8_skip_chop_whitespace(node->string);
     if(line.size == 0 || line.str[0] == '#') { continue; }
 
-    String8 file_path = {0};
-    f64 position = 0.0;
-    u64 timestamp = 0;
+    String8 file_path     = {0};
     String8 subtitle_lang = str8_lit("-");
-    String8 audio_lang = str8_lit("-");
-    f64 duration = 0.0;
-    b32 watched = 0;
+    String8 audio_lang    = str8_lit("-");
+    f64     position      = 0.0;
+    f64     duration      = 0.0;
+    u64     timestamp     = 0;
+    b32     watched       = 0;
 
     String8List parts = str8_split(scratch.arena, line, (u8 *)"\t", 1, 0);
     if(parts.node_count >= 3)
     {
-      String8Node *n = parts.first;
-      file_path = str8_skip_chop_whitespace(n->string);
-      n = n->next;
-      position = f64_from_str8(n->string);
-      n = n->next;
-      timestamp = u64_from_str8(n->string, 10);
+      String8Node *n0 = parts.first;
+      String8Node *n1 = n0->next;
+      String8Node *n2 = n1->next;
+      String8Node *n3 = n2->next;
+      String8Node *n4 = n3 ? n3->next : 0;
+      String8Node *n5 = n4 ? n4->next : 0;
+      String8Node *n6 = n5 ? n5->next : 0;
 
-      if(n->next != 0)
+      file_path = str8_skip_chop_whitespace(n0->string);
+      position  = f64_from_str8(n1->string);
+      timestamp = u64_from_str8(n2->string, 10);
+
+      if(n3)
       {
-        n = n->next;
-        String8 sub = str8_skip_chop_whitespace(n->string);
-        if(sub.size > 0 && !str8_match(sub, str8_lit("-"), 0))
-        {
-          subtitle_lang = sub;
-        }
+        String8 sub = str8_skip_chop_whitespace(n3->string);
+        if(sub.size > 0 && !str8_match(sub, str8_lit("-"), 0)) { subtitle_lang = sub; }
       }
-      if(n->next != 0)
+      if(n4)
       {
-        n = n->next;
-        String8 aud = str8_skip_chop_whitespace(n->string);
-        if(aud.size > 0 && !str8_match(aud, str8_lit("-"), 0))
-        {
-          audio_lang = aud;
-        }
+        String8 aud = str8_skip_chop_whitespace(n4->string);
+        if(aud.size > 0 && !str8_match(aud, str8_lit("-"), 0)) { audio_lang = aud; }
       }
-      if(n->next != 0)
-      {
-        n = n->next;
-        duration = f64_from_str8(n->string);
-      }
-      if(n->next != 0)
-      {
-        n = n->next;
-        watched = (u64_from_str8(n->string, 10) != 0);
-      }
+      if(n5) { duration = f64_from_str8(n5->string); }
+      if(n6) { watched  = (u64_from_str8(n6->string, 10) != 0); }
 
       WatchProgress *wp = watch_progress_find(table, file_path);
       if(wp == 0)
@@ -333,22 +309,46 @@ watch_progress_load(WatchProgressTable *table, String8 state_file_path)
 }
 
 internal void
-watch_progress_save(WatchProgressTable *table, String8 state_file_path)
+watch_progress_migrate_to_absolute_paths(WatchProgressTable *table)
 {
-  if(table == 0) { return; }
-
-  Temp scratch = scratch_begin(&table->arena, 1);
-
-  String8List lines = {0};
-  str8_list_push(scratch.arena, &lines, str8_lit("# Media Player Watch State\n"));
-  str8_list_push(scratch.arena, &lines, str8_lit("# Format: file_path\\tposition\\ttimestamp\\tsub\\taud\\tduration\\twatched\n"));
+  if(table == 0 || g_root_count == 0) { return; }
 
   for(u64 i = 0; i < table->bucket_count; i += 1)
   {
     for(WatchProgress *wp = table->buckets[i]; wp != 0; wp = wp->next)
     {
-      String8 sub = wp->subtitle_lang.size > 0 ? wp->subtitle_lang : str8_lit("-");
-      String8 aud = wp->audio_lang.size > 0 ? wp->audio_lang : str8_lit("-");
+      if(wp->file_path.size > 0 && wp->file_path.str[0] != '/')
+      {
+        for(u64 r = 0; r < g_root_count; r += 1)
+        {
+          String8 root_name = g_roots[r].name;
+          if(str8_match(str8_prefix(wp->file_path, root_name.size), root_name, 0))
+          {
+            String8 relative = str8_skip(wp->file_path, root_name.size);
+            if(relative.size > 0 && relative.str[0] == '/') { relative = str8_skip(relative, 1); }
+            wp->file_path = str8f(table->arena, "%S/%S", g_roots[r].path, relative);
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+internal void
+watch_progress_save(WatchProgressTable *table, String8 state_file_path)
+{
+  if(table == 0) { return; }
+
+  Temp        scratch = scratch_begin(&table->arena, 1);
+  String8List lines   = {0};
+
+  for(u64 i = 0; i < table->bucket_count; i += 1)
+  {
+    for(WatchProgress *wp = table->buckets[i]; wp != 0; wp = wp->next)
+    {
+      String8 sub  = wp->subtitle_lang.size > 0 ? wp->subtitle_lang : str8_lit("-");
+      String8 aud  = wp->audio_lang.size > 0 ? wp->audio_lang : str8_lit("-");
       String8 line = str8f(scratch.arena, "%S\t%.2f\t%llu\t%S\t%S\t%.2f\t%d\n",
                            wp->file_path, wp->position_seconds, wp->last_watched_timestamp, sub, aud, wp->duration_seconds, wp->is_watched);
       str8_list_push(scratch.arena, &lines, line);
@@ -368,67 +368,62 @@ watch_progress_save(WatchProgressTable *table, String8 state_file_path)
   os_file_write(file, rng_1u64(0, contents.size), contents.str);
   os_file_close(file);
 
-  log_infof("media-player: saved watch progress to %S (%llu bytes)\n", state_file_path, contents.size);
-
   scratch_end(scratch);
 }
 
-internal String8
-filename_from_path(String8 path)
+
+//~ Continue Watching - Incremental Updates
+
+internal void
+continue_watching_update_entry(PlayerState *state, String8 file_path, f64 position, u64 timestamp, b32 is_watched)
 {
-  for(u64 i = path.size; i > 0; i -= 1)
+  u64 entry_idx = state->continue_watching_count;
+  for(u64 i = 0; i < state->continue_watching_count; i += 1)
   {
-    if(path.str[i - 1] == '/')
+    if(str8_match(state->continue_watching[i].file_path, file_path, 0))
     {
-      return str8(path.str + i, path.size - i);
+      entry_idx = i;
+      break;
     }
   }
-  return path;
+
+  if(is_watched || position <= 1.0)
+  {
+    if(entry_idx < state->continue_watching_count)
+    {
+      state->continue_watching[entry_idx] = state->continue_watching[state->continue_watching_count - 1];
+      state->continue_watching_count -= 1;
+    }
+    return;
+  }
+
+  if(entry_idx == state->continue_watching_count)
+  {
+    if(state->continue_watching_count >= 10) { return; }
+    state->continue_watching_count += 1;
+    state->continue_watching[entry_idx].file_path = str8_copy(state->perm_arena, file_path);
+  }
+
+  state->continue_watching[entry_idx].position_seconds       = position;
+  state->continue_watching[entry_idx].last_watched_timestamp = timestamp;
+  state->continue_watching[entry_idx].display_name           = str8_skip_last_slash(file_path);
 }
 
-typedef struct EpisodeInfo EpisodeInfo;
-struct EpisodeInfo
+internal void
+continue_watching_sort(PlayerState *state)
 {
-  b32 is_episode;
-  u32 season;
-  u32 episode;
-  String8 show_path;
-};
-
-internal EpisodeInfo
-parse_episode_info(String8 file_path)
-{
-  EpisodeInfo info = {0};
-
-  String8 filename = filename_from_path(file_path);
-
-  // Look for SxxExx pattern in filename
-  for(u64 i = 0; i < filename.size - 5; i += 1)
+  for(u64 i = 0; i < state->continue_watching_count; i += 1)
   {
-    if((filename.str[i] == 'S' || filename.str[i] == 's') &&
-       (filename.str[i + 3] == 'E' || filename.str[i + 3] == 'e'))
+    for(u64 j = i + 1; j < state->continue_watching_count; j += 1)
     {
-      u8 s1 = filename.str[i + 1];
-      u8 s2 = filename.str[i + 2];
-      u8 e1 = filename.str[i + 4];
-      u8 e2 = filename.str[i + 5];
-
-      if(s1 >= '0' && s1 <= '9' && s2 >= '0' && s2 <= '9' &&
-         e1 >= '0' && e1 <= '9' && e2 >= '0' && e2 <= '9')
+      if(state->continue_watching[j].last_watched_timestamp > state->continue_watching[i].last_watched_timestamp)
       {
-        info.is_episode = 1;
-        info.season = (s1 - '0') * 10 + (s2 - '0');
-        info.episode = (e1 - '0') * 10 + (e2 - '0');
-
-        // Extract show path (everything up to /Season XX/)
-        String8 dir = str8_chop_last_slash(file_path);
-        info.show_path = str8_chop_last_slash(dir);
-        break;
+        ContinueWatchingEntry temp = state->continue_watching[i];
+        state->continue_watching[i] = state->continue_watching[j];
+        state->continue_watching[j] = temp;
       }
     }
   }
-
-  return info;
 }
 
 internal void
@@ -438,160 +433,38 @@ load_continue_watching(PlayerState *state, WatchProgressTable *table, u64 max_co
 
   Temp scratch = scratch_begin(&state->perm_arena, 1);
 
-  ContinueWatchingEntry *temp_entries = push_array(scratch.arena, ContinueWatchingEntry, max_count * 2);
+  ContinueWatchingEntry *temp_entries = push_array(scratch.arena, ContinueWatchingEntry, max_count);
   u64 temp_count = 0;
 
-  // Collect in-progress items
   for(u64 i = 0; i < table->bucket_count; i += 1)
   {
     for(WatchProgress *wp = table->buckets[i]; wp != 0; wp = wp->next)
     {
+      if(temp_count >= max_count) { break; }
+
       if(wp->position_seconds > 1.0 && !is_watched(wp))
       {
-        if(temp_count >= max_count * 2) { break; }
-        temp_entries[temp_count].file_path            = wp->file_path;
-        temp_entries[temp_count].position_seconds     = wp->position_seconds;
+        temp_entries[temp_count].file_path              = wp->file_path;
+        temp_entries[temp_count].position_seconds       = wp->position_seconds;
         temp_entries[temp_count].last_watched_timestamp = wp->last_watched_timestamp;
-        temp_entries[temp_count].is_next_episode      = 0;
-        temp_entries[temp_count].display_name         = filename_from_path(wp->file_path);
+        temp_entries[temp_count].display_name           = str8_skip_last_slash(wp->file_path);
         temp_count += 1;
       }
     }
   }
 
-  // Find next episodes for recently watched shows
-  for(u64 i = 0; i < table->bucket_count; i += 1)
-  {
-    for(WatchProgress *wp = table->buckets[i]; wp != 0; wp = wp->next)
-    {
-      if(is_watched(wp))
-      {
-        EpisodeInfo ep = parse_episode_info(wp->file_path);
-        if(ep.is_episode)
-        {
-          // Build next episode pattern
-          String8 next_pattern = str8f(scratch.arena, "S%02dE%02d", ep.season, ep.episode + 1);
+  state->continue_watching       = push_array(state->perm_arena, ContinueWatchingEntry, temp_count);
+  state->continue_watching_count = temp_count;
 
-          // Check if next episode exists in watch progress
-          b32 found_next = 0;
-          for(u64 j = 0; j < table->bucket_count; j += 1)
-          {
-            for(WatchProgress *next_wp = table->buckets[j]; next_wp != 0; next_wp = next_wp->next)
-            {
-              String8 next_filename = filename_from_path(next_wp->file_path);
-              b32 contains_pattern = 0;
-              for(u64 k = 0; k + next_pattern.size <= next_filename.size; k += 1)
-              {
-                if(MemoryCompare(next_filename.str + k, next_pattern.str, next_pattern.size) == 0)
-                {
-                  contains_pattern = 1;
-                  break;
-                }
-              }
-              if(contains_pattern)
-              {
-                found_next = 1;
-                break;
-              }
-            }
-            if(found_next) { break; }
-          }
-
-          if(!found_next)
-          {
-            // Next episode hasn't been started - check if file exists
-            String8 full_path = str8f(scratch.arena, "%S/%S", g_media_root_path, wp->file_path);
-            String8 full_dir = str8_chop_last_slash(full_path);
-
-            char *dir_cstr = (char *)push_array(scratch.arena, u8, full_dir.size + 1);
-            MemoryCopy(dir_cstr, full_dir.str, full_dir.size);
-            dir_cstr[full_dir.size] = 0;
-
-            DIR *d = opendir(dir_cstr);
-            if(d != 0)
-            {
-              struct dirent *entry;
-              while((entry = readdir(d)) != 0)
-              {
-                String8 name = str8_cstring(entry->d_name);
-                b32 contains_pattern = 0;
-                for(u64 k = 0; k + next_pattern.size <= name.size; k += 1)
-                {
-                  if(MemoryCompare(name.str + k, next_pattern.str, next_pattern.size) == 0)
-                  {
-                    contains_pattern = 1;
-                    break;
-                  }
-                }
-                if(contains_pattern)
-                {
-                  String8 next_file_path = str8_chop_last_slash(wp->file_path);
-                  next_file_path = str8f(scratch.arena, "%S/%S", next_file_path, name);
-
-                  if(temp_count >= max_count * 2) { break; }
-                  temp_entries[temp_count].file_path            = next_file_path;
-                  temp_entries[temp_count].position_seconds     = 0.0;
-                  temp_entries[temp_count].last_watched_timestamp = wp->last_watched_timestamp;
-                  temp_entries[temp_count].is_next_episode      = 1;
-                  temp_entries[temp_count].display_name         = name;
-                  temp_count += 1;
-                  break;
-                }
-              }
-              closedir(d);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Sort by last watched timestamp (most recent first)
   for(u64 i = 0; i < temp_count; i += 1)
   {
-    for(u64 j = i + 1; j < temp_count; j += 1)
-    {
-      if(temp_entries[j].last_watched_timestamp > temp_entries[i].last_watched_timestamp)
-      {
-        ContinueWatchingEntry temp = temp_entries[i];
-        temp_entries[i] = temp_entries[j];
-        temp_entries[j] = temp;
-      }
-    }
-  }
-
-  // Remove duplicates (prefer in-progress over next episode)
-  u64 unique_count = 0;
-  for(u64 i = 0; i < temp_count; i += 1)
-  {
-    b32 is_duplicate = 0;
-    for(u64 j = 0; j < unique_count; j += 1)
-    {
-      if(str8_match(temp_entries[i].file_path, temp_entries[j].file_path, 0))
-      {
-        is_duplicate = 1;
-        break;
-      }
-    }
-    if(!is_duplicate && unique_count < max_count)
-    {
-      temp_entries[unique_count] = temp_entries[i];
-      unique_count += 1;
-    }
-  }
-
-  // Copy to permanent storage
-  state->continue_watching = push_array(state->perm_arena, ContinueWatchingEntry, unique_count);
-  state->continue_watching_count = unique_count;
-
-  for(u64 i = 0; i < unique_count; i += 1)
-  {
-    state->continue_watching[i].file_path            = str8_copy(state->perm_arena, temp_entries[i].file_path);
-    state->continue_watching[i].position_seconds     = temp_entries[i].position_seconds;
+    state->continue_watching[i].file_path              = str8_copy(state->perm_arena, temp_entries[i].file_path);
+    state->continue_watching[i].position_seconds       = temp_entries[i].position_seconds;
     state->continue_watching[i].last_watched_timestamp = temp_entries[i].last_watched_timestamp;
-    state->continue_watching[i].is_next_episode      = temp_entries[i].is_next_episode;
-    state->continue_watching[i].display_name         = str8_copy(state->perm_arena, temp_entries[i].display_name);
+    state->continue_watching[i].display_name           = str8_copy(state->perm_arena, temp_entries[i].display_name);
   }
+
+  continue_watching_sort(state);
 
   scratch_end(scratch);
 }
@@ -608,18 +481,15 @@ compare_file_entries(const void *a, const void *b)
   if(fa->is_directory && !fb->is_directory) { return -1; }
   if(!fa->is_directory && fb->is_directory) { return 1; }
 
-  for(u64 i = 0; i < Min(fa->name.size, fb->name.size); i += 1)
+  u64 min_size = Min(fa->name.size, fb->name.size);
+  for(u64 i = 0; i < min_size; i += 1)
   {
-    u8 ca = fa->name.str[i];
-    u8 cb = fb->name.str[i];
-    if(ca >= 'A' && ca <= 'Z') { ca += 32; }
-    if(cb >= 'A' && cb <= 'Z') { cb += 32; }
-    if(ca < cb) { return -1; }
-    if(ca > cb) { return 1; }
+    u8 ca = lower_from_char(fa->name.str[i]);
+    u8 cb = lower_from_char(fb->name.str[i]);
+    if(ca != cb) { return (ca < cb) ? -1 : 1; }
   }
 
-  if(fa->name.size < fb->name.size) { return -1; }
-  if(fa->name.size > fb->name.size) { return 1; }
+  if(fa->name.size != fb->name.size) { return (fa->name.size < fb->name.size) ? -1 : 1; }
   return 0;
 }
 
@@ -628,59 +498,43 @@ load_directory(PlayerState *state, String8 dir_path)
 {
   Temp scratch = scratch_begin(&state->perm_arena, 1);
 
-  String8 full_path = dir_path.size > 0
-    ? str8f(scratch.arena, "%S/%S", g_media_root_path, dir_path)
-    : g_media_root_path;
-
-  log_infof("media-player: loading directory: %S\n", full_path);
-
-  char *dir_cstr = (char *)push_array(scratch.arena, u8, full_path.size + 1);
-  MemoryCopy(dir_cstr, full_path.str, full_path.size);
-  dir_cstr[full_path.size] = 0;
+  char *dir_cstr = (char *)push_array(scratch.arena, u8, dir_path.size + 1);
+  MemoryCopy(dir_cstr, dir_path.str, dir_path.size);
+  dir_cstr[dir_path.size] = 0;
 
   DIR *d = opendir(dir_cstr);
   if(d == 0)
   {
-    log_errorf("media-player: failed to open directory: %S\n", full_path);
     state->file_count = 0;
-    state->files = 0;
+    state->files      = 0;
     scratch_end(scratch);
     return;
   }
 
-  FileEntry *temp_files = push_array(scratch.arena, FileEntry, 1024);
-  u64 temp_count = 0;
+  FileEntry *temp_files = push_array(scratch.arena, FileEntry, 4096);
+  u64        temp_count = 0;
 
   struct dirent *entry;
   for(; (entry = readdir(d)) != 0; )
   {
     String8 name = str8_cstring(entry->d_name);
-    name = str8_copy(scratch.arena, name);  // Copy immediately - d_name is only valid during readdir
-    if(str8_match(name, str8_lit("."), 0)) { continue; }
-    if(str8_match(name, str8_lit(".."), 0)) { continue; }
+    if(str8_match(name, str8_lit("."), 0) || str8_match(name, str8_lit(".."), 0)) { continue; }
+    if(temp_count >= 4096) { break; }
 
-    if(temp_count >= 1024) { break; }
+    name = str8_copy(scratch.arena, name);
 
     String8 entry_path = str8f(scratch.arena, "%s/%S", dir_cstr, name);
-    char *entry_cstr = (char *)push_array(scratch.arena, u8, entry_path.size + 1);
+    char   *entry_cstr = (char *)push_array(scratch.arena, u8, entry_path.size + 1);
     MemoryCopy(entry_cstr, entry_path.str, entry_path.size);
     entry_cstr[entry_path.size] = 0;
 
     struct stat st;
     if(stat(entry_cstr, &st) != 0) { continue; }
 
-    b32 is_dir = S_ISDIR(st.st_mode);
-    u64 size = st.st_size;
-
-    String8 rel_path = dir_path.size > 0
-      ? str8f(scratch.arena, "%S/%S", dir_path, name)
-      : name;
-
-    WatchProgress *wp = watch_progress_find(g_watch_progress, rel_path);
+    WatchProgress *wp = watch_progress_find(g_watch_progress, entry_path);
 
     temp_files[temp_count].name              = name;
-    temp_files[temp_count].is_directory      = is_dir;
-    temp_files[temp_count].size              = size;
+    temp_files[temp_count].is_directory      = S_ISDIR(st.st_mode);
     temp_files[temp_count].last_watched_pos  = wp ? wp->position_seconds : -1.0;
     temp_files[temp_count].duration          = wp ? wp->duration_seconds : 0.0;
     temp_files[temp_count].last_watched_time = wp ? wp->last_watched_timestamp : 0;
@@ -698,18 +552,15 @@ load_directory(PlayerState *state, String8 dir_path)
   {
     state->files[i].name              = str8_copy(state->perm_arena, temp_files[i].name);
     state->files[i].is_directory      = temp_files[i].is_directory;
-    state->files[i].size              = temp_files[i].size;
     state->files[i].last_watched_pos  = temp_files[i].last_watched_pos;
     state->files[i].duration          = temp_files[i].duration;
     state->files[i].last_watched_time = temp_files[i].last_watched_time;
     state->files[i].is_watched        = temp_files[i].is_watched;
   }
 
-  state->current_dir = str8_copy(state->perm_arena, dir_path);
+  state->current_dir    = str8_copy(state->perm_arena, dir_path);
   state->selected_index = 0;
-  state->scroll_offset = 0;
-
-  log_infof("media-player: loaded %lu entries\n", state->file_count);
+  state->scroll_offset  = 0;
 
   scratch_end(scratch);
 }
@@ -748,32 +599,22 @@ mpv_get_property_f64(MPVClient *mpv, String8 property)
   Temp scratch = scratch_begin(&mpv->arena, 1);
 
   mpv->request_id += 1;
-  String8 cmd = str8f(scratch.arena, "{\"command\":[\"get_property\",\"%S\"],\"request_id\":%llu}",
-                      property, mpv->request_id);
+  String8 cmd      = str8f(scratch.arena, "{\"command\":[\"get_property\",\"%S\"],\"request_id\":%llu}",
+                           property, mpv->request_id);
   mpv_ipc_send_command(mpv, cmd);
 
-  // Read response (simple blocking read with timeout)
   for(int retry = 0; retry < 10; retry += 1)
   {
     os_sleep_milliseconds(10);
     String8 response = mpv_ipc_read_response(scratch.arena, mpv->socket_fd);
     if(response.size == 0) { continue; }
 
-    // Log response for debugging (only first time per property)
-    static u64 log_count = 0;
-    if(log_count < 2)
-    {
-      log_infof("media-player: mpv IPC response for %S: %S\n", property, response);
-      log_count += 1;
-    }
-
-    // Very simple JSON parsing - just look for "data":<number>
-    String8 needle = str8_lit("\"data\":");
-    u64 data_pos = str8_find_needle(response, 0, needle, 0);
+    String8 needle   = str8_lit("\"data\":");
+    u64     data_pos = str8_find_needle(response, 0, needle, 0);
     if(data_pos < response.size)
     {
       String8 after_data = str8_skip(response, data_pos + needle.size);
-      f64 value = f64_from_str8(after_data);
+      f64     value      = f64_from_str8(after_data);
       scratch_end(scratch);
       return value;
     }
@@ -799,15 +640,14 @@ mpv_start(Arena *arena, String8 file_path, f64 start_position)
 {
   Temp scratch = scratch_begin(&arena, 1);
 
-  MPVClient *mpv = push_array(arena, MPVClient, 1);
+  MPVClient *mpv  = push_array(arena, MPVClient, 1);
   MemoryZeroStruct(mpv);
   mpv->arena      = arena;
   mpv->request_id = 0;
   mpv->socket_fd  = -1;
 
-  // Create unique IPC socket path
-  u64 timestamp = os_now_microseconds();
-  mpv->ipc_path = str8f(arena, "/tmp/mpv-ipc-%llu.sock", timestamp);
+  u64     timestamp = os_now_microseconds();
+  mpv->ipc_path     = str8f(arena, "/tmp/mpv-ipc-%llu.sock", timestamp);
 
   char *file_cstr = (char *)push_array(scratch.arena, u8, file_path.size + 1);
   MemoryCopy(file_cstr, file_path.str, file_path.size);
@@ -817,11 +657,9 @@ mpv_start(Arena *arena, String8 file_path, f64 start_position)
   MemoryCopy(ipc_cstr, mpv->ipc_path.str, mpv->ipc_path.size);
   ipc_cstr[mpv->ipc_path.size] = 0;
 
-  // Fork and exec mpv
   int pid = fork();
   if(pid == 0)
   {
-    // Child process - exec mpv
     char start_pos_str[64];
     char ipc_arg[512];
     char start_arg[128];
@@ -852,7 +690,6 @@ mpv_start(Arena *arena, String8 file_path, f64 start_position)
              NULL);
     }
 
-    // If exec fails
     exit(1);
   }
   else if(pid > 0)
@@ -860,9 +697,6 @@ mpv_start(Arena *arena, String8 file_path, f64 start_position)
     mpv->child_pid = pid;
     mpv->running   = 1;
 
-    log_infof("media-player: launched mpv (pid=%d) with IPC socket: %S\n", pid, mpv->ipc_path);
-
-    // Wait for IPC socket to be created
     for(int retry = 0; retry < 100; retry += 1)
     {
       os_sleep_milliseconds(50);
@@ -876,16 +710,11 @@ mpv_start(Arena *arena, String8 file_path, f64 start_position)
       {
         if(connect(mpv->socket_fd, (struct sockaddr *)&addr, sizeof(addr)) == 0)
         {
-          // Set non-blocking
           int flags = fcntl(mpv->socket_fd, F_GETFL, 0);
           fcntl(mpv->socket_fd, F_SETFL, flags | O_NONBLOCK);
 
-          log_infof("media-player: connected to mpv IPC socket\n");
-
-          // Enable property observation for time-pos and duration
           mpv_ipc_send_command(mpv, str8_lit("{\"command\":[\"observe_property\",1,\"time-pos\"]}"));
           mpv_ipc_send_command(mpv, str8_lit("{\"command\":[\"observe_property\",2,\"duration\"]}"));
-          log_infof("media-player: enabled property observation for time-pos and duration\n");
 
           scratch_end(scratch);
           return mpv;
@@ -911,10 +740,8 @@ mpv_stop(MPVClient *mpv)
 {
   if(mpv == 0) { return; }
 
-  // Send quit command
   mpv_ipc_send_command(mpv, str8_lit("{\"command\":[\"quit\"]}"));
 
-  // Wait for process to exit
   if(mpv->child_pid > 0)
   {
     for(int retry = 0; retry < 20; retry += 1)
@@ -925,14 +752,12 @@ mpv_stop(MPVClient *mpv)
       os_sleep_milliseconds(50);
     }
 
-    // Force kill if still running
     kill(mpv->child_pid, SIGTERM);
   }
 
   if(mpv->socket_fd >= 0) { close(mpv->socket_fd); }
 
-  // Clean up IPC socket file
-  Temp scratch = scratch_begin(&mpv->arena, 1);
+  Temp  scratch  = scratch_begin(&mpv->arena, 1);
   char *ipc_cstr = (char *)push_array(scratch.arena, u8, mpv->ipc_path.size + 1);
   MemoryCopy(ipc_cstr, mpv->ipc_path.str, mpv->ipc_path.size);
   ipc_cstr[mpv->ipc_path.size] = 0;
@@ -940,44 +765,37 @@ mpv_stop(MPVClient *mpv)
   scratch_end(scratch);
 
   mpv->running = 0;
-  log_info(str8_lit("media-player: mpv stopped\n"));
 }
 
 ////////////////////////////////
-//~ Terminal UI (ncurses replacement for SDL)
+//~ Terminal
 
 internal Terminal *
 terminal_init(Arena *arena)
 {
   Terminal *term = push_array(arena, Terminal, 1);
 
-  setlocale(LC_ALL, "");  // Enable UTF-8 support
-
+  setlocale(LC_ALL, "");
   term->win = initscr();
-  if(term->win == 0)
-  {
-    return 0;
-  }
+  if(term->win == 0) { return 0; }
 
-  cbreak();              // Disable line buffering
-  noecho();              // Don't echo input
-  keypad(stdscr, TRUE);  // Enable arrow keys
-  curs_set(0);           // Hide cursor
-  timeout(16);           // Non-blocking with 16ms timeout (~60fps)
+  cbreak();
+  noecho();
+  keypad(stdscr, TRUE);
+  curs_set(0);
+  timeout(100);
 
   getmaxyx(stdscr, term->height, term->width);
 
-  // Enable colors
   if(has_colors())
   {
     start_color();
-    init_pair(1, COLOR_WHITE, COLOR_BLACK);   // Normal
-    init_pair(2, COLOR_BLACK, COLOR_WHITE);   // Selected
-    init_pair(3, COLOR_GREEN, COLOR_BLACK);   // In-progress
-    init_pair(4, COLOR_CYAN, COLOR_BLACK);    // Dim
+    init_pair(1, COLOR_WHITE, COLOR_BLACK);
+    init_pair(2, COLOR_BLACK, COLOR_WHITE);
+    init_pair(3, COLOR_GREEN, COLOR_BLACK);
+    init_pair(4, COLOR_CYAN, COLOR_BLACK);
   }
 
-  log_info(str8_lit("media-player: terminal UI initialized\n"));
   return term;
 }
 
@@ -993,56 +811,49 @@ render_home_ncurses(Terminal *term, PlayerState *state)
 {
   clear();
 
-  int y = 0;
+  int y        = 0;
   u64 selected = state->selected_index;
 
-  // Header
   attron(A_BOLD);
-  mvprintw(y++, 0, "Home");
+  mvprintw(y, 0, "Media Library");
+  y += 1;
   attroff(A_BOLD);
-  y++;
+  y += 1;
 
-  // Categories
-  if(selected == 0) attron(COLOR_PAIR(2));
-  mvprintw(y++, 2, "> Shows");
-  if(selected == 0) attroff(COLOR_PAIR(2));
+  for(u64 i = 0; i < g_root_count; i += 1)
+  {
+    if(selected == i) attron(COLOR_PAIR(2));
+    mvprintw(y, 2, "> %.*s", (int)g_roots[i].name.size, g_roots[i].name.str);
+    y += 1;
+    if(selected == i) attroff(COLOR_PAIR(2));
+  }
+  y += 1;
 
-  if(selected == 1) attron(COLOR_PAIR(2));
-  mvprintw(y++, 2, "> Movies");
-  if(selected == 1) attroff(COLOR_PAIR(2));
-  y++;
-
-  // Continue Watching
   if(state->continue_watching_count > 0)
   {
     attron(COLOR_PAIR(4));
-    mvprintw(y++, 0, "Continue Watching:");
+    mvprintw(y, 0, "Continue Watching:");
+    y += 1;
     attroff(COLOR_PAIR(4));
 
-    for(u64 i = 0; i < state->continue_watching_count; i++)
+    for(u64 i = 0; i < state->continue_watching_count; i += 1)
     {
       ContinueWatchingEntry *entry = &state->continue_watching[i];
+      u64 item_index = g_root_count + i;
 
-      if(selected == (2 + i)) attron(COLOR_PAIR(2));
+      if(selected == item_index) attron(COLOR_PAIR(2));
       else attron(COLOR_PAIR(3));
 
-      if(entry->is_next_episode)
-      {
-        mvprintw(y++, 2, "> Next: %.*s", (int)entry->display_name.size, entry->display_name.str);
-      }
-      else
-      {
-        int mins = (int)(entry->position_seconds / 60);
-        int secs = (int)(entry->position_seconds) % 60;
-        mvprintw(y++, 2, "* %.*s [%02d:%02d]", (int)entry->display_name.size, entry->display_name.str, mins, secs);
-      }
+      int mins = (int)(entry->position_seconds / 60);
+      int secs = (int)(entry->position_seconds) % 60;
+      mvprintw(y, 2, "* %.*s [%02d:%02d]", (int)entry->display_name.size, entry->display_name.str, mins, secs);
+      y += 1;
 
-      if(selected == (2 + i)) attroff(COLOR_PAIR(2));
+      if(selected == item_index) attroff(COLOR_PAIR(2));
       else attroff(COLOR_PAIR(3));
     }
   }
 
-  // Controls
   attron(COLOR_PAIR(4));
   mvprintw(term->height - 1, 0, "↑↓=Navigate  Enter=Select  ESC=Quit");
   attroff(COLOR_PAIR(4));
@@ -1057,11 +868,11 @@ render_browser_ncurses(Terminal *term, PlayerState *state, String8 header)
 
   int y = 0;
 
-  // Header
   attron(A_BOLD);
-  mvprintw(y++, 0, "%.*s", (int)header.size, header.str);
+  mvprintw(y, 0, "%.*s", (int)header.size, header.str);
+  y += 1;
   attroff(A_BOLD);
-  y++;
+  y += 1;
 
   if(state->file_count == 0)
   {
@@ -1084,14 +895,16 @@ render_browser_ncurses(Terminal *term, PlayerState *state, String8 header)
 
       if(entry->is_directory)
       {
-        mvprintw(y++, 2, "> %.*s/", (int)entry->name.size, entry->name.str);
+        mvprintw(y, 2, "> %.*s/", (int)entry->name.size, entry->name.str);
+        y += 1;
       }
       else
       {
         if(entry->is_watched)
         {
           attron(COLOR_PAIR(4));
-          mvprintw(y++, 2, "✓ %.*s", (int)entry->name.size, entry->name.str);
+          mvprintw(y, 2, "✓ %.*s", (int)entry->name.size, entry->name.str);
+          y += 1;
           attroff(COLOR_PAIR(4));
         }
         else if(entry->last_watched_pos > 0.0)
@@ -1099,12 +912,14 @@ render_browser_ncurses(Terminal *term, PlayerState *state, String8 header)
           int mins = (int)(entry->last_watched_pos / 60);
           int secs = (int)(entry->last_watched_pos) % 60;
           attron(COLOR_PAIR(3));
-          mvprintw(y++, 2, "* %.*s [%02d:%02d]", (int)entry->name.size, entry->name.str, mins, secs);
+          mvprintw(y, 2, "* %.*s [%02d:%02d]", (int)entry->name.size, entry->name.str, mins, secs);
+          y += 1;
           attroff(COLOR_PAIR(3));
         }
         else
         {
-          mvprintw(y++, 2, "  %.*s", (int)entry->name.size, entry->name.str);
+          mvprintw(y, 2, "  %.*s", (int)entry->name.size, entry->name.str);
+          y += 1;
         }
       }
 
@@ -1112,7 +927,6 @@ render_browser_ncurses(Terminal *term, PlayerState *state, String8 header)
     }
   }
 
-  // Info
   attron(COLOR_PAIR(4));
   mvprintw(term->height - 2, 0, "%lu items", state->file_count);
   mvprintw(term->height - 1, 0, "↑↓=Navigate  Enter=Select  W=Mark Watched  Backspace=Back  ESC=Quit");
@@ -1136,37 +950,28 @@ handle_browser_input_ncurses(PlayerState *state, int ch)
 {
   if(state->mode == PlayerMode_Home)
   {
-    u64 max_index = 2 + state->continue_watching_count - 1;
+    u64 max_index = g_root_count + state->continue_watching_count;
+    if(max_index > 0) { max_index -= 1; }
 
     if(ch == KEY_DOWN)
     {
-      if(state->selected_index < max_index)
-      {
-        state->selected_index += 1;
-      }
+      if(state->selected_index < max_index) { state->selected_index += 1; }
     }
     else if(ch == KEY_UP)
     {
-      if(state->selected_index > 0)
-      {
-        state->selected_index -= 1;
-      }
+      if(state->selected_index > 0) { state->selected_index -= 1; }
     }
     else if(ch == '\n' || ch == 10)
     {
-      if(state->selected_index == 0)
+      if(state->selected_index < g_root_count)
       {
-        state->mode = PlayerMode_Shows;
-        load_directory(state, str8_lit("shows"));
+        state->current_root_index = state->selected_index;
+        state->mode               = PlayerMode_Browsing;
+        load_directory(state, g_roots[state->selected_index].path);
       }
-      else if(state->selected_index == 1)
+      else
       {
-        state->mode = PlayerMode_Movies;
-        load_directory(state, str8_lit("movies"));
-      }
-      else if(state->selected_index >= 2)
-      {
-        u64 cw_idx = state->selected_index - 2;
+        u64 cw_idx = state->selected_index - g_root_count;
         if(cw_idx < state->continue_watching_count)
         {
           start_playback(state, state->continue_watching[cw_idx].file_path);
@@ -1174,7 +979,7 @@ handle_browser_input_ncurses(PlayerState *state, int ch)
       }
     }
   }
-  else if(state->mode == PlayerMode_Shows || state->mode == PlayerMode_Movies)
+  else if(state->mode == PlayerMode_Browsing)
   {
     if(ch == KEY_DOWN)
     {
@@ -1203,20 +1008,10 @@ handle_browser_input_ncurses(PlayerState *state, int ch)
       if(state->file_count == 0) { return; }
 
       FileEntry *entry = &state->files[state->selected_index];
-      if(entry->is_directory)
-      {
-        String8 new_dir = state->current_dir.size > 0
-          ? str8f(state->perm_arena, "%S/%S", state->current_dir, entry->name)
-          : str8_copy(state->perm_arena, entry->name);
-        load_directory(state, new_dir);
-      }
-      else
-      {
-        String8 file_path = state->current_dir.size > 0
-          ? str8f(state->perm_arena, "%S/%S", state->current_dir, entry->name)
-          : str8_copy(state->perm_arena, entry->name);
-        start_playback(state, file_path);
-      }
+      String8 path = str8f(state->perm_arena, "%S/%S", state->current_dir, entry->name);
+
+      if(entry->is_directory) { load_directory(state, path); }
+      else { start_playback(state, path); }
     }
     else if(ch == 'w' || ch == 'W')
     {
@@ -1225,41 +1020,31 @@ handle_browser_input_ncurses(PlayerState *state, int ch)
       FileEntry *entry = &state->files[state->selected_index];
       if(!entry->is_directory)
       {
-        String8 file_path = state->current_dir.size > 0
-          ? str8f(state->perm_arena, "%S/%S", state->current_dir, entry->name)
-          : str8_copy(state->perm_arena, entry->name);
+        String8 file_path  = str8f(state->perm_arena, "%S/%S", state->current_dir, entry->name);
+        Temp    scratch    = scratch_begin(&state->perm_arena, 1);
+        String8 state_file = str8f(scratch.arena, "%S/watch-state.txt", g_state_dir_path);
 
         watch_progress_mark_watched(g_watch_progress, file_path);
-
-        Temp scratch = scratch_begin(&state->perm_arena, 1);
-        String8 state_file = str8f(scratch.arena, "%S/watch-state.txt", g_state_dir_path);
         watch_progress_save(g_watch_progress, state_file);
         scratch_end(scratch);
 
-        state->continue_watching_dirty = 1; // Mark for refresh
+        continue_watching_update_entry(state, file_path, 0.0, 0, 1);
         load_directory(state, state->current_dir);
       }
     }
     else if(ch == KEY_BACKSPACE || ch == 127)
     {
-      String8 category = state->mode == PlayerMode_Shows ? str8_lit("shows") : str8_lit("movies");
-
-      if(str8_match(state->current_dir, category, 0))
+      if(state->current_root_index < g_root_count)
       {
-        state->mode = PlayerMode_Home;
-        load_continue_watching(state, g_watch_progress, 10);
-        state->selected_index = 0;
-      }
-      else if(state->current_dir.size > 0)
-      {
-        String8 parent = str8_chop_last_slash(state->current_dir);
-
-        if(parent.size == 0 || str8_match(parent, category, 0))
+        String8 root_path = g_roots[state->current_root_index].path;
+        if(str8_match(state->current_dir, root_path, 0))
         {
-          load_directory(state, category);
+          state->mode           = PlayerMode_Home;
+          state->selected_index = 0;
         }
         else
         {
+          String8 parent = str8_chop_last_slash(state->current_dir);
           load_directory(state, parent);
         }
       }
@@ -1275,14 +1060,10 @@ start_playback(PlayerState *state, String8 file_path)
 {
   Temp scratch = scratch_begin(&state->perm_arena, 1);
 
-  // Load saved watch state
   WatchProgress *wp = watch_progress_find(g_watch_progress, file_path);
-  f64 start_pos = (wp && wp->position_seconds > 1.0) ? wp->position_seconds : 0.0;
+  f64 start_pos     = (wp && wp->position_seconds > 1.0) ? wp->position_seconds : 0.0;
 
-  String8 full_path = str8f(scratch.arena, "%S/%S", g_media_root_path, file_path);
-  log_infof("media-player: starting playback: %S (resume from %.1fs)\n", full_path, start_pos);
-
-  state->mpv = mpv_start(state->perm_arena, full_path, start_pos);
+  state->mpv = mpv_start(state->perm_arena, file_path, start_pos);
   if(state->mpv == 0)
   {
     log_errorf("media-player: failed to start mpv\n");
@@ -1291,7 +1072,6 @@ start_playback(PlayerState *state, String8 file_path)
   }
 
   state->current_file        = str8_copy(state->perm_arena, file_path);
-  state->last_poll_time      = os_now_microseconds();
   state->last_position_save  = os_now_microseconds();
   state->last_known_position = start_pos;
   state->last_known_duration = 0.0;
@@ -1309,73 +1089,75 @@ stop_playback(PlayerState *state)
     if(state->current_file.size > 0 && state->last_known_position >= 0.0)
     {
       Temp scratch = scratch_begin(&state->perm_arena, 1);
-      watch_progress_update(g_watch_progress, state->current_file, state->last_known_position, state->last_known_duration);
+      WatchProgress *wp = watch_progress_update(g_watch_progress, state->current_file, state->last_known_position, state->last_known_duration);
       String8 state_file = str8f(scratch.arena, "%S/watch-state.txt", g_state_dir_path);
       watch_progress_save(g_watch_progress, state_file);
       scratch_end(scratch);
+
+      b32 watched = wp ? is_watched(wp) : 0;
+      continue_watching_update_entry(state, state->current_file, state->last_known_position, os_now_microseconds() / Million(1), watched);
+      continue_watching_sort(state);
     }
 
     mpv_stop(state->mpv);
     state->mpv = 0;
   }
 
-  state->current_file            = str8_zero();
-  state->mode                    = PlayerMode_Home;
-  state->selected_index          = 0;
-  state->needs_render            = 1;
-  state->continue_watching_dirty = 1; // Refresh Continue Watching
+  state->current_file     = str8_zero();
+  state->mode             = PlayerMode_Home;
+  state->selected_index   = 0;
+  state->needs_render     = 1;
 }
 
 internal void
 update_playback(PlayerState *state)
 {
   if(state->mpv == 0) { return; }
+  if(!mpv_is_running(state->mpv)) { stop_playback(state); return; }
 
-  b32 is_running = mpv_is_running(state->mpv);
-  if(!is_running)
-  {
-    stop_playback(state);
-    return;
-  }
-
-  // Read and process property-change events from mpv (event-driven, not polling)
-  Temp scratch = scratch_begin(&state->perm_arena, 1);
+  Temp    scratch  = scratch_begin(&state->perm_arena, 1);
   String8 response = mpv_ipc_read_response(scratch.arena, state->mpv->socket_fd);
+
   if(response.size > 0)
   {
-    // Parse multiple JSON events separated by newlines
-    u64 offset = 0;
-    while(offset < response.size)
+    for(u64 offset = 0; offset < response.size; )
     {
-      u64 newline = str8_find_needle(response, offset, str8_lit("\n"), 0);
-      u64 end = (newline < response.size) ? newline : response.size;
-      String8 line = str8_substr(response, rng_1u64(offset, end));
+      u64     newline = str8_find_needle(response, offset, str8_lit("\n"), 0);
+      u64     end     = (newline < response.size) ? newline : response.size;
+      String8 line    = str8_substr(response, rng_1u64(offset, end));
 
-      // Look for property-change events: {"event":"property-change","id":1,"data":123.45}
-      if(str8_find_needle(line, 0, str8_lit("\"property-change\""), 0) < line.size)
+      u64 prop_change_pos = str8_find_needle(line, 0, str8_lit("\"property-change\""), 0);
+      if(prop_change_pos < line.size)
       {
-        // Check if it's time-pos (id:1) or duration (id:2)
-        b32 is_time_pos = str8_find_needle(line, 0, str8_lit("\"id\":1"), 0) < line.size;
-        b32 is_duration = str8_find_needle(line, 0, str8_lit("\"id\":2"), 0) < line.size;
+        u64 id_pos   = str8_find_needle(line, 0, str8_lit("\"id\":"), 0);
+        u64 data_pos = str8_find_needle(line, 0, str8_lit("\"data\":"), 0);
 
-        if(is_time_pos || is_duration)
+        if(id_pos < line.size && data_pos < line.size)
         {
-          // Extract "data":<number>
-          u64 data_pos = str8_find_needle(line, 0, str8_lit("\"data\":"), 0);
-          if(data_pos < line.size)
-          {
-            String8 after_data = str8_skip(line, data_pos + 7);
-            f64 value = f64_from_str8(after_data);
+          String8 after_id   = str8_skip(line, id_pos + 5);
+          String8 after_data = str8_skip(line, data_pos + 7);
 
-            if(is_time_pos && value > 0.0)
-            {
-              state->last_known_position = value;
-            }
-            else if(is_duration && value > 0.0)
-            {
-              state->last_known_duration = value;
-            }
+          u64 id_end = 0;
+          for(; id_end < after_id.size; id_end += 1)
+          {
+            u8 c = after_id.str[id_end];
+            if(c < '0' || c > '9') { break; }
           }
+          String8 id_str = str8_prefix(after_id, id_end);
+
+          u64 data_end = 0;
+          for(; data_end < after_data.size; data_end += 1)
+          {
+            u8 c = after_data.str[data_end];
+            if(!((c >= '0' && c <= '9') || c == '.' || c == '-')) { break; }
+          }
+          String8 data_str = str8_prefix(after_data, data_end);
+
+          u64 id    = u64_from_str8(id_str, 10);
+          f64 value = f64_from_str8(data_str);
+
+          if(id == 1) { state->last_known_position = value; }
+          else if(id == 2) { state->last_known_duration = value; }
         }
       }
 
@@ -1384,18 +1166,19 @@ update_playback(PlayerState *state)
   }
   scratch_end(scratch);
 
-  // Save progress every 5 seconds
   u64 now = os_now_microseconds();
   if(now - state->last_position_save > Million(5))
   {
-    Temp scratch2 = scratch_begin(&state->perm_arena, 1);
-    watch_progress_update(g_watch_progress, state->current_file, state->last_known_position, state->last_known_duration);
+    Temp    scratch2   = scratch_begin(&state->perm_arena, 1);
     String8 state_file = str8f(scratch2.arena, "%S/watch-state.txt", g_state_dir_path);
+    WatchProgress *wp = watch_progress_update(g_watch_progress, state->current_file, state->last_known_position, state->last_known_duration);
     watch_progress_save(g_watch_progress, state_file);
     scratch_end(scratch2);
 
+    b32 watched = wp ? is_watched(wp) : 0;
+    continue_watching_update_entry(state, state->current_file, state->last_known_position, now / Million(1), watched);
+
     state->last_position_save = now;
-    state->continue_watching_dirty = 1; // Mark for refresh
   }
 }
 
@@ -1405,24 +1188,19 @@ update_playback(PlayerState *state)
 internal void
 main_loop(PlayerState *state)
 {
-  state->needs_render = 1; // Initial render
-  state->continue_watching_dirty = 1; // Initial load
+  state->needs_render = 1;
 
-  while(!state->quit)
+  for(; !state->quit; )
   {
-    // Handle input (ncurses with 16ms timeout)
     int ch = getch();
     if(ch != ERR && IS_BROWSE_MODE(state->mode))
     {
-      if(ch == 27) // ESC
+      if(ch == 27)
       {
-        if(state->mode == PlayerMode_Home)
-        {
-          state->quit = 1;
-        }
+        if(state->mode == PlayerMode_Home) { state->quit = 1; }
         else
         {
-          state->mode = PlayerMode_Home;
+          state->mode         = PlayerMode_Home;
           state->needs_render = 1;
         }
       }
@@ -1433,39 +1211,17 @@ main_loop(PlayerState *state)
       }
     }
 
-    // Update playback
-    if(state->mode == PlayerMode_Playing)
-    {
-      update_playback(state);
-    }
+    if(state->mode == PlayerMode_Playing) { update_playback(state); }
 
-    // Reload Continue Watching if dirty (cached when clean)
-    if(state->mode == PlayerMode_Home && state->continue_watching_dirty)
-    {
-      load_continue_watching(state, g_watch_progress, 10);
-      state->continue_watching_dirty = 0;
-      state->needs_render = 1;
-    }
-
-    // Render only when state changes (eliminates flicker)
     if(IS_BROWSE_MODE(state->mode) && state->needs_render)
     {
       if(state->mode == PlayerMode_Home)
       {
         render_home_ncurses(state->term, state);
       }
-      else if(state->mode == PlayerMode_Shows)
+      else
       {
-        String8 header = state->current_dir.size > 0
-          ? state->current_dir
-          : str8_lit("Shows");
-        render_browser_ncurses(state->term, state, header);
-      }
-      else if(state->mode == PlayerMode_Movies)
-      {
-        String8 header = state->current_dir.size > 0
-          ? state->current_dir
-          : str8_lit("Movies");
+        String8 header = state->current_dir;
         render_browser_ncurses(state->term, state, header);
       }
 
@@ -1476,11 +1232,6 @@ main_loop(PlayerState *state)
 
 ////////////////////////////////
 //~ Exit/Signal Handlers
-
-internal void
-atexit_handler(void)
-{
-}
 
 internal void
 signal_handler(int sig)
@@ -1499,8 +1250,6 @@ signal_handler(int sig)
 internal void
 entry_point(CmdLine *cmd_line)
 {
-  // Install exit and signal handlers to debug unexpected termination
-  atexit(atexit_handler);
   signal(SIGTERM, signal_handler);
   signal(SIGHUP, signal_handler);
   signal(SIGINT, signal_handler);
@@ -1517,46 +1266,52 @@ entry_point(CmdLine *cmd_line)
   log_select(log);
   log_scope_begin();
 
-  String8 media_root = cmd_line_string(cmd_line, str8_lit("media-root"));
-  String8 state_dir  = cmd_line_string(cmd_line, str8_lit("state-dir"));
-  b32 windowed       = cmd_line_has_flag(cmd_line, str8_lit("windowed"));
-
-  if(media_root.size == 0) { media_root = str8_lit("/home/mpd/n/media"); }
-  if(state_dir.size == 0)  { state_dir = str8_lit("/home/mpd/.local/state/media-player"); }
-
-  if(media_root.size > 0 && media_root.str[media_root.size - 1] == '/')
-  {
-    media_root = str8_chop_last_slash(media_root);
-  }
-
-  g_media_root_path = media_root;
-  g_state_dir_path  = state_dir;
-
-  log_infof("media-player: media root: %S\n", g_media_root_path);
-  log_infof("media-player: state dir: %S\n", g_state_dir_path);
+  String8 state_dir = cmd_line_string(cmd_line, str8_lit("state-dir"));
+  if(state_dir.size == 0) { state_dir = str8_lit("/home/mpd/.local/state/media-player"); }
+  g_state_dir_path = state_dir;
 
   Arena *perm_arena = arena_alloc();
 
-  // Create state directory if it doesn't exist
+  String8List root_strings = cmd_line_strings(cmd_line, str8_lit("root"));
+  if(root_strings.node_count == 0)
+  {
+    str8_list_push(perm_arena, &root_strings, str8_lit("/home/mpd/n/shows"));
+    str8_list_push(perm_arena, &root_strings, str8_lit("/home/mpd/n/movies"));
+  }
+
+  g_root_count = root_strings.node_count;
+  g_roots      = push_array(perm_arena, MediaRoot, g_root_count);
+
+  u64 root_idx = 0;
+  for(String8Node *node = root_strings.first; node != 0; node = node->next)
+  {
+    String8 path = node->string;
+    if(path.size > 0 && path.str[path.size - 1] == '/') { path = str8_chop_last_slash(path); }
+
+    g_roots[root_idx].path = str8_copy(perm_arena, path);
+    g_roots[root_idx].name = str8_skip_last_slash(path);
+    log_infof("media-player: root [%llu]: %S (%S)\n", root_idx, g_roots[root_idx].name, g_roots[root_idx].path);
+    root_idx += 1;
+  }
+
+  log_infof("media-player: state dir: %S\n", g_state_dir_path);
+
   OS_Handle state_dir_handle = os_file_open(OS_AccessFlag_Read, g_state_dir_path);
   if(state_dir_handle.u64[0] == 0)
   {
-    log_infof("media-player: creating state directory: %S\n", g_state_dir_path);
     b32 created = os_make_directory(g_state_dir_path);
-    if(!created)
-    {
-      log_errorf("media-player: failed to create state directory\n");
-    }
+    if(!created) { log_errorf("media-player: failed to create state directory\n"); }
   }
   else
   {
     os_file_close(state_dir_handle);
   }
 
-  // Initialize watch progress table
-  g_watch_progress = watch_progress_table_alloc(perm_arena, 256);
-  String8 state_file = str8f(perm_arena, "%S/watch-state.txt", g_state_dir_path);
+  g_watch_progress       = watch_progress_table_alloc(perm_arena, 256);
+  String8 state_file     = str8f(perm_arena, "%S/watch-state.txt", g_state_dir_path);
   watch_progress_load(g_watch_progress, state_file);
+  watch_progress_migrate_to_absolute_paths(g_watch_progress);
+  watch_progress_save(g_watch_progress, state_file);
 
   Terminal *term = terminal_init(perm_arena);
   if(term == 0)
@@ -1566,20 +1321,17 @@ entry_point(CmdLine *cmd_line)
     return;
   }
 
-  PlayerState state = {0};
-  state.perm_arena = perm_arena;
-  state.term = term;
-  state.mode = PlayerMode_Home;
-  state.quit = 0;
+  PlayerState state  = {0};
+  state.perm_arena   = perm_arena;
+  state.term         = term;
+  state.mode         = PlayerMode_Home;
+  state.quit         = 0;
 
   load_continue_watching(&state, g_watch_progress, 10);
 
   main_loop(&state);
 
-  if(state.mpv != 0)
-  {
-    stop_playback(&state);
-  }
+  if(state.mpv != 0) { stop_playback(&state); }
 
   terminal_shutdown(state.term);
 
