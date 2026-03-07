@@ -51,12 +51,15 @@ struct TransmuxQueue
 typedef struct WatchProgress WatchProgress;
 struct WatchProgress
 {
+  WatchProgress *next;
   String8 file_path;
   f64 position_seconds;
+  f64 duration_seconds;
   u64 last_watched_timestamp;
+  b32 is_watched;
+  u32 _pad0;
   String8 subtitle_lang;
   String8 audio_lang;
-  WatchProgress *next;
 };
 
 typedef struct WatchProgressTable WatchProgressTable;
@@ -66,6 +69,7 @@ struct WatchProgressTable
   Arena *arena;
   WatchProgress **buckets;
   u64 bucket_count;
+  u64 last_save_time;
 };
 
 typedef struct StreamMeta StreamMeta;
@@ -322,26 +326,25 @@ parse_stream_metadata(Arena *arena, String8 cache_dir)
       if(line.size == 0) { continue; }
 
       String8List fields = str8_split(arena, line, (u8 *)"\t", 1, 0);
-      if(fields.node_count >= 4)
+      if(fields.node_count != 4) { continue; }
+
+      String8Node *field0 = fields.first;
+      String8Node *field1 = field0->next;
+      String8Node *field2 = field1->next;
+      String8Node *field3 = field2->next;
+
+      u32 stream_idx   = (u32)u64_from_str8(field0->string, 10);
+      String8 type     = field1->string;
+      String8 lang     = field2->string;
+      String8 metadata = field3->string;
+
+      if(count < 32)
       {
-        String8Node *field0 = fields.first;
-        String8Node *field1 = field0->next;
-        String8Node *field2 = field1->next;
-        String8Node *field3 = field2->next;
-
-        u32 stream_idx   = (u32)u64_from_str8(field0->string, 10);
-        String8 type     = field1->string;
-        String8 lang     = field2->string;
-        String8 metadata = field3->string;
-
-        if(count < 32)
-        {
-          items[count].stream_idx = stream_idx;
-          items[count].is_audio   = str8_match(type, str8_lit("audio"), 0);
-          items[count].lang       = lang;
-          items[count].metadata   = metadata;
-          count                  += 1;
-        }
+        items[count].stream_idx = stream_idx;
+        items[count].is_audio   = str8_match(type, str8_lit("audio"), 0);
+        items[count].lang       = lang;
+        items[count].metadata   = metadata;
+        count                  += 1;
       }
     }
   }
@@ -1662,24 +1665,30 @@ watch_progress_load(void)
       if(line.size == 0) { continue; }
 
       String8List fields = str8_split(scratch.arena, line, (u8 *)"\t", 1, 0);
-      if(fields.node_count >= 5)
+      if(fields.node_count >= 7)
       {
         String8Node *field0 = fields.first;
         String8Node *field1 = field0->next;
         String8Node *field2 = field1->next;
         String8Node *field3 = field2->next;
         String8Node *field4 = field3->next;
+        String8Node *field5 = field4->next;
+        String8Node *field6 = field5->next;
 
-        String8 file     = field0->string;
-        String8 pos_str  = field1->string;
-        String8 time_str = field2->string;
-        String8 sub_str  = field3->string;
-        String8 aud_str  = field4->string;
+        String8 file      = field0->string;
+        String8 pos_str   = field1->string;
+        String8 time_str  = field2->string;
+        String8 sub_str   = field3->string;
+        String8 aud_str   = field4->string;
+        String8 dur_str   = field5->string;
+        String8 watch_str = field6->string;
 
         f64 position          = f64_from_str8(pos_str);
         u64 timestamp         = u64_from_str8(time_str, 10);
         String8 subtitle_lang = str8_match(sub_str, str8_lit("-"), 0) ? str8_zero() : sub_str;
         String8 audio_lang    = str8_match(aud_str, str8_lit("-"), 0) ? str8_zero() : aud_str;
+        f64 duration          = f64_from_str8(dur_str);
+        b32 watched           = (u64_from_str8(watch_str, 10) != 0);
 
         u64 hash                      = u64_hash_from_str8(file) % watch_progress->bucket_count;
         WatchProgress *entry          = push_array(watch_progress->arena, WatchProgress, 1);
@@ -1688,7 +1697,9 @@ watch_progress_load(void)
         entry->last_watched_timestamp = timestamp;
         entry->subtitle_lang          = str8_copy(watch_progress->arena, subtitle_lang);
         entry->audio_lang             = str8_copy(watch_progress->arena, audio_lang);
-        entry->next = watch_progress->buckets[hash];
+        entry->duration_seconds       = duration;
+        entry->is_watched             = watched;
+        entry->next                   = watch_progress->buckets[hash];
         watch_progress->buckets[hash] = entry;
       }
     }
@@ -1697,7 +1708,7 @@ watch_progress_load(void)
 }
 
 internal void
-watch_progress_save(void)
+watch_progress_save_immediate(void)
 {
   Temp scratch          = scratch_begin(0, 0);
   String8 progress_path = str8f(scratch.arena, "%S/watch-progress.txt", state_root_path);
@@ -1711,10 +1722,12 @@ watch_progress_save(void)
       {
         String8 sub = entry->subtitle_lang.size > 0 ? entry->subtitle_lang : str8_lit("-");
         String8 aud = entry->audio_lang.size > 0 ? entry->audio_lang    : str8_lit("-");
-        str8_list_pushf(scratch.arena, &lines, "%S\t%.2f\t%llu\t%S\t%S\n",
-                        entry->file_path, entry->position_seconds, entry->last_watched_timestamp, sub, aud);
+        str8_list_pushf(scratch.arena, &lines, "%S\t%.2f\t%llu\t%S\t%S\t%.2f\t%d\n",
+                        entry->file_path, entry->position_seconds, entry->last_watched_timestamp,
+                        sub, aud, entry->duration_seconds, entry->is_watched);
       }
     }
+    watch_progress->last_save_time = os_now_microseconds();
   }
 
   String8 content = str8_list_join(scratch.arena, lines, 0);
@@ -1725,6 +1738,18 @@ watch_progress_save(void)
     os_file_close(file);
   }
   scratch_end(scratch);
+}
+
+internal void
+watch_progress_save_debounced(void)
+{
+  u64 now = os_now_microseconds();
+  u64 elapsed = now - watch_progress->last_save_time;
+
+  if(elapsed > 30 * Million(1))
+  {
+    watch_progress_save_immediate();
+  }
 }
 
 internal WatchProgress *
@@ -1768,11 +1793,11 @@ watch_progress_delete(String8 file)
     }
   }
 
-  watch_progress_save();
+  watch_progress_save_immediate();
 }
 
 internal void
-watch_progress_set(String8 file, f64 position, String8 subtitle_lang, String8 audio_lang)
+watch_progress_set(String8 file, f64 position, f64 duration, String8 subtitle_lang, String8 audio_lang)
 {
   Temp scratch           = scratch_begin(0, 0);
   EpisodeInfo current_ep = parse_episode_info(file);
@@ -1799,9 +1824,12 @@ watch_progress_set(String8 file, f64 position, String8 subtitle_lang, String8 au
     }
 
     entry->position_seconds       = position;
+    entry->duration_seconds       = duration;
     entry->last_watched_timestamp = os_now_microseconds() / 1000000;
     entry->subtitle_lang          = str8_copy(watch_progress->arena, subtitle_lang);
     entry->audio_lang             = str8_copy(watch_progress->arena, audio_lang);
+
+    if(duration > 0.0 && (position / duration) > 0.90) { entry->is_watched = 1; }
 
     // Clean up earlier episodes in the same season
     if(current_ep.is_episode)
@@ -1833,7 +1861,7 @@ watch_progress_set(String8 file, f64 position, String8 subtitle_lang, String8 au
   }
 
   scratch_end(scratch);
-  watch_progress_save();
+  watch_progress_save_debounced();
 }
 
 ////////////////////////////////
@@ -1929,6 +1957,7 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
   {
     String8 file_param   = get_query_param(arena, req->query, str8_lit("file"));
     String8 pos_param    = get_query_param(arena, req->query, str8_lit("position"));
+    String8 dur_param    = get_query_param(arena, req->query, str8_lit("duration"));
     String8 sub_param    = get_query_param(arena, req->query, str8_lit("subtitle"));
     String8 aud_param    = get_query_param(arena, req->query, str8_lit("audio"));
     String8 delete_param = get_query_param(arena, req->query, str8_lit("delete"));
@@ -1943,7 +1972,8 @@ handle_http_request(HTTP_Request *req, OS_Handle socket, Arena *arena)
     else if(pos_param.size > 0)
     {
       f64 position = f64_from_str8(pos_param);
-      watch_progress_set(file_param, position, sub_param, aud_param);
+      f64 duration = f64_from_str8(dur_param);
+      watch_progress_set(file_param, position, duration, sub_param, aud_param);
       send_response(socket, arena, str8_lit("text/plain"), str8_lit("ok"));
     }
     else
@@ -2154,7 +2184,7 @@ entry_point(CmdLine *cmd_line)
   watch_progress               = push_array(arena, WatchProgressTable, 1);
   watch_progress->mutex        = mutex_alloc();
   watch_progress->arena        = arena_alloc();
-  watch_progress->bucket_count = 256;
+  watch_progress->bucket_count = 2048;
   watch_progress->buckets      = push_array(arena, WatchProgress *, watch_progress->bucket_count);
   watch_progress_load();
 

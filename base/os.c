@@ -427,7 +427,6 @@ os_socket_connect_tcp(String8 host, u16 port)
 internal OS_Handle
 os_socket_connect_unix(String8 path)
 {
-  if(path.size == 0) { return os_handle_zero(); }
   char path_buffer[1024] = {0};
   if(path.size >= sizeof path_buffer) { return os_handle_zero(); }
   MemoryCopy(path_buffer, path.str, path.size);
@@ -465,7 +464,6 @@ os_socket_connect_unix(String8 path)
 internal OS_Handle
 os_socket_listen_tcp(u16 port)
 {
-  if(port == 0) { return os_handle_zero(); }
   char port_buffer[6] = {0};
   snprintf(port_buffer, sizeof port_buffer, "%u", port);
 
@@ -510,7 +508,6 @@ os_socket_listen_tcp(u16 port)
 internal OS_Handle
 os_socket_listen_unix(String8 path)
 {
-  if(path.size == 0) { return os_handle_zero(); }
   char path_buffer[1024] = {0};
   if(path.size >= sizeof path_buffer) { return os_handle_zero(); }
   MemoryCopy(path_buffer, path.str, path.size);

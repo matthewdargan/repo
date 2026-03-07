@@ -23,23 +23,23 @@ struct FileEntry
 {
   String8 name;
   b32     is_directory;
+  b32     is_watched;
   f64     last_watched_pos;
   f64     duration;
-  u64     last_watched_time;
-  b32     is_watched;
 };
 
 typedef struct WatchProgress WatchProgress;
 struct WatchProgress
 {
+  WatchProgress *next;
   String8        file_path;
   f64            position_seconds;
+  f64            duration_seconds;
   u64            last_watched_timestamp;
+  b32            is_watched;
+  u32            _pad0;
   String8        subtitle_lang;
   String8        audio_lang;
-  f64            duration_seconds;
-  b32            is_watched;
-  WatchProgress *next;
 };
 
 typedef struct WatchProgressTable WatchProgressTable;
@@ -53,7 +53,6 @@ struct WatchProgressTable
 internal b32
 is_watched(WatchProgress *wp)
 {
-  if(wp == 0) { return 0; }
   return wp->is_watched;
 }
 
@@ -105,8 +104,9 @@ struct PlayerState
   ContinueWatchingEntry *continue_watching;
   u64                    continue_watching_count;
 
-  MPVClient *mpv;
-  Terminal  *term;
+  MPVClient     *mpv;
+  Terminal      *term;
+  WatchProgress *current_watch_progress;
 
   u64 last_position_save;
   f64 last_known_position;
@@ -152,8 +152,6 @@ watch_progress_table_alloc(Arena *arena, u64 bucket_count)
 internal WatchProgress *
 watch_progress_find(WatchProgressTable *table, String8 file_path)
 {
-  if(table == 0 || table->bucket_count == 0) { return 0; }
-
   u64 hash = hash_string(file_path);
   u64 idx  = hash % table->bucket_count;
 
@@ -168,8 +166,6 @@ watch_progress_find(WatchProgressTable *table, String8 file_path)
 internal WatchProgress *
 watch_progress_update(WatchProgressTable *table, String8 file_path, f64 position, f64 duration)
 {
-  if(table == 0) { return 0; }
-
   u64 hash = hash_string(file_path);
   u64 idx  = hash % table->bucket_count;
 
@@ -199,8 +195,6 @@ watch_progress_update(WatchProgressTable *table, String8 file_path, f64 position
 internal void
 watch_progress_mark_watched(WatchProgressTable *table, String8 file_path)
 {
-  if(table == 0) { return; }
-
   u64 hash = hash_string(file_path);
   u64 idx  = hash % table->bucket_count;
 
@@ -225,8 +219,6 @@ watch_progress_mark_watched(WatchProgressTable *table, String8 file_path)
 internal void
 watch_progress_load(WatchProgressTable *table, String8 state_file_path)
 {
-  if(table == 0) { return; }
-
   Temp scratch = scratch_begin(&table->arena, 1);
 
   OS_Handle file = os_file_open(OS_AccessFlag_Read, state_file_path);
@@ -248,98 +240,47 @@ watch_progress_load(WatchProgressTable *table, String8 state_file_path)
     String8 line = str8_skip_chop_whitespace(node->string);
     if(line.size == 0 || line.str[0] == '#') { continue; }
 
-    String8 file_path     = {0};
-    String8 subtitle_lang = str8_lit("-");
-    String8 audio_lang    = str8_lit("-");
-    f64     position      = 0.0;
-    f64     duration      = 0.0;
-    u64     timestamp     = 0;
-    b32     watched       = 0;
-
     String8List parts = str8_split(scratch.arena, line, (u8 *)"\t", 1, 0);
-    if(parts.node_count >= 3)
-    {
-      String8Node *n0 = parts.first;
-      String8Node *n1 = n0->next;
-      String8Node *n2 = n1->next;
-      String8Node *n3 = n2->next;
-      String8Node *n4 = n3 ? n3->next : 0;
-      String8Node *n5 = n4 ? n4->next : 0;
-      String8Node *n6 = n5 ? n5->next : 0;
+    if(parts.node_count != 7) { continue; }
 
-      file_path = str8_skip_chop_whitespace(n0->string);
-      position  = f64_from_str8(n1->string);
-      timestamp = u64_from_str8(n2->string, 10);
+    String8Node *n0 = parts.first;
+    String8Node *n1 = n0->next;
+    String8Node *n2 = n1->next;
+    String8Node *n3 = n2->next;
+    String8Node *n4 = n3->next;
+    String8Node *n5 = n4->next;
+    String8Node *n6 = n5->next;
 
-      if(n3)
-      {
-        String8 sub = str8_skip_chop_whitespace(n3->string);
-        if(sub.size > 0 && !str8_match(sub, str8_lit("-"), 0)) { subtitle_lang = sub; }
-      }
-      if(n4)
-      {
-        String8 aud = str8_skip_chop_whitespace(n4->string);
-        if(aud.size > 0 && !str8_match(aud, str8_lit("-"), 0)) { audio_lang = aud; }
-      }
-      if(n5) { duration = f64_from_str8(n5->string); }
-      if(n6) { watched  = (u64_from_str8(n6->string, 10) != 0); }
+    String8 file_path     = n0->string;
+    f64     position      = f64_from_str8(n1->string);
+    u64     timestamp     = u64_from_str8(n2->string, 10);
+    String8 subtitle_lang = str8_match(n3->string, str8_lit("-"), 0) ? str8_zero() : n3->string;
+    String8 audio_lang    = str8_match(n4->string, str8_lit("-"), 0) ? str8_zero() : n4->string;
+    f64     duration      = f64_from_str8(n5->string);
+    b32     watched       = (u64_from_str8(n6->string, 10) != 0);
 
-      WatchProgress *wp = watch_progress_find(table, file_path);
-      if(wp == 0)
-      {
-        u64 hash = hash_string(file_path);
-        u64 idx  = hash % table->bucket_count;
+    u64 hash = hash_string(file_path);
+    u64 idx  = hash % table->bucket_count;
 
-        wp = push_array(table->arena, WatchProgress, 1);
-        wp->file_path = str8_copy(table->arena, file_path);
-        wp->next      = table->buckets[idx];
-        table->buckets[idx] = wp;
-      }
-
-      wp->position_seconds       = position;
-      wp->last_watched_timestamp = timestamp;
-      wp->subtitle_lang          = str8_copy(table->arena, subtitle_lang);
-      wp->audio_lang             = str8_copy(table->arena, audio_lang);
-      wp->duration_seconds       = duration;
-      wp->is_watched             = watched;
-    }
+    WatchProgress *wp          = push_array(table->arena, WatchProgress, 1);
+    wp->file_path              = str8_copy(table->arena, file_path);
+    wp->position_seconds       = position;
+    wp->last_watched_timestamp = timestamp;
+    wp->subtitle_lang          = str8_copy(table->arena, subtitle_lang);
+    wp->audio_lang             = str8_copy(table->arena, audio_lang);
+    wp->duration_seconds       = duration;
+    wp->is_watched             = watched;
+    wp->next                   = table->buckets[idx];
+    table->buckets[idx]        = wp;
   }
 
   scratch_end(scratch);
 }
 
-internal void
-watch_progress_migrate_to_absolute_paths(WatchProgressTable *table)
-{
-  if(table == 0 || g_root_count == 0) { return; }
-
-  for(u64 i = 0; i < table->bucket_count; i += 1)
-  {
-    for(WatchProgress *wp = table->buckets[i]; wp != 0; wp = wp->next)
-    {
-      if(wp->file_path.size > 0 && wp->file_path.str[0] != '/')
-      {
-        for(u64 r = 0; r < g_root_count; r += 1)
-        {
-          String8 root_name = g_roots[r].name;
-          if(str8_match(str8_prefix(wp->file_path, root_name.size), root_name, 0))
-          {
-            String8 relative = str8_skip(wp->file_path, root_name.size);
-            if(relative.size > 0 && relative.str[0] == '/') { relative = str8_skip(relative, 1); }
-            wp->file_path = str8f(table->arena, "%S/%S", g_roots[r].path, relative);
-            break;
-          }
-        }
-      }
-    }
-  }
-}
 
 internal void
 watch_progress_save(WatchProgressTable *table, String8 state_file_path)
 {
-  if(table == 0) { return; }
-
   Temp        scratch = scratch_begin(&table->arena, 1);
   String8List lines   = {0};
 
@@ -429,8 +370,6 @@ continue_watching_sort(PlayerState *state)
 internal void
 load_continue_watching(PlayerState *state, WatchProgressTable *table, u64 max_count)
 {
-  if(table == 0) { return; }
-
   Temp scratch = scratch_begin(&state->perm_arena, 1);
 
   ContinueWatchingEntry *temp_entries = push_array(scratch.arena, ContinueWatchingEntry, max_count);
@@ -533,12 +472,11 @@ load_directory(PlayerState *state, String8 dir_path)
 
     WatchProgress *wp = watch_progress_find(g_watch_progress, entry_path);
 
-    temp_files[temp_count].name              = name;
-    temp_files[temp_count].is_directory      = S_ISDIR(st.st_mode);
-    temp_files[temp_count].last_watched_pos  = wp ? wp->position_seconds : -1.0;
-    temp_files[temp_count].duration          = wp ? wp->duration_seconds : 0.0;
-    temp_files[temp_count].last_watched_time = wp ? wp->last_watched_timestamp : 0;
-    temp_files[temp_count].is_watched        = is_watched(wp);
+    temp_files[temp_count].name             = name;
+    temp_files[temp_count].is_directory     = S_ISDIR(st.st_mode);
+    temp_files[temp_count].is_watched       = wp ? is_watched(wp) : 0;
+    temp_files[temp_count].last_watched_pos = wp ? wp->position_seconds : -1.0;
+    temp_files[temp_count].duration         = wp ? wp->duration_seconds : 0.0;
     temp_count += 1;
   }
 
@@ -550,12 +488,11 @@ load_directory(PlayerState *state, String8 dir_path)
   state->file_count = temp_count;
   for(u64 i = 0; i < temp_count; i += 1)
   {
-    state->files[i].name              = str8_copy(state->perm_arena, temp_files[i].name);
-    state->files[i].is_directory      = temp_files[i].is_directory;
-    state->files[i].last_watched_pos  = temp_files[i].last_watched_pos;
-    state->files[i].duration          = temp_files[i].duration;
-    state->files[i].last_watched_time = temp_files[i].last_watched_time;
-    state->files[i].is_watched        = temp_files[i].is_watched;
+    state->files[i].name             = str8_copy(state->perm_arena, temp_files[i].name);
+    state->files[i].is_directory     = temp_files[i].is_directory;
+    state->files[i].is_watched       = temp_files[i].is_watched;
+    state->files[i].last_watched_pos = temp_files[i].last_watched_pos;
+    state->files[i].duration         = temp_files[i].duration;
   }
 
   state->current_dir    = str8_copy(state->perm_arena, dir_path);
@@ -738,8 +675,6 @@ mpv_start(Arena *arena, String8 file_path, f64 start_position)
 internal void
 mpv_stop(MPVClient *mpv)
 {
-  if(mpv == 0) { return; }
-
   mpv_ipc_send_command(mpv, str8_lit("{\"command\":[\"quit\"]}"));
 
   if(mpv->child_pid > 0)
@@ -802,7 +737,6 @@ terminal_init(Arena *arena)
 internal void
 terminal_shutdown(Terminal *term)
 {
-  if(term == 0) { return; }
   endwin();
 }
 
@@ -1022,7 +956,7 @@ handle_browser_input_ncurses(PlayerState *state, int ch)
       {
         String8 file_path  = str8f(state->perm_arena, "%S/%S", state->current_dir, entry->name);
         Temp    scratch    = scratch_begin(&state->perm_arena, 1);
-        String8 state_file = str8f(scratch.arena, "%S/watch-state.txt", g_state_dir_path);
+        String8 state_file = str8f(scratch.arena, "%S/watch-progress.txt", g_state_dir_path);
 
         watch_progress_mark_watched(g_watch_progress, file_path);
         watch_progress_save(g_watch_progress, state_file);
@@ -1071,11 +1005,12 @@ start_playback(PlayerState *state, String8 file_path)
     return 0;
   }
 
-  state->current_file        = str8_copy(state->perm_arena, file_path);
-  state->last_position_save  = os_now_microseconds();
-  state->last_known_position = start_pos;
-  state->last_known_duration = 0.0;
-  state->mode                = PlayerMode_Playing;
+  state->current_file           = str8_copy(state->perm_arena, file_path);
+  state->current_watch_progress = wp;
+  state->last_position_save     = os_now_microseconds();
+  state->last_known_position    = start_pos;
+  state->last_known_duration    = 0.0;
+  state->mode                   = PlayerMode_Playing;
 
   scratch_end(scratch);
   return 1;
@@ -1089,8 +1024,21 @@ stop_playback(PlayerState *state)
     if(state->current_file.size > 0 && state->last_known_position >= 0.0)
     {
       Temp scratch = scratch_begin(&state->perm_arena, 1);
-      WatchProgress *wp = watch_progress_update(g_watch_progress, state->current_file, state->last_known_position, state->last_known_duration);
-      String8 state_file = str8f(scratch.arena, "%S/watch-state.txt", g_state_dir_path);
+
+      WatchProgress *wp = state->current_watch_progress;
+      if(wp == 0)
+      {
+        wp = watch_progress_update(g_watch_progress, state->current_file, state->last_known_position, state->last_known_duration);
+      }
+      else
+      {
+        wp->position_seconds       = state->last_known_position;
+        wp->duration_seconds       = state->last_known_duration;
+        wp->last_watched_timestamp = os_now_microseconds() / Million(1);
+        if(wp->duration_seconds > 0.0 && (wp->position_seconds / wp->duration_seconds) > 0.90) { wp->is_watched = 1; }
+      }
+
+      String8 state_file = str8f(scratch.arena, "%S/watch-progress.txt", g_state_dir_path);
       watch_progress_save(g_watch_progress, state_file);
       scratch_end(scratch);
 
@@ -1103,10 +1051,11 @@ stop_playback(PlayerState *state)
     state->mpv = 0;
   }
 
-  state->current_file     = str8_zero();
-  state->mode             = PlayerMode_Home;
-  state->selected_index   = 0;
-  state->needs_render     = 1;
+  state->current_file           = str8_zero();
+  state->current_watch_progress = 0;
+  state->mode                   = PlayerMode_Home;
+  state->selected_index         = 0;
+  state->needs_render           = 1;
 }
 
 internal void
@@ -1169,9 +1118,23 @@ update_playback(PlayerState *state)
   u64 now = os_now_microseconds();
   if(now - state->last_position_save > Million(5))
   {
-    Temp    scratch2   = scratch_begin(&state->perm_arena, 1);
-    String8 state_file = str8f(scratch2.arena, "%S/watch-state.txt", g_state_dir_path);
-    WatchProgress *wp = watch_progress_update(g_watch_progress, state->current_file, state->last_known_position, state->last_known_duration);
+    Temp scratch2 = scratch_begin(&state->perm_arena, 1);
+
+    WatchProgress *wp = state->current_watch_progress;
+    if(wp == 0)
+    {
+      wp = watch_progress_update(g_watch_progress, state->current_file, state->last_known_position, state->last_known_duration);
+      state->current_watch_progress = wp;
+    }
+    else
+    {
+      wp->position_seconds       = state->last_known_position;
+      wp->duration_seconds       = state->last_known_duration;
+      wp->last_watched_timestamp = now / Million(1);
+      if(wp->duration_seconds > 0.0 && (wp->position_seconds / wp->duration_seconds) > 0.90) { wp->is_watched = 1; }
+    }
+
+    String8 state_file = str8f(scratch2.arena, "%S/watch-progress.txt", g_state_dir_path);
     watch_progress_save(g_watch_progress, state_file);
     scratch_end(scratch2);
 
@@ -1267,7 +1230,7 @@ entry_point(CmdLine *cmd_line)
   log_scope_begin();
 
   String8 state_dir = cmd_line_string(cmd_line, str8_lit("state-dir"));
-  if(state_dir.size == 0) { state_dir = str8_lit("/home/mpd/.local/state/media-player"); }
+  if(state_dir.size == 0) { state_dir = str8_lit("/home/mpd/.local/state"); }
   g_state_dir_path = state_dir;
 
   Arena *perm_arena = arena_alloc();
@@ -1307,11 +1270,9 @@ entry_point(CmdLine *cmd_line)
     os_file_close(state_dir_handle);
   }
 
-  g_watch_progress       = watch_progress_table_alloc(perm_arena, 256);
-  String8 state_file     = str8f(perm_arena, "%S/watch-state.txt", g_state_dir_path);
+  g_watch_progress   = watch_progress_table_alloc(perm_arena, 2048);
+  String8 state_file = str8f(perm_arena, "%S/watch-progress.txt", g_state_dir_path);
   watch_progress_load(g_watch_progress, state_file);
-  watch_progress_migrate_to_absolute_paths(g_watch_progress);
-  watch_progress_save(g_watch_progress, state_file);
 
   Terminal *term = terminal_init(perm_arena);
   if(term == 0)

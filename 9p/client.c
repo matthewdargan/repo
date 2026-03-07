@@ -309,7 +309,6 @@ client9p_attach(Arena *arena, Client9P *client, u32 auth_fid, String8 user_name,
 internal void
 client9p_fid_close(Arena *arena, ClientFid9P *fid)
 {
-  if(fid == 0) { return; }
   Message9P tx = msg9p_zero();
   tx.type      = Msg9P_Tclunk;
   tx.fid       = fid->fid;
@@ -319,7 +318,6 @@ client9p_fid_close(Arena *arena, ClientFid9P *fid)
 internal ClientFid9P *
 client9p_fid_walk(Arena *arena, ClientFid9P *fid, String8 path)
 {
-  if(fid == 0) { return 0; }
   ClientFid9P *walk_fid = push_array(arena, ClientFid9P, 1);
   Temp scratch          = temp_begin(arena);
   walk_fid->fid         = ins_atomic_u32_inc_eval(&fid->client->next_fid) - 1;
@@ -370,7 +368,6 @@ client9p_fid_walk(Arena *arena, ClientFid9P *fid, String8 path)
 internal b32
 client9p_fid_create(Arena *arena, ClientFid9P *fid, String8 name, u32 mode, u32 permissions)
 {
-  if(fid == 0) { return 0; }
   Message9P tx   = msg9p_zero();
   tx.type        = Msg9P_Tcreate;
   tx.fid         = fid->fid;
@@ -386,8 +383,6 @@ client9p_fid_create(Arena *arena, ClientFid9P *fid, String8 name, u32 mode, u32 
 internal ClientFid9P *
 client9p_create(Arena *arena, Client9P *client, String8 name, u32 mode, u32 permissions)
 {
-  if(client == 0 || client->root == 0) { return 0; }
-
   String8 dir      = str8_chop_last_slash(name);
   String8 element  = str8_skip_last_slash(name);
   ClientFid9P *fid = client9p_fid_walk(arena, client->root, dir);
@@ -405,7 +400,6 @@ client9p_create(Arena *arena, Client9P *client, String8 name, u32 mode, u32 perm
 internal b32
 client9p_fid_remove(Arena *arena, ClientFid9P *fid)
 {
-  if(fid == 0) { return 0; }
   Message9P tx = msg9p_zero();
   tx.type      = Msg9P_Tremove;
   tx.fid       = fid->fid;
@@ -417,7 +411,6 @@ client9p_fid_remove(Arena *arena, ClientFid9P *fid)
 internal b32
 client9p_remove(Arena *arena, Client9P *client, String8 name)
 {
-  if(client == 0 || client->root == 0) { return 0; }
   ClientFid9P *fid = client9p_fid_walk(arena, client->root, name);
   if(fid == 0)                         { return 0; }
   if(!client9p_fid_remove(arena, fid)) { return 0; }
@@ -427,7 +420,6 @@ client9p_remove(Arena *arena, Client9P *client, String8 name)
 internal b32
 client9p_fid_open(Arena *arena, ClientFid9P *fid, u32 mode)
 {
-  if(fid == 0) { return 0; }
   Message9P tx = msg9p_zero();
   tx.type      = Msg9P_Topen;
   tx.fid       = fid->fid;
@@ -441,7 +433,6 @@ client9p_fid_open(Arena *arena, ClientFid9P *fid, u32 mode)
 internal ClientFid9P *
 client9p_open(Arena *arena, Client9P *client, String8 name, u32 mode)
 {
-  if(client == 0 || client->root == 0) { return 0; }
   ClientFid9P *fid = client9p_fid_walk(arena, client->root, name);
   if(fid == 0) { return 0; }
   if(!client9p_fid_open(arena, fid, mode))
@@ -455,8 +446,6 @@ client9p_open(Arena *arena, Client9P *client, String8 name, u32 mode)
 internal s64
 client9p_fid_pread(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset)
 {
-  if(fid == 0 || buf == 0) { return -1; }
-
   u32 max_message_size     = fid->client->max_message_size - P9_MESSAGE_HEADER_SIZE;
   s64 current_offset       = (offset == -1) ? fid->offset : offset;
   u64 num_chunks           = (n + max_message_size - 1) / max_message_size;
@@ -520,8 +509,6 @@ client9p_fid_pread(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset)
 internal s64
 client9p_fid_pwrite(Arena *arena, ClientFid9P *fid, void *buf, u64 n, s64 offset)
 {
-  if(fid == 0 || buf == 0) { return -1; }
-
   u32 max_message_size        = fid->client->max_message_size - P9_MESSAGE_HEADER_SIZE;
   s64 current_offset          = (offset == -1) ? fid->offset : offset;
   u64 num_chunks              = (n + max_message_size - 1) / max_message_size;
@@ -614,8 +601,6 @@ internal DirList9P
 client9p_fid_read_dirs(Arena *arena, ClientFid9P *fid)
 {
   DirList9P result = {0};
-  if(fid == 0) { return result; }
-
   u8 *buf               = push_array_no_zero(arena, u8, P9_DIR_BUFFER_MAX);
   s64 total_bytes_read  = 0;
   u64 buffer_space_left = P9_DIR_BUFFER_MAX;
@@ -636,7 +621,6 @@ internal Dir9P
 client9p_fid_stat(Arena *arena, ClientFid9P *fid)
 {
   Dir9P result = dir9p_zero();
-  if(fid == 0) { return result; }
   Message9P tx = msg9p_zero();
   tx.type      = Msg9P_Tstat;
   tx.fid       = fid->fid;
@@ -650,7 +634,6 @@ internal Dir9P
 client9p_stat(Arena *arena, Client9P *client, String8 name)
 {
   Dir9P result = dir9p_zero();
-  if(client == 0 || client->root == 0) { return result; }
   ClientFid9P *fid = client9p_fid_walk(arena, client->root, name);
   if(fid == 0) { return result; }
   result = client9p_fid_stat(arena, fid);
@@ -661,7 +644,6 @@ client9p_stat(Arena *arena, Client9P *client, String8 name)
 internal b32
 client9p_fid_wstat(Arena *arena, ClientFid9P *fid, Dir9P dir)
 {
-  if(fid == 0) { return 0; }
   Temp scratch = temp_begin(arena);
   String8 stat = str8_from_dir9p(scratch.arena, dir);
   if(stat.size == 0) { return 0; }
