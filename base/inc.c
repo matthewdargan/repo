@@ -1,6 +1,3 @@
-////////////////////////////////
-//~ Base Includes
-
 #include "core.c"
 #include "arena.c"
 #include "math.c"

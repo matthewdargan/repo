@@ -1,9 +1,6 @@
 #ifndef _9P_FS_H
 #define _9P_FS_H
 
-////////////////////////////////
-//~ Includes
-
 #include <grp.h>
 #include <sys/syscall.h>
 

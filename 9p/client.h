@@ -1,9 +1,6 @@
 #ifndef _9P_CLIENT_H
 #define _9P_CLIENT_H
 
-////////////////////////////////
-//~ Includes
-
 #include <pwd.h>
 
 ////////////////////////////////

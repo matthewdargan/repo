@@ -888,6 +888,15 @@ dir9p_list_push(Arena *arena, DirList9P *list, Dir9P dir)
 internal String8
 read_9p_msg(Arena *arena, u64 fd)
 {
+  struct timeval timeout;
+  timeout.tv_sec  = 5;
+  timeout.tv_usec = 0;
+  if(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
+  {
+    fprintf(stderr, "9p: failed to set socket timeout: %s\n", strerror(errno));
+    fflush(stderr);
+  }
+
   u8  len_buf[4];
   u32 total_num_bytes_to_read      = 4;
   u32 total_num_bytes_read         = 0;
@@ -902,7 +911,11 @@ read_9p_msg(Arena *arena, u64 fd)
       total_num_bytes_left_to_read -= read_result;
     }
     else if(errno == EINTR) { continue; }
-    else                    { return str8_zero(); }
+    else
+    {
+      if(errno == EWOULDBLOCK || errno == EAGAIN) { fprintf(stderr, "9p: read timeout after 5s (fd=%lu)\n", (unsigned long)fd); }
+      return str8_zero();
+    }
   }
 
   u32     msg_size = (u32)from_le_u32(read_u32(len_buf));

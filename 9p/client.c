@@ -59,6 +59,7 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_daemon, String
   ClientFid9P *rpc_fid = client9p_fid_walk(arena, auth_root, str8_lit("rpc"));
   if(rpc_fid == 0)
   {
+    client9p_fid_close(arena, auth_root);
     os_file_close(auth_handle);
     scratch_end(scratch);
     return 0;
@@ -66,6 +67,8 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_daemon, String
 
   if(!client9p_fid_open(arena, rpc_fid, P9_OpenFlag_ReadWrite))
   {
+    client9p_fid_close(arena, rpc_fid);
+    client9p_fid_close(arena, auth_root);
     os_file_close(auth_handle);
     scratch_end(scratch);
     return 0;
@@ -74,6 +77,8 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_daemon, String
   ClientFid9P *server_auth_fid = client9p_tauth(arena, server_client, user_name, attach_path);
   if(server_auth_fid == 0)
   {
+    client9p_fid_close(arena, rpc_fid);
+    client9p_fid_close(arena, auth_root);
     os_file_close(auth_handle);
     scratch_end(scratch);
     return 0;
@@ -83,15 +88,21 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_daemon, String
   s64 write_result  = client9p_fid_pwrite(arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
   if(write_result != (s64)start_cmd.size)
   {
+    client9p_fid_close(arena, server_auth_fid);
+    client9p_fid_close(arena, rpc_fid);
+    client9p_fid_close(arena, auth_root);
     os_file_close(auth_handle);
     scratch_end(scratch);
     return 0;
   }
 
-  u8 challenge[36];
-  s64 challenge_len = client9p_fid_pread(arena, server_auth_fid, challenge, 36, 0);
-  if(challenge_len != 36)
+  u8 challenge[32];
+  s64 challenge_len = client9p_fid_pread(arena, server_auth_fid, challenge, sizeof(challenge), 0);
+  if(challenge_len != sizeof(challenge))
   {
+    client9p_fid_close(arena, server_auth_fid);
+    client9p_fid_close(arena, rpc_fid);
+    client9p_fid_close(arena, auth_root);
     os_file_close(auth_handle);
     scratch_end(scratch);
     return 0;
@@ -103,9 +114,12 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_daemon, String
     fflush(stdout);
   }
 
-  write_result = client9p_fid_pwrite(arena, rpc_fid, challenge, 36, 0);
-  if(write_result != 36)
+  write_result = client9p_fid_pwrite(arena, rpc_fid, challenge, sizeof(challenge), 0);
+  if(write_result != sizeof(challenge))
   {
+    client9p_fid_close(arena, server_auth_fid);
+    client9p_fid_close(arena, rpc_fid);
+    client9p_fid_close(arena, auth_root);
     os_file_close(auth_handle);
     scratch_end(scratch);
     return 0;
@@ -115,6 +129,9 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_daemon, String
   s64 auth_response_len = client9p_fid_pread(arena, rpc_fid, auth_response, 512, 0);
   if(auth_response_len <= 0)
   {
+    client9p_fid_close(arena, server_auth_fid);
+    client9p_fid_close(arena, rpc_fid);
+    client9p_fid_close(arena, auth_root);
     os_file_close(auth_handle);
     scratch_end(scratch);
     return 0;
@@ -123,6 +140,9 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_daemon, String
   write_result = client9p_fid_pwrite(arena, server_auth_fid, auth_response, auth_response_len, 0);
   if(write_result != auth_response_len)
   {
+    client9p_fid_close(arena, server_auth_fid);
+    client9p_fid_close(arena, rpc_fid);
+    client9p_fid_close(arena, auth_root);
     os_file_close(auth_handle);
     scratch_end(scratch);
     return 0;
@@ -132,12 +152,16 @@ client9p_auth(Arena *arena, Client9P *server_client, String8 auth_daemon, String
   s64 done_len = client9p_fid_pread(arena, server_auth_fid, done_response, 16, 0);
   if(done_len <= 0)
   {
+    client9p_fid_close(arena, server_auth_fid);
+    client9p_fid_close(arena, rpc_fid);
+    client9p_fid_close(arena, auth_root);
     os_file_close(auth_handle);
     scratch_end(scratch);
     return 0;
   }
 
   client9p_fid_close(arena, rpc_fid);
+  client9p_fid_close(arena, auth_root);
   os_file_close(auth_handle);
   scratch_end(scratch);
 
@@ -180,8 +204,11 @@ client9p_mount(Arena *arena, u64 fd, String8 auth_daemon, String8 auth_id, Strin
 internal void
 client9p_unmount(Arena *arena, Client9P *client)
 {
-  client9p_fid_close(arena, client->root);
-  client->root = 0;
+  if(client->root != 0)
+  {
+    client9p_fid_close(arena, client->root);
+    client->root = 0;
+  }
   if(client->auth_fid != 0)
   {
     client9p_fid_close(arena, client->auth_fid);

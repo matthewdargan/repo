@@ -2,7 +2,7 @@
 #define THREAD_H
 
 ////////////////////////////////
-//~ Includes
+//~ System Headers
 
 #include <errno.h>
 #include <fcntl.h>

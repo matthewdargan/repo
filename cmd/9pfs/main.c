@@ -3,11 +3,12 @@
 #include "base/inc.c"
 #include "9p/inc.c"
 
-global FsContext9P *fs_context       = 0;
-global WP_Pool     *worker_pool      = 0;
-global b32          require_auth     = 0;
-global String8      auth_daemon_addr = {0};
-global String8      auth_id          = {0};
+global FsContext9P *fs_context                  = 0;
+global WP_Pool     *worker_pool                 = 0;
+global b32          require_auth                = 0;
+global String8      auth_daemon_addr            = {0};
+global String8      auth_id                     = {0};
+global volatile sig_atomic_t shutdown_requested = 0;
 
 internal FidAuxiliary9P *
 fid_aux_alloc(Server9P *server)
@@ -92,20 +93,43 @@ srv_auth(ServerRequest9P *request)
 
   u64 auth_fd           = auth_handle.u64[0];
   Client9P *auth_client = client9p_init(request->server->arena, auth_fd);
-  if(auth_client == 0) { os_file_close(auth_handle); server9p_respond(request, str8_lit("9auth connection failed")); return; }
+  if(auth_client == 0)
+  {
+    os_file_close(auth_handle);
+    server9p_respond(request, str8_lit("9auth connection failed"));
+    return;
+  }
 
   ClientFid9P *auth_root = client9p_attach(request->server->arena, auth_client, P9_FID_NONE, request->in_msg.user_name, str8_lit("/"));
-  if(auth_root == 0) { server9p_respond(request, str8_lit("9auth attach failed")); return; }
+  if(auth_root == 0)
+  {
+    os_file_close(auth_handle);
+    server9p_respond(request, str8_lit("9auth attach failed"));
+    return;
+  }
 
   auth_client->root = auth_root;
 
   String8 rpc_path     = str8_lit("rpc");
   ClientFid9P *rpc_fid = client9p_open(request->server->arena, auth_client, rpc_path, OS_AccessFlag_Read | OS_AccessFlag_Write);
-  if(rpc_fid == 0) { server9p_respond(request, str8_lit("9auth rpc file not found")); return; }
+  if(rpc_fid == 0)
+  {
+    client9p_fid_close(request->server->arena, auth_root);
+    os_file_close(auth_handle);
+    server9p_respond(request, str8_lit("9auth rpc file not found"));
+    return;
+  }
 
   String8 start_cmd = str8f(request->scratch.arena, "start role=server user=%S auth-id=%S", request->in_msg.user_name, auth_id);
   s64 write_result  = client9p_fid_pwrite(request->server->arena, rpc_fid, (void *)start_cmd.str, start_cmd.size, 0);
-  if(write_result != (s64)start_cmd.size) { server9p_respond(request, str8_lit("9auth start failed")); return; }
+  if(write_result != (s64)start_cmd.size)
+  {
+    client9p_fid_close(request->server->arena, rpc_fid);
+    client9p_fid_close(request->server->arena, auth_root);
+    os_file_close(auth_handle);
+    server9p_respond(request, str8_lit("9auth start failed"));
+    return;
+  }
 
   FidAuxiliary9P *aux = fid_aux_get(request->server, request->fid);
   aux->is_auth_fid    = 1;
@@ -514,6 +538,16 @@ handle_connection_task(void *params)
 }
 
 ////////////////////////////////
+//~ Signal Handlers
+
+internal void
+signal_handler(int signum)
+{
+  (void)signum;
+  shutdown_requested = 1;
+}
+
+////////////////////////////////
 //~ Entry Point
 
 internal void
@@ -573,8 +607,19 @@ entry_point(CmdLine *cmd_line)
       fprintf(stdout, "9pfs: launched %lu worker threads\n", (unsigned long)worker_count);
       fflush(stdout);
 
+      signal(SIGTERM, signal_handler);
+      signal(SIGINT, signal_handler);
+
       for(;;)
       {
+        if(shutdown_requested)
+        {
+          fprintf(stdout, "9pfs: shutdown requested, cleaning up and exiting\n");
+          fflush(stdout);
+          os_file_close(listen_socket);
+          break;
+        }
+
         OS_Handle connection_socket = os_socket_accept(listen_socket);
         if(os_handle_match(connection_socket, os_handle_zero())) { fprintf(stderr, "9pfs: failed to accept connection\n"); fflush(stderr); continue; }
 

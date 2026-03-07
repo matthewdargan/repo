@@ -1,9 +1,6 @@
 #ifndef AUTH_FIDO2_H
 #define AUTH_FIDO2_H
 
-////////////////////////////////
-//~ Includes
-
 #include <fido.h>
 #include <fido/es256.h>
 

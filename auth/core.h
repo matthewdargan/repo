@@ -1,6 +1,8 @@
 #ifndef AUTH_CORE_H
 #define AUTH_CORE_H
 
+#include <openssl/crypto.h>
+
 ////////////////////////////////
 //~ Authentication State
 
@@ -30,7 +32,7 @@ struct Auth_Conv
   String8 proto;
   Auth_Key *key;
   Auth_State state;
-  u32 start_time;
+  u64 start_time_us;
   u8 challenge[32];
   u8 auth_data[256];
   u64 auth_data_len;
@@ -80,6 +82,19 @@ struct Auth_KeyRing
   u64 capacity;
 };
 
+#define AUTH_ENCRYPTED_VERSION   0x01    // Format version
+#define AUTH_KDF_ITERATIONS      2000000 // Future-proof to 2030 (3.3x NIST 2023 minimum)
+#define AUTH_SALT_SIZE           32      // 256-bit salt for PBKDF2
+#define AUTH_NONCE_SIZE          12      // AES-GCM standard nonce size
+#define AUTH_TAG_SIZE            16      // AES-GCM 128-bit authentication tag
+#define AUTH_KEY_SIZE            32      // AES-256 key size
+#define AUTH_MAX_CREDENTIAL_SIZE 256     // Maximum credential/public key size
+#define AUTH_MAX_IDENTIFIER_SIZE 256     // Maximum user/auth_id length
+#define AUTH_CHALLENGE_SIZE      32      // Ed25519/FIDO2 challenge size
+#define AUTH_SIGNATURE_SIZE_MAX  256     // Maximum signature size
+
+#define SecureMemoryZero(ptr, size) OPENSSL_cleanse((void*)(ptr), (size))
+
 ////////////////////////////////
 //~ Conversation Functions
 
@@ -96,8 +111,10 @@ internal void auth_keyring_remove(Auth_KeyRing *ring, String8 user, String8 auth
 ////////////////////////////////
 //~ Key Ring Serialization
 
-internal String8 auth_keyring_save(Arena *arena, Auth_KeyRing *ring);
-internal b32 auth_keyring_load(Arena *arena, Auth_KeyRing *ring, String8 data);
+internal b32 auth_keyring_encrypt(Arena *arena, String8 plaintext, String8 passphrase, String8 *out_encrypted, String8 *out_error);
+internal b32 auth_keyring_decrypt(Arena *arena, String8 encrypted, String8 passphrase, String8 *out_plaintext, String8 *out_error);
+internal b32 auth_keyring_save(Arena *arena, Auth_KeyRing *ring, String8 passphrase, String8 *out_data, String8 *out_error);
+internal b32 auth_keyring_load(Arena *arena, Auth_KeyRing *ring, String8 data, String8 passphrase);
 
 ////////////////////////////////
 //~ Security Validation

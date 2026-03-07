@@ -229,9 +229,13 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
       if(str8_match(proto, str8_lit("ed25519"), 0))
       {
         Auth_Ed25519_RegisterParams reg_params = {0};
-        reg_params.user = user;
-        reg_params.auth_id = auth_id;
-        if(!auth_ed25519_register_credential(arena, reg_params, &new_key, &error)) goto cleanup;
+        reg_params.user                        = user;
+        reg_params.auth_id                     = auth_id;
+        if(!auth_ed25519_register_credential(arena, reg_params, &new_key, &error))
+        {
+          auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+          break;
+        }
       }
       else if(str8_match(proto, str8_lit("fido2"), 0))
       {
@@ -242,23 +246,28 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
           if(cred_bytes.size < 16 || cred_bytes.size > 256 || pub_bytes.size < 32 || pub_bytes.size > 256)
           {
             error = str8_lit("fido2: invalid credential size");
-            goto cleanup;
+            auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+            break;
           }
 
           new_key.type              = Auth_Proto_FIDO2;
           new_key.user              = str8_copy(arena, user);
           new_key.auth_id           = str8_copy(arena, auth_id);
           new_key.credential_id_len = cred_bytes.size;
-          MemoryCopy(new_key.credential_id, cred_bytes.str, cred_bytes.size);
           new_key.public_key_len    = pub_bytes.size;
+          MemoryCopy(new_key.credential_id, cred_bytes.str, cred_bytes.size);
           MemoryCopy(new_key.public_key, pub_bytes.str, pub_bytes.size);
         }
         else
         {
           Auth_Fido2_RegisterParams reg_params = {0};
-          reg_params.user  = user;
-          reg_params.rp_id = auth_id;
-          if(!auth_fido2_register_credential(arena, reg_params, &new_key, &error)) { goto cleanup; }
+          reg_params.user                      = user;
+          reg_params.rp_id                     = auth_id;
+          if(!auth_fido2_register_credential(arena, reg_params, &new_key, &error))
+          {
+            auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+            break;
+          }
         }
       }
       else
@@ -267,17 +276,115 @@ auth_fs_write(Arena *arena, Auth_FS_State *fs, Auth_File_Type file_type, Auth_Co
         break;
       }
 
-      if(!auth_keyring_add(fs->rpc_state->keyring, &new_key, &error)) { goto cleanup; }
+      if(!auth_keyring_add(fs->rpc_state->keyring, &new_key, &error))
+      {
+        auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+        break;
+      }
 
-      String8 saved = auth_keyring_save(arena, fs->rpc_state->keyring);
-      os_write_data_to_file_path(fs->keys_path, saved);
+      String8 saved = str8_zero();
+      if(!auth_keyring_save(arena, fs->rpc_state->keyring, fs->rpc_state->passphrase, &saved, &error))
+      {
+        auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+        break;
+      }
+
+      Temp temp = temp_begin(arena);
+
+      u8 random_bytes[16];
+
+      if(getentropy(random_bytes, sizeof(random_bytes)) != 0)
+      {
+        SecureMemoryZero(random_bytes, sizeof(random_bytes));
+        error = str8_lit("auth: failed to generate random temp filename");
+        auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+        temp_end(temp);
+        break;
+      }
+
+      String8 random_hex = hex_from_bytes(temp.arena, random_bytes, 16);
+      String8 temp_path  = str8f(temp.arena, "%S.tmp.%S", fs->keys_path, random_hex);
+
+      char temp_path_buffer[PATH_MAX] = {0};
+      char keys_path_buffer[PATH_MAX] = {0};
+      if(temp_path.size >= sizeof temp_path_buffer || fs->keys_path.size >= sizeof keys_path_buffer)
+      {
+        error = str8_lit("auth: path too long");
+        auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+        temp_end(temp);
+        break;
+      }
+
+      MemoryCopy(temp_path_buffer, temp_path.str, temp_path.size);
+      MemoryCopy(keys_path_buffer, fs->keys_path.str, fs->keys_path.size);
+
+      int fd = open(temp_path_buffer, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW, 0600);
+      if(fd < 0)
+      {
+        error = str8_lit("auth: failed to create temp file");
+        auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+        temp_end(temp);
+        break;
+      }
+
+      struct stat st;
+      struct stat lstat_st;
+      if(fstat(fd, &st) != 0 || (st.st_mode & 0777) != 0600)
+      {
+        close(fd);
+        unlink(temp_path_buffer);
+        error = str8_lit("auth: insecure temp file permissions");
+        auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+        temp_end(temp);
+        break;
+      }
+
+      if(lstat(temp_path_buffer, &lstat_st) != 0 || S_ISLNK(lstat_st.st_mode) || st.st_ino != lstat_st.st_ino)
+      {
+        close(fd);
+        unlink(temp_path_buffer);
+        error = str8_lit("auth: symlink detected in temp file");
+        auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+        temp_end(temp);
+        break;
+      }
+
+      ssize_t written = write(fd, saved.str, saved.size);
+      if(written != (ssize_t)saved.size)
+      {
+        close(fd);
+        unlink(temp_path_buffer);
+        error = str8_lit("auth: failed to write temp file");
+        auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+        temp_end(temp);
+        break;
+      }
+
+      // fsync before close to ensure data is on disk before rename
+      if(fsync(fd) < 0)
+      {
+        close(fd);
+        unlink(temp_path_buffer);
+        error = str8_lit("auth: fsync failed");
+        auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+        temp_end(temp);
+        break;
+      }
+
+      close(fd);
+
+      if(rename(temp_path_buffer, keys_path_buffer) < 0)
+      {
+        unlink(temp_path_buffer);
+        error = str8_lit("auth: failed to rename temp file");
+        auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
+        temp_end(temp);
+        break;
+      }
+
+      temp_end(temp);
       auth_fs_log(fs, str8f(arena, "register_success: user=%S auth_id=%S proto=%S\n", user, auth_id, proto));
       success = 1;
-      break;
-
-cleanup:
-      auth_fs_log(fs, str8f(arena, "register_failed: user=%S auth_id=%S proto=%S error=%S\n", user, auth_id, proto, error));
-      break;
     }
   }break;
 

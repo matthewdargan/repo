@@ -8,10 +8,10 @@
   in {
     packages = cmdPackage.mkCmdPackage {
       pname = "9auth";
-      description = "Authentication agent for 9P with FIDO2 and Ed25519 support";
+      description = "Authentication agent for 9P with TPM 2.0, FIDO2, and Ed25519";
       version = "0.1.0";
-      buildInputs = [pkgs.libfido2 pkgs.openssl];
-      extraLinkFlags = "-lfido2 -lcrypto";
+      buildInputs = [pkgs.libfido2 pkgs.openssl pkgs.tpm2-tss];
+      extraLinkFlags = "-lfido2 -lcrypto -ltss2-esys -ltss2-mu";
     };
   };
 }

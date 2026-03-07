@@ -2,7 +2,7 @@
 #define OS_H
 
 ////////////////////////////////
-//~ Includes
+//~ System Headers
 
 #include <dirent.h>
 #include <errno.h>
@@ -41,10 +41,11 @@ struct OS_SystemInfo
 typedef u32 OS_AccessFlags;
 enum
 {
-  OS_AccessFlag_Read = (1 << 0),
-  OS_AccessFlag_Write = (1 << 1),
-  OS_AccessFlag_Append = (1 << 2),
-  OS_AccessFlag_Truncate = (1 << 3),
+  OS_AccessFlag_Read      = (1 << 0),
+  OS_AccessFlag_Write     = (1 << 1),
+  OS_AccessFlag_Append    = (1 << 2),
+  OS_AccessFlag_Truncate  = (1 << 3),
+  OS_AccessFlag_Exclusive = (1 << 4),
 };
 
 ////////////////////////////////

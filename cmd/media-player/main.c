@@ -820,7 +820,7 @@ render_browser_ncurses(Terminal *term, PlayerState *state, String8 header)
     u64 start = state->scroll_offset;
     u64 end = Min(state->file_count, start + visible_count);
 
-    for(u64 i = start; i < end; i++)
+    for(u64 i = start; i < end; i += 1)
     {
       FileEntry *entry = &state->files[i];
       b32 selected = (i == state->selected_index);

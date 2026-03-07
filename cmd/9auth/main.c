@@ -8,8 +8,12 @@
 ////////////////////////////////
 //~ Globals
 
-global Auth_FS_State *auth_fs_state = 0;
-global WP_Pool       *worker_pool   = 0;
+global Auth_FS_State *auth_fs_state             = 0;
+global WP_Pool *worker_pool                     = 0;
+global Mutex connection_mutex                   = {0};
+global u64 active_connections                   = 0;
+global read_only u64 max_connections            = 128;
+global volatile sig_atomic_t shutdown_requested = 0;
 
 ////////////////////////////////
 //~ Fid Auxiliary
@@ -93,11 +97,7 @@ srv_attach(ServerRequest9P *request)
   server9p_respond(request, str8_zero());
 }
 
-internal void
-srv_flush(ServerRequest9P *request)
-{
-  server9p_respond(request, str8_zero());
-}
+internal void srv_flush(ServerRequest9P *request) { server9p_respond(request, str8_zero()); }
 
 internal void
 srv_walk(ServerRequest9P *request)
@@ -243,11 +243,7 @@ srv_clunk(ServerRequest9P *request)
   server9p_respond(request, str8_zero());
 }
 
-internal void
-srv_remove(ServerRequest9P *request)
-{
-  server9p_respond(request, str8_lit("cannot remove files"));
-}
+internal void srv_remove(ServerRequest9P *request) { server9p_respond(request, str8_lit("cannot remove files")); }
 
 internal void
 srv_stat(ServerRequest9P *request)
@@ -280,10 +276,16 @@ srv_stat(ServerRequest9P *request)
   server9p_respond(request, str8_zero());
 }
 
+internal void srv_wstat(ServerRequest9P *request) { server9p_respond(request, str8_zero()); }
+
+////////////////////////////////
+//~ Signal Handlers
+
 internal void
-srv_wstat(ServerRequest9P *request)
+signal_handler(int signum)
 {
-  server9p_respond(request, str8_zero());
+  (void)signum;
+  shutdown_requested = 1;
 }
 
 ////////////////////////////////
@@ -292,6 +294,11 @@ srv_wstat(ServerRequest9P *request)
 internal void
 handle_connection(OS_Handle connection_socket)
 {
+  MutexScope(connection_mutex)
+  {
+    active_connections += 1;
+  }
+
   Temp scratch            = scratch_begin(0, 0);
   Arena *connection_arena = arena_alloc();
   Log *log                = log_alloc();
@@ -299,6 +306,12 @@ handle_connection(OS_Handle connection_socket)
   log_scope_begin();
 
   u64 connection_fd = connection_socket.u64[0];
+
+  struct timeval timeout;
+  timeout.tv_sec  = 30;
+  timeout.tv_usec = 0;
+  setsockopt(connection_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+  setsockopt(connection_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
   struct ucred cred;
   socklen_t cred_len = sizeof(cred);
@@ -313,7 +326,11 @@ handle_connection(OS_Handle connection_socket)
   {
     log_error(str8_lit("9auth: failed to allocate server\n"));
     os_file_close(connection_socket);
+    log_scope_flush(scratch.arena);
+    log_release(log);
     arena_release(connection_arena);
+    scratch_end(scratch);
+    MutexScope(connection_mutex) { active_connections -= 1; }
     return;
   }
 
@@ -353,6 +370,11 @@ handle_connection(OS_Handle connection_socket)
   log_release(log);
   arena_release(connection_arena);
   scratch_end(scratch);
+
+  MutexScope(connection_mutex)
+  {
+    active_connections -= 1;
+  }
 }
 
 internal void
@@ -383,6 +405,27 @@ entry_point(CmdLine *cmd_line)
   String8 keys_path = cmd_line_string(cmd_line, str8_lit("keys-path"));
   if(keys_path.size == 0) { keys_path = str8_lit("/var/lib/9auth/keys"); }
 
+  String8 error        = str8_zero();
+  Auth_TPM_Result seal = auth_tpm_unseal_key(arena, &error);
+  if(seal.key.size == 0)
+  {
+    fprintf(stderr, "9auth: failed to unseal keyring: %.*s\n", (int)error.size, error.str);
+    fflush(stderr);
+    goto cleanup;
+  }
+
+  String8 source_name = str8_lit("unknown");
+  switch(seal.source)
+  {
+  case Auth_TPM_Source_None:      source_name = str8_lit("none"); break;
+  case Auth_TPM_Source_Hardware:  source_name = str8_lit("TPM (hardware-protected)"); break;
+  case Auth_TPM_Source_MachineID:
+  {
+    source_name = str8_lit("machine-id (INSECURE FALLBACK)");
+    fprintf(stderr, "9auth: WARNING: TPM unavailable - using machine-id fallback (NOT suitable for production)\n");
+  }break;
+  }
+
   u64 worker_count    = 0;
   String8 threads_str = cmd_line_string(cmd_line, str8_lit("threads"));
   if(threads_str.size > 0) { worker_count = u64_from_str8(threads_str, 10); }
@@ -396,13 +439,13 @@ entry_point(CmdLine *cmd_line)
     {
       fprintf(stderr, "usage: 9auth --register --user=<user> --auth-id=<auth-id> --proto=<ed25519|fido2>\n");
       fflush(stderr);
-      return;
+      goto cleanup;
     }
     if(!str8_match(proto, str8_lit("ed25519"), 0) && !str8_match(proto, str8_lit("fido2"), 0))
     {
       fprintf(stderr, "9auth: unsupported protocol: %.*s\n", (int)proto.size, proto.str);
       fflush(stderr);
-      return;
+      goto cleanup;
     }
 
     Auth_Key new_key = {0};
@@ -412,15 +455,15 @@ entry_point(CmdLine *cmd_line)
     if(str8_match(proto, str8_lit("ed25519"), 0))
     {
       Auth_Ed25519_RegisterParams params = {0};
-      params.user    = user;
-      params.auth_id = auth_id;
-      success        = auth_ed25519_register_credential(arena, params, &new_key, &error);
+      params.user                        = user;
+      params.auth_id                     = auth_id;
+      success                            = auth_ed25519_register_credential(arena, params, &new_key, &error);
     }
     else if(str8_match(proto, str8_lit("fido2"), 0))
     {
       Auth_Fido2_RegisterParams params = {0};
-      params.user  = user;
-      params.rp_id = auth_id;
+      params.user                      = user;
+      params.rp_id                     = auth_id;
 
       fprintf(stdout, "9auth: touch FIDO2 token\n");
       fflush(stdout);
@@ -432,21 +475,24 @@ entry_point(CmdLine *cmd_line)
     {
       String8 existing  = os_data_from_file_path(arena, keys_path);
       Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
-      if(existing.size > 0) { auth_keyring_load(arena, &ring, existing); }
+      if(existing.size > 0) { auth_keyring_load(arena, &ring, existing, seal.key); }
 
       String8 add_error = str8_zero();
       if(!auth_keyring_add(&ring, &new_key, &add_error))
       {
         fprintf(stderr, "9auth: failed to add credential: %.*s\n", (int)add_error.size, add_error.str);
-        fflush(stderr);
       }
       else
       {
-        String8 saved = auth_keyring_save(arena, &ring);
-        if(!os_write_data_to_file_path(keys_path, saved))
+        String8 saved      = str8_zero();
+        String8 save_error = str8_zero();
+        if(!auth_keyring_save(arena, &ring, seal.key, &saved, &save_error))
+        {
+          fprintf(stderr, "9auth: failed to save keyring: %.*s\n", (int)save_error.size, save_error.str);
+        }
+        else if(!os_write_data_to_file_path(keys_path, saved))
         {
           fprintf(stderr, "9auth: failed to save credential to %.*s (check file permissions)\n", (int)keys_path.size, keys_path.str);
-          fflush(stderr);
         }
         else
         {
@@ -461,7 +507,7 @@ entry_point(CmdLine *cmd_line)
       fflush(stderr);
     }
 
-    return;
+    goto cleanup;
   }
   else if(export_credential)
   {
@@ -472,7 +518,7 @@ entry_point(CmdLine *cmd_line)
     {
       fprintf(stderr, "usage: 9auth --export --user=<user> --auth-id=<auth-id>\n");
       fflush(stderr);
-      return;
+      goto cleanup;
     }
 
     String8 data = os_data_from_file_path(arena, keys_path);
@@ -480,15 +526,15 @@ entry_point(CmdLine *cmd_line)
     {
       fprintf(stderr, "9auth: no credentials found\n");
       fflush(stderr);
-      return;
+      goto cleanup;
     }
 
     Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
-    if(!auth_keyring_load(arena, &ring, data))
+    if(!auth_keyring_load(arena, &ring, data, seal.key))
     {
       fprintf(stderr, "9auth: failed to load credentials\n");
       fflush(stderr);
-      return;
+      goto cleanup;
     }
 
     Auth_KeyRing export_ring = auth_keyring_alloc(arena, 0);
@@ -505,7 +551,6 @@ entry_point(CmdLine *cmd_line)
         if(!auth_keyring_add(&export_ring, &export_key, &add_error))
         {
           fprintf(stderr, "9auth: failed to add credential: %.*s\n", (int)add_error.size, add_error.str);
-          fflush(stderr);
           continue;
         }
         matched_count += 1;
@@ -516,22 +561,30 @@ entry_point(CmdLine *cmd_line)
     {
       fprintf(stderr, "9auth: no credentials found for user='%.*s' auth-id='%.*s'\n", (int)user.size, user.str, (int)auth_id.size, auth_id.str);
       fflush(stderr);
-      return;
+      goto cleanup;
     }
 
-    String8 exported = auth_keyring_save(arena, &export_ring);
-    fwrite(exported.str, 1, exported.size, stdout);
+    String8 saved      = str8_zero();
+    String8 save_error = str8_zero();
+    if(!auth_keyring_save(arena, &export_ring, str8_zero(), &saved, &save_error))
+    {
+      fprintf(stderr, "9auth: failed to serialize keyring: %.*s\n", (int)save_error.size, save_error.str);
+      fflush(stderr);
+      goto cleanup;
+    }
+
+    fwrite(saved.str, 1, saved.size, stdout);
     fflush(stdout);
 
     fprintf(stderr, "9auth: exported %lu credentials\n", matched_count);
     fflush(stderr);
 
-    return;
+    goto cleanup;
   }
   else if(import_credential)
   {
     String8List input_chunks = {0};
-    u8 buffer[4096];
+    u8 buffer[KB(4)];
     for(;;)
     {
       ssize_t n = read(STDIN_FILENO, buffer, sizeof(buffer));
@@ -550,27 +603,27 @@ entry_point(CmdLine *cmd_line)
     {
       fprintf(stderr, "9auth: no data provided on stdin\n");
       fflush(stderr);
-      return;
+      goto cleanup;
     }
 
     Auth_KeyRing import_ring = auth_keyring_alloc(arena, 0);
-    if(!auth_keyring_load(arena, &import_ring, input))
+    if(!auth_keyring_load(arena, &import_ring, input, str8_zero()))
     {
       fprintf(stderr, "9auth: failed to parse imported data\n");
       fflush(stderr);
-      return;
+      goto cleanup;
     }
 
     if(import_ring.count == 0)
     {
       fprintf(stderr, "9auth: no credentials in imported data\n");
       fflush(stderr);
-      return;
+      goto cleanup;
     }
 
     String8 existing  = os_data_from_file_path(arena, keys_path);
     Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
-    if(existing.size > 0) { auth_keyring_load(arena, &ring, existing); }
+    if(existing.size > 0) { auth_keyring_load(arena, &ring, existing, seal.key); }
 
     for(u64 i = 0; i < import_ring.count; i += 1)
     {
@@ -580,52 +633,126 @@ entry_point(CmdLine *cmd_line)
       {
         fprintf(stderr, "9auth: failed to import credential for user='%.*s': %.*s\n",
                 (int)key->user.size, key->user.str, (int)add_error.size, add_error.str);
-        fflush(stderr);
         continue;
       }
     }
 
-    String8 saved = auth_keyring_save(arena, &ring);
-    os_write_data_to_file_path(keys_path, saved);
+    String8 saved      = str8_zero();
+    String8 save_error = str8_zero();
+    if(!auth_keyring_save(arena, &ring, seal.key, &saved, &save_error))
+    {
+      fprintf(stderr, "9auth: failed to save keyring: %.*s\n", (int)save_error.size, save_error.str);
+      fflush(stderr);
+      goto cleanup;
+    }
+
+    if(!os_write_data_to_file_path(keys_path, saved))
+    {
+      fprintf(stderr, "9auth: failed to write keyring to %.*s\n", (int)keys_path.size, keys_path.str);
+      fflush(stderr);
+      goto cleanup;
+    }
 
     fprintf(stdout, "9auth: imported %lu credentials\n", import_ring.count);
     fflush(stdout);
-    return;
+    goto cleanup;
   }
 
-  struct stat st;
-  if(stat((char *)keys_path.str, &st) == 0)
+  for(u64 i = 0; i + 1 < keys_path.size; i += 1)
   {
-    mode_t mode = st.st_mode & 0777;
-    if(mode != 0600)
+    if(keys_path.str[i] == '.' && keys_path.str[i + 1] == '.')
     {
-      fprintf(stderr, "9auth: security error: key file has insecure permissions %o (expected 0600)\n", mode);
+      fprintf(stderr, "9auth: keys path contains '..' - path traversal detected\n");
       fflush(stderr);
-      return;
+      goto cleanup;
     }
   }
 
-  String8 data      = os_data_from_file_path(arena, keys_path);
+  String8 data = str8_zero();
+  {
+    char keys_path_cstr[KB(4)];
+    if(keys_path.size >= sizeof(keys_path_cstr))
+    {
+      fprintf(stderr, "9auth: keys path too long\n");
+      fflush(stderr);
+      goto cleanup;
+    }
+    MemoryCopy(keys_path_cstr, keys_path.str, keys_path.size);
+    keys_path_cstr[keys_path.size] = 0;
+
+    int fd = open(keys_path_cstr, O_RDONLY | O_NOFOLLOW);
+    if(fd >= 0)
+    {
+      struct stat st;
+      struct stat lstat_st;
+      if(fstat(fd, &st) == 0)
+      {
+        if(lstat(keys_path_cstr, &lstat_st) != 0 || S_ISLNK(lstat_st.st_mode) || st.st_ino != lstat_st.st_ino)
+        {
+          fprintf(stderr, "9auth: security error: keys path is or contains a symlink\n");
+          fflush(stderr);
+          close(fd);
+          goto cleanup;
+        }
+
+        mode_t mode = st.st_mode & 0777;
+        if(mode != 0600)
+        {
+          fprintf(stderr, "9auth: security error: key file has insecure permissions %o (expected 0600)\n", mode);
+          fflush(stderr);
+          close(fd);
+          goto cleanup;
+        }
+        if(st.st_size > 0 && (u64)st.st_size < MB(16))
+        {
+          u8 *buffer = push_array(arena, u8, st.st_size);
+          ssize_t bytes_read = read(fd, buffer, st.st_size);
+          if(bytes_read == st.st_size) { data = str8(buffer, bytes_read); }
+        }
+      }
+      close(fd);
+    }
+  }
   Auth_KeyRing ring = auth_keyring_alloc(arena, 0);
+
+  // Lock ALL current and future memory to prevent swapping sensitive data
+  if(mlockall(MCL_CURRENT | MCL_FUTURE) != 0)
+  {
+    fprintf(stderr, "9auth: FATAL - failed to lock memory (cannot prevent swapping sensitive data)\n");
+    fprintf(stderr, "9auth: This is a security requirement. Check ulimit -l and CAP_IPC_LOCK capability.\n");
+    fflush(stderr);
+    goto cleanup;
+  }
+
   if(data.size > 0)
   {
-    if(!auth_keyring_load(arena, &ring, data))
+    if(!auth_keyring_load(arena, &ring, data, seal.key))
     {
       fprintf(stderr, "9auth: failed to load keyring\n");
       fflush(stderr);
-      return;
+      goto cleanup;
     }
   }
 
-  Auth_RPC_State *rpc_state = auth_rpc_state_alloc(arena, &ring, keys_path);
+  fprintf(stdout, "9auth: keyring unsealed from %.*s\n", (int)source_name.size, source_name.str);
+  fflush(stdout);
+
+  Auth_RPC_State *rpc_state = auth_rpc_state_alloc(arena, &ring, keys_path, seal.key);
   auth_fs_state             = auth_fs_alloc(arena, rpc_state, keys_path);
+
+  SecureMemoryZero((void *)seal.key.str, seal.key.size);
+
+  connection_mutex = mutex_alloc();
+
+  signal(SIGTERM, signal_handler);
+  signal(SIGINT, signal_handler);
 
   OS_Handle listen_socket = dial9p_listen(socket_addr, str8_lit("unix"), str8_lit("9auth"));
   if(os_handle_match(listen_socket, os_handle_zero()))
   {
     fprintf(stderr, "9auth: failed to create socket at %.*s\n", (int)socket_path.size, socket_path.str);
     fflush(stderr);
-    return;
+    goto cleanup;
   }
 
   if(worker_count == 0)
@@ -640,6 +767,19 @@ entry_point(CmdLine *cmd_line)
 
   for(;;)
   {
+    if(shutdown_requested)
+    {
+      fprintf(stdout, "9auth: shutdown requested, waiting for %lu active connections to close\n", active_connections);
+      fflush(stdout);
+      for(;active_connections > 0;) { os_sleep_milliseconds(100); }
+      fprintf(stdout, "9auth: cleaning up and exiting\n");
+      fflush(stdout);
+      MemoryZero(rpc_state->keyring->keys, rpc_state->keyring->count * sizeof(Auth_Key));
+      MemoryZero((void*)rpc_state->passphrase.str, rpc_state->passphrase.size);
+      os_file_close(listen_socket);
+      break;
+    }
+
     OS_Handle connection_socket = os_socket_accept(listen_socket);
     if(os_handle_match(connection_socket, os_handle_zero()))
     {
@@ -648,10 +788,26 @@ entry_point(CmdLine *cmd_line)
       continue;
     }
 
-    fprintf(stdout, "9auth: accepted connection\n");
+    b32 accept_connection = 0;
+    MutexScope(connection_mutex)
+    {
+      if(active_connections < max_connections) { accept_connection = 1; }
+    }
+
+    if(!accept_connection)
+    {
+      fprintf(stderr, "9auth: connection limit reached (%lu/%lu)\n", active_connections, max_connections);
+      fflush(stderr);
+      os_file_close(connection_socket);
+      continue;
+    }
+
+    fprintf(stdout, "9auth: accepted connection (%lu/%lu active)\n", active_connections + 1, max_connections);
     fflush(stdout);
     wp_submit(worker_pool, handle_connection_task, &connection_socket, sizeof(connection_socket));
   }
 
+cleanup:
+  if(seal.key.size > 0 && seal.key.str != 0) { SecureMemoryZero((void*)seal.key.str, seal.key.size); }
   arena_release(arena);
 }

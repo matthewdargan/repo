@@ -1,4 +1,5 @@
 #include "core.c"
+#include "tpm.c"
 #include "fido2.c"
 #include "ed25519.c"
 #include "rpc.c"

@@ -1,9 +1,6 @@
 #ifndef AUTH_ED25519_H
 #define AUTH_ED25519_H
 
-////////////////////////////////
-//~ Includes
-
 #include <openssl/err.h>
 #include <openssl/evp.h>
 

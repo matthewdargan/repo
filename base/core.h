@@ -2,7 +2,7 @@
 #define CORE_H
 
 ////////////////////////////////
-//~ Includes
+//~ Standard Library
 
 #include <stdio.h>
 #include <stdarg.h>

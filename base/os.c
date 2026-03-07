@@ -204,8 +204,11 @@ os_file_open(OS_AccessFlags flags, String8 path)
   else if(flags & OS_AccessFlag_Write)                          { lnx_flags  = O_WRONLY; }
   if(flags & OS_AccessFlag_Append)                              { lnx_flags |= O_APPEND; }
   if(flags & OS_AccessFlag_Truncate)                            { lnx_flags |= O_TRUNC; }
+  if(flags & OS_AccessFlag_Exclusive)                           { lnx_flags |= O_EXCL; }
   if(flags & (OS_AccessFlag_Write | OS_AccessFlag_Append))      { lnx_flags |= O_CREAT; }
-  int fd           = open((char *)path_copy.str, lnx_flags, 0755);
+
+  int mode         = (flags & OS_AccessFlag_Exclusive) ? 0600 : 0644;
+  int fd           = open((char *)path_copy.str, lnx_flags, mode);
   OS_Handle handle = os_handle_zero();
   if(fd != -1) { handle.u64[0] = fd; }
   scratch_end(scratch);

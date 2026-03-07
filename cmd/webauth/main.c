@@ -228,18 +228,13 @@ invite_create(InviteTable *t, u64 duration_us)
 internal b32
 invite_validate(InviteTable *t, String8 token)
 {
-  fprintf(stderr, "[DEBUG] invite_validate: entry\n"); fflush(stderr);
   if(token.size == 0) { return 0; }
 
-  fprintf(stderr, "[DEBUG] invite_validate: calling os_now_microseconds\n"); fflush(stderr);
   u64 now = os_now_microseconds();
-  fprintf(stderr, "[DEBUG] invite_validate: got time=%llu\n", now); fflush(stderr);
   b32 valid = 0;
 
-  fprintf(stderr, "[DEBUG] invite_validate: about to acquire mutex\n"); fflush(stderr);
   MutexScope(t->mutex)
   {
-    fprintf(stderr, "[DEBUG] invite_validate: mutex acquired, capacity=%llu\n", t->capacity); fflush(stderr);
     for(u64 i = 0; i < t->capacity; i += 1)
     {
       Invite *inv = &t->slots[i];
@@ -249,9 +244,7 @@ invite_validate(InviteTable *t, String8 token)
         break;
       }
     }
-    fprintf(stderr, "[DEBUG] invite_validate: loop complete, valid=%d\n", valid); fflush(stderr);
   }
-  fprintf(stderr, "[DEBUG] invite_validate: mutex released\n"); fflush(stderr);
 
   return valid;
 }
@@ -762,7 +755,6 @@ handle_auth_check(Arena *arena, HTTPRequest *req, OS_Handle sock)
 internal void
 handle_login_page(Arena *arena, HTTPRequest *req, OS_Handle sock)
 {
-  fprintf(stderr, "[DEBUG] login: creating challenge\n"); fflush(stderr);
   u8 challenge[32];
   String8 challenge_b64 = challenge_create(g_challenges, challenge);
   if(challenge_b64.size == 0)
@@ -771,12 +763,10 @@ handle_login_page(Arena *arena, HTTPRequest *req, OS_Handle sock)
     return;
   }
 
-  fprintf(stderr, "[DEBUG] login: formatting options\n"); fflush(stderr);
   String8 options = str8f(arena,
     "{\"challenge\":\"%S\",\"rpId\":\"%S\",\"userVerification\":\"required\",\"timeout\":60000}",
     challenge_b64, g_rp_id);
 
-  fprintf(stderr, "[DEBUG] login: formatting HTML\n"); fflush(stderr);
   String8 html = str8f(arena,
     "<!DOCTYPE html><html><head><title>Login</title></head><body>"
     "<h1>Login</h1><input id=\"u\" placeholder=\"Username\"/>"
@@ -792,11 +782,8 @@ handle_login_page(Arena *arena, HTTPRequest *req, OS_Handle sock)
     "const res=await fetch('/login/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(r)});"
     "if(res.ok)window.location='/';else alert('Login failed');"
     "}</script></body></html>", options);
-  fprintf(stderr, "[DEBUG] login: HTML formatted (size=%llu)\n", html.size); fflush(stderr);
 
-  fprintf(stderr, "[DEBUG] login: sending HTTP response\n"); fflush(stderr);
   http_send(sock, 200, str8_zero(), str8_lit("text/html"), html);
-  fprintf(stderr, "[DEBUG] login: HTTP response sent\n"); fflush(stderr);
 }
 
 internal void
@@ -876,28 +863,21 @@ handle_logout(Arena *arena, HTTPRequest *req, OS_Handle sock)
 internal void
 handle_register_page(Arena *arena, HTTPRequest *req, OS_Handle sock)
 {
-  fprintf(stderr, "[DEBUG] register: parsing invite token\n"); fflush(stderr);
   String8 token = http_query_param(arena, req->query, str8_lit("invite"));
 
-  fprintf(stderr, "[DEBUG] register: validating invite (token size=%llu)\n", token.size); fflush(stderr);
   if(!invite_validate(g_invites, token))
   {
-    fprintf(stderr, "[DEBUG] register: invalid invite\n"); fflush(stderr);
     http_send(sock, 401, str8_zero(), str8_lit("text/plain"), str8_lit("Invalid invite"));
     return;
   }
 
-  fprintf(stderr, "[DEBUG] register: creating challenge\n"); fflush(stderr);
   u8 challenge[32];
   String8 challenge_b64 = challenge_create(g_challenges, challenge);
 
-  fprintf(stderr, "[DEBUG] register: generating user_id\n"); fflush(stderr);
   u8 user_id[64];
   getentropy(user_id, 64);
-  fprintf(stderr, "[DEBUG] register: encoding user_id\n"); fflush(stderr);
   String8 user_id_b64 = str8_base64_encode(arena, str8(user_id, 64));
 
-  fprintf(stderr, "[DEBUG] register: formatting options\n"); fflush(stderr);
   String8 options = str8f(arena,
     "{\"challenge\":\"%S\",\"rp\":{\"id\":\"%S\",\"name\":\"%S\"},"
     "\"user\":{\"id\":\"%S\",\"name\":\"user\",\"displayName\":\"user\"},"
@@ -905,7 +885,6 @@ handle_register_page(Arena *arena, HTTPRequest *req, OS_Handle sock)
     "\"authenticatorSelection\":{\"userVerification\":\"required\"},\"timeout\":60000,\"attestation\":\"none\"}",
     challenge_b64, g_rp_id, g_rp_name, user_id_b64);
 
-  fprintf(stderr, "[DEBUG] register: formatting HTML\n"); fflush(stderr);
   String8 html = str8f(arena,
     "<!DOCTYPE html><html><head><title>Register</title></head><body>"
     "<h1>Register</h1><input id=\"u\" placeholder=\"Username\"/>"
@@ -922,11 +901,8 @@ handle_register_page(Arena *arena, HTTPRequest *req, OS_Handle sock)
     "const res=await fetch('/register/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(a)});"
     "if(res.ok)window.location='/login';else alert('Registration failed');"
     "}</script></body></html>", options, token);
-  fprintf(stderr, "[DEBUG] register: HTML formatted (size=%llu)\n", html.size); fflush(stderr);
 
-  fprintf(stderr, "[DEBUG] register: sending HTTP response\n"); fflush(stderr);
   http_send(sock, 200, str8_zero(), str8_lit("text/html"), html);
-  fprintf(stderr, "[DEBUG] register: HTTP response sent\n"); fflush(stderr);
 }
 
 internal void
@@ -1088,12 +1064,14 @@ run_invite_command(Arena *arena)
   {
     fprintf(stderr, "Error: You must be in the '9auth' group to generate invites\n");
     fprintf(stderr, "Ask your system administrator to add you to the group\n");
+    fflush(stderr);
     exit(1);
   }
 
   fprintf(stderr, "Error: invite command requires a running webauth daemon\n");
   fprintf(stderr, "TODO: Implement IPC to communicate with running daemon\n");
   fprintf(stderr, "\nFor now, use: webauth --test-invite=true\n");
+  fflush(stderr);
   exit(1);
 }
 

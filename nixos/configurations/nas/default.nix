@@ -70,15 +70,64 @@
     services = {
       # 9P servers
       media-serve = {
-        after = ["network.target"];
+        after = ["network.target" "9auth.service"];
         description = "9P server for media files";
+        requires = ["9auth.service"];
+        wantedBy = ["multi-user.target"];
+
         serviceConfig = {
-          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs"}/bin/9pfs --root=/media --auth-id=nas tcp!*!5640";
+          # Execution
+          ExecStart = "${self.packages.${pkgs.stdenv.hostPlatform.system}."9pfs"}/bin/9pfs --require-auth --auth-id=nas tcp!*!5640 /media";
+          User = "storage";
+          Group = "storage";
+
+          # Lifecycle
           Restart = "always";
           RestartSec = "5s";
-          User = "storage";
+          TimeoutStartSec = "10s";
+          TimeoutStopSec = "30s";
+
+          # Filesystem
+          RuntimeDirectory = "9pfs";
+          RuntimeDirectoryMode = "0750";
+          ReadWritePaths = ["/media"];
+
+          # Security - Capabilities
+          AmbientCapabilities = ["CAP_NET_BIND_SERVICE"];
+          NoNewPrivileges = true;
+
+          # Security - Filesystem Isolation
+          PrivateTmp = true;
+          ProtectHome = true;
+          ProtectSystem = "strict";
+          ProtectProc = "invisible";
+          ProcSubset = "pid";
+
+          # Security - Kernel Protection
+          ProtectKernelTunables = true;
+          ProtectKernelModules = true;
+          ProtectKernelLogs = true;
+          ProtectControlGroups = true;
+          ProtectClock = true;
+
+          # Security - Network
+          RestrictAddressFamilies = ["AF_UNIX" "AF_INET" "AF_INET6"];
+
+          # Security - System Calls
+          SystemCallFilter = ["@system-service" "@file-system" "~@privileged" "~@resources"];
+          SystemCallArchitectures = "native";
+
+          # Security - Misc Restrictions
+          RestrictNamespaces = true;
+          RestrictRealtime = true;
+          RestrictSUIDSGID = true;
+          LockPersonality = true;
+          MemoryDenyWriteExecute = true;
+          PrivateMounts = true;
+          RemoveIPC = true;
+          ProtectHostname = true;
+          KeyringMode = "private";
         };
-        wantedBy = ["multi-user.target"];
       };
     };
     tmpfiles.rules = [

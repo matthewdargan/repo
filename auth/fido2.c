@@ -4,6 +4,8 @@
 internal String8
 auth_fido2_error_string(Arena *arena, int error_code)
 {
+  if(arena == 0) { return str8_zero(); }
+
   const char *error_str = fido_strerr(error_code);
   return str8_copy(arena, str8_cstring((char *)error_str));
 }
@@ -11,7 +13,13 @@ auth_fido2_error_string(Arena *arena, int error_code)
 internal b32
 auth_fido2_generate_challenge(u8 challenge[32])
 {
-  if(getentropy(challenge, 32) != 0) { return 0; }
+  if(challenge == 0) { return 0; }
+
+  if(getentropy(challenge, 32) != 0)
+  {
+    SecureMemoryZero(challenge, 32);
+    return 0;
+  }
   return 1;
 }
 
@@ -19,6 +27,8 @@ internal Auth_Fido2_DeviceList
 auth_fido2_enumerate_devices(Arena *arena)
 {
   Auth_Fido2_DeviceList result = {0};
+  if(arena == 0) { return result; }
+
   fido_dev_info_t *dev_list    = 0;
   size_t dev_count             = 0;
 
@@ -34,15 +44,18 @@ auth_fido2_enumerate_devices(Arena *arena)
     return result;
   }
 
-  for(size_t i = 0; i < dev_count; i += 1)
+  // Bounds check: dev_count could exceed allocation size
+  size_t actual_count = (dev_count > 64) ? 64 : dev_count;
+
+  for(size_t i = 0; i < actual_count; i += 1)
   {
     const fido_dev_info_t *di = fido_dev_info_ptr(dev_list, i);
     if(di == 0) { continue; }
 
     Auth_Fido2_DeviceInfo *info = push_array(arena, Auth_Fido2_DeviceInfo, 1);
-    const char *path         = fido_dev_info_path(di);
-    const char *product      = fido_dev_info_product_string(di);
-    const char *manufacturer = fido_dev_info_manufacturer_string(di);
+    const char *path            = fido_dev_info_path(di);
+    const char *product         = fido_dev_info_product_string(di);
+    const char *manufacturer    = fido_dev_info_manufacturer_string(di);
 
     if(path != 0)         { info->path         = str8_copy(arena, str8_cstring((char *)path)); }
     if(product != 0)      { info->product      = str8_copy(arena, str8_cstring((char *)product)); }
@@ -61,10 +74,15 @@ auth_fido2_enumerate_devices(Arena *arena)
 internal b32
 auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, Auth_Key *out_key, String8 *out_error)
 {
+  if(arena == 0 || out_key == 0 || out_error == 0) { return 0; }
+
   b32 success       = 0;
   Temp temp         = {0};
   fido_dev_t *dev   = 0;
   fido_cred_t *cred = 0;
+  u8 client_data_hash[32];
+
+  SecureMemoryZero(client_data_hash, 32);
 
   Auth_Fido2_DeviceList devices = auth_fido2_enumerate_devices(arena);
   if(devices.count == 0) { *out_error = str8_lit("fido2: no devices found"); goto cleanup; }
@@ -104,7 +122,6 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   temp = (Temp){0};
   if(r != FIDO_OK) { *out_error = str8f(arena, "fido2: failed to set user: %S", auth_fido2_error_string(arena, r)); goto cleanup; }
 
-  u8 client_data_hash[32];
   if(!auth_fido2_generate_challenge(client_data_hash)) { *out_error = str8_lit("fido2: failed to generate challenge"); goto cleanup; }
 
   r = fido_cred_set_clientdata_hash(cred, client_data_hash, 32);
@@ -124,11 +141,11 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
 
   const u8 *cred_id  = fido_cred_id_ptr(cred);
   size_t cred_id_len = fido_cred_id_len(cred);
-  if(cred_id == 0 || cred_id_len == 0 || cred_id_len > 256) { *out_error = str8_lit("fido2: invalid credential ID"); goto cleanup; }
+  if(cred_id == 0 || cred_id_len == 0 || cred_id_len > AUTH_MAX_CREDENTIAL_SIZE) { *out_error = str8_lit("fido2: invalid credential ID"); goto cleanup; }
 
   const u8 *pubkey  = fido_cred_pubkey_ptr(cred);
   size_t pubkey_len = fido_cred_pubkey_len(cred);
-  if(pubkey == 0 || pubkey_len == 0 || pubkey_len > 256) { *out_error = str8_lit("fido2: invalid public key"); goto cleanup; }
+  if(pubkey == 0 || pubkey_len == 0 || pubkey_len > AUTH_MAX_CREDENTIAL_SIZE) { *out_error = str8_lit("fido2: invalid public key"); goto cleanup; }
 
   out_key->type    = Auth_Proto_FIDO2;
   out_key->user    = str8_copy(arena, params.user);
@@ -143,8 +160,9 @@ auth_fido2_register_credential(Arena *arena, Auth_Fido2_RegisterParams params, A
   success = 1;
 
 cleanup:
+  SecureMemoryZero(client_data_hash, sizeof(client_data_hash));
   if(temp.arena != 0) { temp_end(temp); }
-  if(cred != 0) { fido_cred_free(&cred); }
+  if(cred != 0)       { fido_cred_free(&cred); }
   if(dev != 0)
   {
     fido_dev_close(dev);
@@ -156,10 +174,14 @@ cleanup:
 internal b32
 auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fido2_Assertion *out_assertion, String8 *out_error)
 {
+  if(arena == 0 || params == 0 || out_assertion == 0 || out_error == 0) { return 0; }
+
   b32 success           = 0;
   Temp temp             = {0};
   fido_dev_t *dev       = 0;
   fido_assert_t *assert = 0;
+
+  MemoryZero(out_assertion, sizeof(Auth_Fido2_Assertion));
 
   Auth_Fido2_DeviceList devices = auth_fido2_enumerate_devices(arena);
   if(devices.count == 0) { *out_error = str8_lit("fido2: no devices found"); goto cleanup; }
@@ -204,11 +226,11 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
 
   const u8 *sig  = fido_assert_sig_ptr(assert, 0);
   size_t sig_len = fido_assert_sig_len(assert, 0);
-  if(sig == 0 || sig_len == 0 || sig_len > 256) { *out_error = str8_lit("fido2: invalid signature"); goto cleanup; }
+  if(sig == 0 || sig_len == 0 || sig_len > AUTH_SIGNATURE_SIZE_MAX) { *out_error = str8_lit("fido2: invalid signature"); goto cleanup; }
 
   const u8 *authdata  = fido_assert_authdata_ptr(assert, 0);
   size_t authdata_len = fido_assert_authdata_len(assert, 0);
-  if(authdata == 0 || authdata_len == 0 || authdata_len > 256) { *out_error = str8_lit("fido2: invalid authenticator data"); goto cleanup; }
+  if(authdata == 0 || authdata_len == 0 || authdata_len > AUTH_MAX_CREDENTIAL_SIZE) { *out_error = str8_lit("fido2: invalid authenticator data"); goto cleanup; }
 
   MemoryCopy(out_assertion->signature, sig, sig_len);
   out_assertion->signature_len = sig_len;
@@ -220,7 +242,7 @@ auth_fido2_get_assertion(Arena *arena, Auth_Fido2_AssertParams *params, Auth_Fid
 
 cleanup:
   if(temp.arena != 0) { temp_end(temp); }
-  if(assert != 0) { fido_assert_free(&assert); }
+  if(assert != 0)     { fido_assert_free(&assert); }
   if(dev != 0)
   {
     fido_dev_close(dev);
@@ -232,92 +254,88 @@ cleanup:
 internal b32
 auth_fido2_verify_signature(Arena *arena, Auth_Fido2_VerifyParams *params, String8 *out_error)
 {
+  if(arena == 0 || params == 0 || out_error == 0) { return 0; }
+
+  b32 success           = 0;
+  fido_assert_t *assert = 0;
+  es256_pk_t *pk        = 0;
+  Temp temp             = {0};
+
   fido_init(0);
 
-  fido_assert_t *assert = fido_assert_new();
+  assert = fido_assert_new();
   if(assert == 0)
   {
     *out_error = str8_lit("fido2: failed to allocate assert");
-    return 0;
+    goto cleanup;
   }
 
-  es256_pk_t *pk = es256_pk_new();
+  pk = es256_pk_new();
   if(pk == 0)
   {
     *out_error = str8_lit("fido2: failed to allocate public key");
-    fido_assert_free(&assert);
-    return 0;
+    goto cleanup;
   }
 
   int r = es256_pk_from_ptr(pk, params->public_key, params->public_key_len);
   if(r != FIDO_OK)
   {
     *out_error = str8_lit("fido2: failed to parse public key");
-    es256_pk_free(&pk);
-    fido_assert_free(&assert);
-    return 0;
+    goto cleanup;
   }
 
-  Temp temp          = scratch_begin(&arena, 1);
+  temp = scratch_begin(&arena, 1);
   String8 rp_id_copy = str8_copy(temp.arena, params->rp_id);
   char *rp_id_cstr   = (char *)rp_id_copy.str;
   r = fido_assert_set_rp(assert, rp_id_cstr);
   scratch_end(temp);
+  temp = (Temp){0};
   if(r != FIDO_OK)
   {
     *out_error = str8_lit("fido2: failed to set RP ID");
-    es256_pk_free(&pk);
-    fido_assert_free(&assert);
-    return 0;
+    goto cleanup;
   }
 
   r = fido_assert_set_clientdata_hash(assert, params->challenge, 32);
   if(r != FIDO_OK)
   {
     *out_error = str8_lit("fido2: failed to set clientdata hash");
-    es256_pk_free(&pk);
-    fido_assert_free(&assert);
-    return 0;
+    goto cleanup;
   }
 
   r = fido_assert_set_count(assert, 1);
   if(r != FIDO_OK)
   {
     *out_error = str8_lit("fido2: failed to set count");
-    es256_pk_free(&pk);
-    fido_assert_free(&assert);
-    return 0;
+    goto cleanup;
   }
 
   r = fido_assert_set_authdata(assert, 0, params->auth_data, params->auth_data_len);
   if(r != FIDO_OK)
   {
     *out_error = str8_lit("fido2: failed to set authdata");
-    es256_pk_free(&pk);
-    fido_assert_free(&assert);
-    return 0;
+    goto cleanup;
   }
 
   r = fido_assert_set_sig(assert, 0, params->signature, params->signature_len);
   if(r != FIDO_OK)
   {
     *out_error = str8_lit("fido2: failed to set signature");
-    es256_pk_free(&pk);
-    fido_assert_free(&assert);
-    return 0;
+    goto cleanup;
   }
 
   r = fido_assert_verify(assert, 0, COSE_ES256, pk);
   if(r != FIDO_OK)
   {
     *out_error = str8_lit("fido2: signature verification failed");
-    es256_pk_free(&pk);
-    fido_assert_free(&assert);
-    return 0;
+    goto cleanup;
   }
 
-  es256_pk_free(&pk);
-  fido_assert_free(&assert);
+  success = 1;
 
-  return 1;
+cleanup:
+  if(temp.arena != 0) { scratch_end(temp); }
+  if(pk != 0)         { es256_pk_free(&pk); }
+  if(assert != 0)     { fido_assert_free(&assert); }
+  return success;
 }

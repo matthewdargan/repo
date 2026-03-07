@@ -1,9 +1,6 @@
 #ifndef INC_H
 #define INC_H
 
-////////////////////////////////
-//~ Base Includes
-
 #include "context_cracking.h"
 #include "core.h"
 #include "arena.h"
